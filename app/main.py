@@ -47,6 +47,7 @@ from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, p
 from .core.rag import build_context, retrieve, retrieve_cross_book
 from .core.minds import (
     SEED_MINDS,
+    create_mind_from_content,
     extract_and_save_memory,
     get_or_create_mind,
     mind_chat,
@@ -300,15 +301,34 @@ def _process_recommendations(text: str) -> None:
 
 def _seed_minds() -> None:
     """Background task: pre-generate seed minds on first startup."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    pending = []
     for seed in SEED_MINDS:
-        try:
-            existing = find_mind_by_name(seed["name"])
-            if existing:
-                continue
-            get_or_create_mind(seed["name"], era=seed["era"], domain=seed["domain"])
-            log.info("Seeded mind: %s", seed["name"])
-        except Exception as exc:
-            log.warning("Failed to seed mind %s: %s", seed["name"], exc)
+        existing = find_mind_by_name(seed["name"])
+        if existing:
+            continue
+        pending.append(seed)
+
+    if not pending:
+        log.info("All %d seed minds already exist.", len(SEED_MINDS))
+        return
+
+    log.info("Seeding %d new minds (out of %d total)…", len(pending), len(SEED_MINDS))
+
+    def _gen(seed: dict) -> str:
+        get_or_create_mind(seed["name"], era=seed["era"], domain=seed["domain"])
+        return seed["name"]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_gen, s): s["name"] for s in pending}
+        for fut in as_completed(futures):
+            name = futures[fut]
+            try:
+                fut.result()
+                log.info("Seeded mind: %s", name)
+            except Exception as exc:
+                log.warning("Failed to seed mind %s: %s", name, exc)
 
 
 @app.on_event("startup")
@@ -860,6 +880,12 @@ class MindGenerateRequest(BaseModel):
     domain: str = ""
 
 
+class MindFromContentRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    source_url: str = ""
+    content: str = ""
+
+
 class MindSuggestRequest(BaseModel):
     book_title: str = ""
     book_author: str = ""
@@ -910,6 +936,31 @@ def api_generate_mind(payload: MindGenerateRequest, background_tasks: Background
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Mind generation failed: {exc}")
     # Trigger learning for linked works
+    from .core.db import get_mind_work_ids
+    for agent_id in get_mind_work_ids(mind["id"]):
+        agent = get_agent(agent_id)
+        if agent and agent["status"] == "catalog":
+            background_tasks.add_task(_learn_agent, agent_id)
+    safe = {k: v for k, v in mind.items() if k != "persona"}
+    return safe
+
+
+@app.post("/api/minds/create-from-content")
+def api_create_mind_from_content(
+    payload: MindFromContentRequest, background_tasks: BackgroundTasks
+) -> dict[str, Any]:
+    if not payload.source_url and not payload.content:
+        raise HTTPException(status_code=400, detail="Provide source_url or content")
+    try:
+        mind = create_mind_from_content(
+            name=payload.name.strip(),
+            source_url=payload.source_url.strip(),
+            content=payload.content,
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Mind creation failed: {exc}")
     from .core.db import get_mind_work_ids
     for agent_id in get_mind_work_ids(mind["id"]):
         agent = get_agent(agent_id)

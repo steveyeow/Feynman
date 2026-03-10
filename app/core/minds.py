@@ -27,28 +27,96 @@ log = logging.getLogger(__name__)
 # ─── Seed minds generated on first startup ───
 
 SEED_MINDS: list[dict[str, str]] = [
-    {"name": "Aristotle", "era": "384–322 BC", "domain": "philosophy, logic, ethics, science"},
-    {"name": "Socrates", "era": "470–399 BC", "domain": "philosophy, ethics, epistemology"},
-    {"name": "Friedrich Nietzsche", "era": "1844–1900", "domain": "philosophy, existentialism, ethics"},
-    {"name": "Laozi", "era": "6th century BC", "domain": "philosophy, Taoism, metaphysics"},
-    {"name": "Richard Feynman", "era": "1918–1988", "domain": "physics, science education, curiosity"},
-    {"name": "Albert Einstein", "era": "1879–1955", "domain": "physics, philosophy of science"},
-    {"name": "Charles Darwin", "era": "1809–1882", "domain": "biology, evolution, natural science"},
-    {"name": "Adam Smith", "era": "1723–1790", "domain": "economics, moral philosophy"},
-    {"name": "Charlie Munger", "era": "1924–2023", "domain": "investing, mental models, decision-making"},
-    {"name": "Peter Drucker", "era": "1909–2005", "domain": "management, business, leadership"},
-    {"name": "Bertrand Russell", "era": "1872–1970", "domain": "philosophy, logic, mathematics, social criticism"},
-    {"name": "Fyodor Dostoevsky", "era": "1821–1881", "domain": "literature, philosophy, psychology"},
-    {"name": "Steve Jobs", "era": "1955–2011", "domain": "technology, design, entrepreneurship"},
-    {"name": "Elon Musk", "era": "1971–present", "domain": "technology, engineering, entrepreneurship"},
-    {"name": "Carl Jung", "era": "1875–1961", "domain": "psychology, psychoanalysis, mythology"},
-    {"name": "Daniel Kahneman", "era": "1934–2024", "domain": "psychology, behavioral economics, decision-making"},
-    {"name": "Niccolò Machiavelli", "era": "1469–1527", "domain": "political philosophy, statecraft, history"},
-    {"name": "Winston Churchill", "era": "1874–1965", "domain": "politics, history, leadership, writing"},
+    # ── Ancient & Classical Philosophy ──
+    {"name": "Aristotle", "era": "384–322 BC", "domain": "ancient philosophy, logic, ethics, metaphysics, rhetoric"},
+    {"name": "Socrates", "era": "470–399 BC", "domain": "ancient philosophy, ethics, epistemology, dialectic"},
+    {"name": "Plato", "era": "428–348 BC", "domain": "ancient philosophy, metaphysics, political theory, epistemology"},
+    {"name": "Marcus Aurelius", "era": "121–180 AD", "domain": "stoicism, ancient philosophy, ethics, leadership"},
+    {"name": "Confucius", "era": "551–479 BC", "domain": "eastern philosophy, ethics, governance, education"},
+    {"name": "Laozi", "era": "6th century BC", "domain": "eastern philosophy, Taoism, metaphysics"},
+    {"name": "Sun Tzu", "era": "544–496 BC", "domain": "eastern philosophy, military strategy, leadership, game theory"},
+
+    # ── Modern Philosophy ──
+    {"name": "Friedrich Nietzsche", "era": "1844–1900", "domain": "modern philosophy, existentialism, ethics, cultural criticism"},
+    {"name": "Niccolò Machiavelli", "era": "1469–1527", "domain": "political philosophy, statecraft, power, realism"},
+    {"name": "Bertrand Russell", "era": "1872–1970", "domain": "analytic philosophy, logic, mathematics, social criticism"},
+    {"name": "Michel Foucault", "era": "1926–1984", "domain": "modern philosophy, power, social theory, knowledge systems"},
+    {"name": "Immanuel Kant", "era": "1724–1804", "domain": "modern philosophy, epistemology, ethics, metaphysics"},
+
+    # ── Physics & Mathematics ──
+    {"name": "Richard Feynman", "era": "1918–1988", "domain": "physics, quantum mechanics, science education"},
+    {"name": "Albert Einstein", "era": "1879–1955", "domain": "physics, relativity, philosophy of science"},
+    {"name": "Isaac Newton", "era": "1643–1727", "domain": "physics, mathematics, classical mechanics, optics"},
+    {"name": "Nikola Tesla", "era": "1856–1943", "domain": "physics, electrical engineering, invention"},
+    {"name": "Stephen Hawking", "era": "1942–2018", "domain": "physics, cosmology, science communication"},
+    {"name": "John von Neumann", "era": "1903–1957", "domain": "mathematics, computer science, game theory, quantum mechanics"},
+
+    # ── Biology & Life Sciences ──
+    {"name": "Charles Darwin", "era": "1809–1882", "domain": "biology, evolution, natural history"},
+    {"name": "E.O. Wilson", "era": "1929–2021", "domain": "biology, sociobiology, ecology, biodiversity"},
+
+    # ── Economics & Investing ──
+    {"name": "Adam Smith", "era": "1723–1790", "domain": "economics, free markets, moral philosophy"},
+    {"name": "John Maynard Keynes", "era": "1883–1946", "domain": "economics, macroeconomics, fiscal policy"},
+    {"name": "Charlie Munger", "era": "1924–2023", "domain": "investing, mental models, multidisciplinary thinking"},
+    {"name": "Warren Buffett", "era": "1930–present", "domain": "investing, value investing, business analysis"},
+    {"name": "Ray Dalio", "era": "1949–present", "domain": "investing, macroeconomics, principles, systems thinking"},
+
+    # ── Psychology & Cognitive Science ──
+    {"name": "Daniel Kahneman", "era": "1934–2024", "domain": "cognitive psychology, behavioral economics, decision-making"},
+    {"name": "Carl Jung", "era": "1875–1961", "domain": "depth psychology, psychoanalysis, mythology, archetypes"},
+    {"name": "Sigmund Freud", "era": "1856–1939", "domain": "depth psychology, psychoanalysis, unconscious mind"},
+    {"name": "Steven Pinker", "era": "1954–present", "domain": "cognitive psychology, linguistics, human nature, rationality"},
+
+    # ── Literature & Arts ──
+    {"name": "Fyodor Dostoevsky", "era": "1821–1881", "domain": "literature, existentialism, human nature"},
+    {"name": "Leo Tolstoy", "era": "1828–1910", "domain": "literature, moral philosophy, pacifism"},
+    {"name": "William Shakespeare", "era": "1564–1616", "domain": "literature, drama, human nature, language"},
+    {"name": "Jorge Luis Borges", "era": "1899–1986", "domain": "literature, metaphysics, philosophy of mind"},
+
+    # ── History & Political Leadership ──
+    {"name": "Winston Churchill", "era": "1874–1965", "domain": "political leadership, history, wartime strategy, rhetoric"},
+    {"name": "Leonardo da Vinci", "era": "1452–1519", "domain": "art, engineering, anatomy, invention, polymathy"},
+
+    # ── Tech & Product ──
+    {"name": "Steve Jobs", "era": "1955–2011", "domain": "technology, product design, entrepreneurship, innovation"},
+    {"name": "Elon Musk", "era": "1971–present", "domain": "technology, engineering, space, first principles thinking"},
+    {"name": "Jensen Huang", "era": "1963–present", "domain": "technology, semiconductors, AI, computing"},
+    {"name": "Jeff Bezos", "era": "1964–present", "domain": "technology, business strategy, customer obsession, e-commerce"},
+
+    # ── Startups & Venture Capital ──
+    {"name": "Marc Andreessen", "era": "1971–present", "domain": "venture capital, software, startups, techno-optimism"},
+    {"name": "Paul Graham", "era": "1964–present", "domain": "startups, programming, essays, venture capital"},
+    {"name": "Peter Thiel", "era": "1967–present", "domain": "venture capital, contrarian thinking, startups, monopoly theory"},
+    {"name": "Sam Altman", "era": "1985–present", "domain": "AI, startups, technology, venture capital"},
+
+    # ── Business & Management ──
+    {"name": "Peter Drucker", "era": "1909–2005", "domain": "management, business strategy, leadership, knowledge work"},
+
+    # ── Interdisciplinary Thinkers ──
+    {"name": "Naval Ravikant", "era": "1974–present", "domain": "startups, personal philosophy, wealth, decision-making"},
+    {"name": "Nassim Nicholas Taleb", "era": "1960–present", "domain": "risk, probability, antifragility, epistemology"},
+    {"name": "Yuval Noah Harari", "era": "1976–present", "domain": "history, futurism, cognitive science, anthropology"},
+    {"name": "Jordan Peterson", "era": "1962–present", "domain": "depth psychology, personal development, mythology, cultural criticism"},
+    {"name": "Tim Ferriss", "era": "1977–present", "domain": "productivity, self-optimization, entrepreneurship, podcasting"},
+    {"name": "James Clear", "era": "1986–present", "domain": "habits, behavioral psychology, productivity, self-improvement"},
+    {"name": "Balaji Srinivasan", "era": "1980–present", "domain": "technology, network state, crypto, futurism"},
+    {"name": "Tyler Cowen", "era": "1962–present", "domain": "economics, cultural commentary, innovation, blogging"},
 ]
 
 
 def _generate_persona_prompt(name: str, era: str, domain: str) -> str:
+    is_contemporary = "present" in era.lower() or any(
+        int(y) > 1960 for y in re.findall(r'\b(19\d{2}|20\d{2})\b', era)
+    )
+    extra = ""
+    if is_contemporary:
+        extra = (
+            "6. Their public communication style — tweets, blog posts, interviews, talks\n"
+            "7. Their contrarian or distinctive takes that set them apart\n"
+            "8. Their most famous or viral statements\n\n"
+            "For 'works', include books, essays, blog posts, famous talks, or notable interviews.\n\n"
+        )
     return (
         f'Create a detailed persona profile for {name} ({era}), known for: {domain}.\n\n'
         'Capture:\n'
@@ -56,8 +124,9 @@ def _generate_persona_prompt(name: str, era: str, domain: str) -> str:
         '2. Their vocabulary and rhetorical patterns\n'
         '3. Their known philosophical/intellectual positions\n'
         '4. How they would likely respond to modern ideas they never encountered\n'
-        '5. Their characteristic agreements and disagreements with other thinkers\n\n'
-        'Return ONLY a JSON object with these keys:\n'
+        '5. Their characteristic agreements and disagreements with other thinkers\n'
+        + extra +
+        '\nReturn ONLY a JSON object with these keys:\n'
         '{\n'
         '  "bio_summary": "2-3 sentence biography",\n'
         '  "persona": "detailed system prompt capturing their voice, 300-500 words",\n'
@@ -118,6 +187,109 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "") -> dict[str, 
         link_mind_work(mind_id, agent_id)
 
     log.info("Generated mind: %s (%s)", name, era)
+    return mind
+
+
+def _fetch_url_text(url: str, max_chars: int = 12000) -> str:
+    """Fetch text content from a URL (Twitter profile, blog, etc.)."""
+    import httpx
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Feynman/1.0)",
+        "Accept": "text/html,application/xhtml+xml,text/plain,*/*",
+    }
+    with httpx.Client(timeout=30, follow_redirects=True) as client:
+        resp = client.get(url, headers=headers)
+        resp.raise_for_status()
+    text = resp.text
+    # Strip HTML tags for a rough text extraction
+    import html
+    clean = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
+    clean = re.sub(r'<style[^>]*>.*?</style>', '', clean, flags=re.DOTALL)
+    clean = re.sub(r'<[^>]+>', ' ', clean)
+    clean = html.unescape(clean)
+    clean = re.sub(r'\s+', ' ', clean).strip()
+    return clean[:max_chars]
+
+
+def create_mind_from_content(
+    name: str,
+    source_url: str = "",
+    content: str = "",
+) -> dict[str, Any]:
+    """Create a user's own mind agent from a URL or pasted content.
+
+    The LLM analyzes the provided content to extract the person's voice,
+    thinking style, domains, and then creates a mind agent.
+    """
+    existing = find_mind_by_name(name)
+    if existing:
+        return existing
+
+    source_text = content
+    if source_url and not source_text:
+        try:
+            source_text = _fetch_url_text(source_url)
+        except Exception as exc:
+            log.warning("Failed to fetch URL %s: %s", source_url, exc)
+            source_text = f"(URL provided but could not be fetched: {source_url})"
+
+    source_label = f"URL: {source_url}" if source_url else "user-provided text"
+    source_snippet = source_text[:8000] if source_text else "(no content provided)"
+
+    prompt = (
+        f"Analyze the following content from {name} ({source_label}) and create a persona profile.\n\n"
+        f"--- CONTENT ---\n{source_snippet}\n--- END CONTENT ---\n\n"
+        "Based on this content, infer:\n"
+        "1. Their intellectual style — how they think, argue, and communicate\n"
+        "2. Their key topics and domains of expertise\n"
+        "3. Their vocabulary, tone, and rhetorical patterns\n"
+        "4. Their distinctive viewpoints or contrarian takes\n"
+        "5. Their public communication style\n\n"
+        "Return ONLY a JSON object with these keys:\n"
+        "{\n"
+        '  "bio_summary": "2-3 sentence biography based on the content",\n'
+        '  "era": "their approximate active period, e.g. 1985–present",\n'
+        '  "domain": "comma-separated list of 3-5 domains they focus on",\n'
+        '  "persona": "detailed system prompt capturing their voice, 300-500 words",\n'
+        '  "works": ["notable works, articles, posts mentioned or implied"],\n'
+        '  "thinking_style": "one paragraph describing how they think",\n'
+        '  "typical_phrases": ["characteristic phrases or expressions"]\n'
+        "}"
+    )
+
+    try:
+        result, _ = chat_with_fallback(
+            system="You are an expert at analyzing writing to build persona profiles. Return only valid JSON.",
+            user=prompt,
+        )
+        data = _parse_json_response(result.content)
+    except Exception as exc:
+        log.error("Failed to generate mind from content for %s: %s", name, exc)
+        raise
+
+    mind_data = {
+        "name": name,
+        "era": data.get("era", "present"),
+        "domain": data.get("domain", ""),
+        "bio_summary": data.get("bio_summary", ""),
+        "persona": data.get("persona", ""),
+        "works": data.get("works", []),
+        "thinking_style": data.get("thinking_style", ""),
+        "typical_phrases": data.get("typical_phrases", []),
+    }
+    mind_id = create_mind(mind_data)
+    mind = get_mind(mind_id)
+
+    for title in mind_data["works"][:5]:
+        agent = find_agent_by_name(title)
+        if not agent:
+            agent_id = create_catalog_agent(title=title, author=name)
+        else:
+            agent_id = agent["id"]
+        link_mind_work(mind_id, agent_id)
+
+    log.info("Generated mind from content: %s", name)
     return mind
 
 

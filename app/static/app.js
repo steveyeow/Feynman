@@ -11,6 +11,7 @@ let pollTimer = null;
 
 // Chat state
 let selectedBooks = new Map();
+let selectedMinds = new Map();
 let chatSessions = [];
 let currentSessionId = null;
 let sessionCounter = 0;
@@ -249,44 +250,46 @@ function renderStarters() {
   });
 }
 
+function _short(title, max = 30) {
+  return title.length <= max ? title : title.slice(0, max - 1).trimEnd() + '…';
+}
+
 function generateStarters() {
   const selected = [...selectedBooks.values()];
 
-  // ── Books selected in composer → questions about those books ──
   if (selected.length === 1) {
-    const t = selected[0].title;
+    const t = _short(selected[0].title);
     return [
       `What are the key ideas in "${t}"?`,
       `Summarize the core argument of "${t}"`,
-      `What makes "${t}" unique compared to similar books?`,
+      `What makes "${t}" unique?`,
       `Quiz me on "${t}"`,
     ];
   }
   if (selected.length >= 2) {
-    const a = selected[0].title, b = selected[1].title;
+    const a = _short(selected[0].title), b = _short(selected[1].title);
     const questions = [
-      `Compare the main ideas in "${a}" and "${b}"`,
+      `Compare "${a}" and "${b}"`,
       `What do "${a}" and "${b}" have in common?`,
-      `What are the key ideas in "${a}"?`,
+      `Key ideas in "${a}"?`,
     ];
     if (selected.length > 2) {
-      questions.push(`Summarize what these ${selected.length} books cover together`);
+      questions.push(`What do these ${selected.length} books cover together?`);
     } else {
-      questions.push(`What are the key ideas in "${b}"?`);
+      questions.push(`Key ideas in "${b}"?`);
     }
     return questions;
   }
 
-  // ── No selection → questions from the library ──
   const ready = allBooks.filter(b => b.available);
   const catalog = allBooks.filter(b => b.status === 'catalog');
   const books = ready.length ? ready : catalog;
 
   if (!books.length) {
     return [
-      'I want to learn quantitative trading from scratch',
+      'Learn quantitative trading from scratch',
       'Teach me the fundamentals of philosophy',
-      'What are the best books on cognitive psychology?',
+      'Best books on cognitive psychology?',
       'Help me understand machine learning',
     ];
   }
@@ -295,13 +298,13 @@ function generateStarters() {
   const shuffled = [...books].sort(() => Math.random() - 0.5);
 
   if (shuffled[0]) {
-    questions.push(`What are the key ideas in "${shuffled[0].title}"?`);
+    questions.push(`Key ideas in "${_short(shuffled[0].title)}"?`);
   }
   if (shuffled[1]) {
-    questions.push(`Summarize the core argument of "${shuffled[1].title}"`);
+    questions.push(`Core argument of "${_short(shuffled[1].title)}"?`);
   }
   if (shuffled.length >= 2) {
-    questions.push(`Compare "${shuffled[0].title}" and "${shuffled[1].title}"`);
+    questions.push(`Compare "${_short(shuffled[0].title, 24)}" and "${_short(shuffled[1].title, 24)}"`);
   }
 
   const categories = [...new Set(books.map(b => b.category).filter(Boolean))];
@@ -544,6 +547,7 @@ function saveCurrentSession() {
   });
   session.messages = msgs;
   session.books = new Map(selectedBooks);
+  session.minds = new Map(selectedMinds);
   if (msgs.length) session.updatedAt = Date.now();
 }
 
@@ -554,6 +558,7 @@ function switchToSession(id) {
   if (!session) return;
   currentSessionId = id;
   selectedBooks = new Map(session.books);
+  selectedMinds = new Map(session.minds || []);
   const chatBox = document.getElementById('chat-messages');
   chatBox.innerHTML = '';
   session.messages.forEach(m => appendMsg(chatBox, m.role, m.content, m.sources, m.opts));
@@ -743,39 +748,37 @@ async function sendGlobalChat(message) {
 
 async function _fetchPerspectives(chatBox, message, bookContext, agentIds) {
   try {
-    // Determine whether to suggest based on book or topic
-    const suggestBody = {};
+    const mindIds = [...selectedMinds.keys()];
+
+    const existingNames = [...selectedMinds.values()].map(m => m.name);
+    const suggestBody = { count: 3, exclude: existingNames };
     if (bookContext && bookContext.length) {
       suggestBody.book_title = bookContext[0].title;
       suggestBody.book_author = bookContext[0].author || '';
     } else {
       suggestBody.topic = message.slice(0, 100);
     }
-    suggestBody.count = 3;
 
-    const suggestions = await api('/api/minds/suggest', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(suggestBody),
-    });
+    try {
+      const suggestions = await api('/api/minds/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(suggestBody),
+      });
+      for (const s of (suggestions.minds || [])) {
+        try {
+          const mind = await api('/api/minds/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
+          });
+          if (!mindIds.includes(mind.id)) mindIds.push(mind.id);
+        } catch { /* skip */ }
+      }
+    } catch { /* suggestion failed, proceed with manually selected */ }
 
-    if (!suggestions.minds?.length) return;
-
-    // Ensure minds exist (generate if needed)
-    const mindIds = [];
-    for (const s of suggestions.minds) {
-      try {
-        const mind = await api('/api/minds/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
-        });
-        mindIds.push(mind.id);
-      } catch { /* skip failed minds */ }
-    }
     if (!mindIds.length) return;
 
-    // Panel chat
     const panelBody = { message, mind_ids: mindIds };
     if (bookContext?.length) panelBody.book_context = bookContext;
     if (agentIds?.length) panelBody.agent_ids = agentIds;
@@ -1202,11 +1205,23 @@ function togglePopover(popId, listId, emptyId) {
   emptyId = emptyId || 'popover-no-books';
   const pop = document.getElementById(popId);
   const show = pop.classList.contains('hidden');
-  // Close all popovers first
   document.querySelectorAll('.composer-popover').forEach(p => p.classList.add('hidden'));
   if (show) {
     pop.classList.remove('hidden');
     renderPopoverBookList(listId, emptyId);
+  }
+}
+
+function toggleMindPopover(popId, listId, emptyId) {
+  popId = popId || 'chat-minds-popover';
+  listId = listId || 'popover-mind-list';
+  emptyId = emptyId || 'popover-no-minds';
+  const pop = document.getElementById(popId);
+  const show = pop.classList.contains('hidden');
+  document.querySelectorAll('.composer-popover').forEach(p => p.classList.add('hidden'));
+  if (show) {
+    pop.classList.remove('hidden');
+    renderPopoverMindList(listId, emptyId);
   }
 }
 
@@ -1215,6 +1230,7 @@ function closeAllPopovers() {
 }
 // Expose globally so onclick attributes work
 window.togglePopover = togglePopover;
+window.toggleMindPopover = toggleMindPopover;
 window.closeAllPopovers = closeAllPopovers;
 
 function renderPopoverBookList(listId, emptyId) {
@@ -1247,33 +1263,87 @@ function renderPopoverBookList(listId, emptyId) {
   });
 }
 
+function _refreshOpenPopovers() {
+  document.querySelectorAll('.composer-popover').forEach(pop => {
+    if (pop.classList.contains('hidden')) return;
+    const bl = pop.querySelector('.popover-book-list');
+    if (bl) {
+      const be = bl.nextElementSibling;
+      if (be && be.classList.contains('popover-empty')) renderPopoverBookList(bl.id, be.id);
+    }
+    const ml = pop.querySelector('.popover-mind-list');
+    if (ml) {
+      const me = ml.nextElementSibling;
+      if (me && me.classList.contains('popover-empty')) renderPopoverMindList(ml.id, me.id);
+    }
+  });
+}
+
+function renderPopoverMindList(listId, emptyId) {
+  listId = listId || 'popover-mind-list';
+  emptyId = emptyId || 'popover-no-minds';
+  const list = document.getElementById(listId);
+  const empty = document.getElementById(emptyId);
+  if (!list || !empty) return;
+  if (!allMinds.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
+  empty.classList.add('hidden');
+  const sorted = [...allMinds].sort((a, b) => a.name.localeCompare(b.name));
+  list.innerHTML = sorted.map(m => {
+    const sel = selectedMinds.has(m.id);
+    const color = mindColor(m.name);
+    const initials = mindInitials(m.name);
+    return `<div class="popover-mind-item ${sel ? 'selected' : ''}" data-mid="${m.id}">
+      <div class="popover-mind-check">${sel ? '&#10003;' : ''}</div>
+      <div class="popover-mind-avatar" style="background:${color}">${initials}</div>
+      <span>${esc(m.name)}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.popover-mind-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.mid;
+      if (selectedMinds.has(id)) {
+        selectedMinds.delete(id);
+      } else {
+        const mind = allMinds.find(x => x.id === id);
+        if (mind) selectedMinds.set(id, mind);
+      }
+      renderPopoverMindList(listId, emptyId);
+      renderSelectedChips();
+    });
+  });
+}
+
 // Renders chips in BOTH home and chat composers + updates placeholder
 function renderSelectedChips() {
   ['home-selected-chips', 'chat-selected-chips'].forEach(cId => {
     const c = document.getElementById(cId);
     if (!c) return;
-    if (!selectedBooks.size) { c.innerHTML = ''; return; }
-    c.innerHTML = [...selectedBooks.entries()].map(([id, b]) =>
+    if (!selectedBooks.size && !selectedMinds.size) { c.innerHTML = ''; return; }
+    const bookChips = [...selectedBooks.entries()].map(([id, b]) =>
       `<div class="book-chip"><span>${esc(b.title)}</span><button class="chip-remove" data-bid="${id}">&times;</button></div>`
     ).join('');
-    c.querySelectorAll('.chip-remove').forEach(btn => {
+    const mindChips = [...selectedMinds.entries()].map(([id, m]) =>
+      `<div class="mind-chip"><span class="mind-chip-avatar" style="background:${mindColor(m.name)}">${mindInitials(m.name)}</span><span>${esc(m.name)}</span><button class="chip-remove" data-mid="${id}">&times;</button></div>`
+    ).join('');
+    c.innerHTML = bookChips + mindChips;
+    c.querySelectorAll('.chip-remove[data-bid]').forEach(btn => {
       btn.addEventListener('click', () => {
         selectedBooks.delete(btn.dataset.bid);
         renderSelectedChips();
-        document.querySelectorAll('.composer-popover').forEach(pop => {
-          if (!pop.classList.contains('hidden')) {
-            const list = pop.querySelector('.popover-book-list');
-            const empty = pop.querySelector('.popover-empty');
-            if (list && empty) renderPopoverBookList(list.id, empty.id);
-          }
-        });
+        _refreshOpenPopovers();
+      });
+    });
+    c.querySelectorAll('.chip-remove[data-mid]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedMinds.delete(btn.dataset.mid);
+        renderSelectedChips();
+        _refreshOpenPopovers();
       });
     });
   });
-  // Update placeholder based on selected books
   const homeInput = document.getElementById('home-input');
   if (homeInput) {
-    homeInput.placeholder = selectedBooks.size > 0 ? 'Ask your question...' : 'Ask and learn across one or more books...';
+    homeInput.placeholder = (selectedBooks.size || selectedMinds.size) ? 'Ask your question...' : 'Ask about books or topics — great minds will join in...';
   }
   // Re-render starters to match selected books
   if (getRoute().page === 'home') renderStarters();
@@ -1286,6 +1356,7 @@ function selectBookForChat(bookId) {
   saveCurrentSession();
   currentSessionId = null;
   selectedBooks.clear();
+  selectedMinds.clear();
   selectedBooks.set(bookId, book);
   window.location.hash = '#/';
 }
@@ -1394,47 +1465,624 @@ async function loadMinds() {
   try { allMinds = await api('/api/minds'); } catch { allMinds = []; }
 }
 
-function renderMindsPage() {
-  const grid = document.getElementById('minds-grid');
-  const search = document.getElementById('minds-search');
-  if (search) search.value = '';
-  _renderMindsGrid('');
+let _graphSim = null;
+let _graphAnim = null;
+let _graphState = null;
+
+function _domainTokens(m) {
+  return (m.domain || '').toLowerCase().split(/[,;\/&]+/).map(d => d.trim()).filter(Boolean);
 }
 
-function _renderMindsGrid(query) {
-  const grid = document.getElementById('minds-grid');
-  let filtered = [...allMinds];
-  if (query) {
-    const q = query.toLowerCase();
-    filtered = filtered.filter(m =>
-      m.name.toLowerCase().includes(q) ||
-      (m.domain || '').toLowerCase().includes(q) ||
-      (m.era || '').toLowerCase().includes(q)
-    );
+function _buildGraphData(minds) {
+  const nodes = minds.map(m => ({
+    id: m.id, name: m.name, era: m.era || '',
+    domain: m.domain || '', bio: m.bio_summary || '',
+    color: mindColor(m.name), initials: mindInitials(m.name),
+    chatCount: m.chat_count || 0,
+    tokens: _domainTokens(m),
+  }));
+
+  const links = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const shared = nodes[i].tokens.filter(t => nodes[j].tokens.some(u => t === u || t.includes(u) || u.includes(t)));
+      if (shared.length > 0) {
+        links.push({ source: nodes[i].id, target: nodes[j].id, strength: shared.length });
+      }
+    }
   }
-  if (!filtered.length) {
-    grid.innerHTML = filtered.length === 0 && allMinds.length === 0
-      ? '<div class="empty-state"><p>Minds are being generated... refresh in a moment.</p></div>'
-      : '<div class="empty-state"><p>No minds found.</p></div>';
+  if (links.length === 0 && nodes.length > 1) {
+    for (let i = 1; i < nodes.length; i++) {
+      links.push({ source: nodes[0].id, target: nodes[i].id, strength: 0.3 });
+    }
+  }
+  return { nodes, links };
+}
+
+function renderMindsPage() {
+  const search = document.getElementById('minds-search');
+  if (search) search.value = '';
+  _renderMindsGraph();
+}
+
+function _hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return [r, g, b];
+}
+
+function _renderMindsGraph() {
+  const container = document.getElementById('minds-graph');
+  const tooltip = document.getElementById('minds-tooltip');
+  if (!container) return;
+
+  if (_graphAnim) { cancelAnimationFrame(_graphAnim); _graphAnim = null; }
+  if (_graphSim) { _graphSim.stop(); _graphSim = null; }
+  container.innerHTML = '';
+  tooltip.classList.add('hidden');
+
+  if (!allMinds.length) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(160,180,220,0.5);font-size:14px">Minds are being generated… refresh in a moment.</div>';
     return;
   }
-  grid.innerHTML = filtered.map(m => {
-    const color = mindColor(m.name);
-    const initials = mindInitials(m.name);
-    const domains = (m.domain || '').split(',').map(d => d.trim()).filter(Boolean);
-    const chatLabel = m.chat_count ? `${m.chat_count} discussions` : 'New';
-    return `<div class="mind-card" onclick="window.location.hash='#/mind/${esc(m.id)}'">
-      <div class="mind-avatar" style="background:${color}">${initials}</div>
-      <div class="mind-card-name">${esc(m.name)}</div>
-      <div class="mind-card-era">${esc(m.era)}</div>
-      <div class="mind-card-domain">${domains.map(d => `<span class="mind-domain-tag">${esc(d)}</span>`).join('')}</div>
-      <div class="mind-card-bio">${esc(m.bio_summary)}</div>
-      <div class="mind-card-footer">
-        <span class="mind-chat-count">${chatLabel}</span>
-        <button class="mind-chat-btn" onclick="event.stopPropagation();window.location.hash='#/mind/${esc(m.id)}'">Chat &rarr;</button>
-      </div>
-    </div>`;
-  }).join('');
+
+  const { nodes, links } = _buildGraphData(allMinds);
+  const dpr = window.devicePixelRatio || 1;
+  const W = container.clientWidth || 900;
+  const H = container.clientHeight || 600;
+  const BASE_R = Math.max(20, Math.min(30, W / (nodes.length * 2)));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  container.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  let transform = d3.zoomIdentity;
+  const zoomBehavior = d3.zoom()
+    .scaleExtent([0.1, 6])
+    .on('zoom', (e) => { transform = e.transform; });
+  d3.select(canvas).call(zoomBehavior);
+
+  const particles = [];
+  links.forEach(l => {
+    const count = Math.max(1, Math.round(l.strength * 1.5));
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        link: l,
+        t: Math.random(),
+        speed: 0.001 + Math.random() * 0.003,
+        size: 1 + Math.random() * 1.5,
+        opacity: 0.3 + Math.random() * 0.5,
+      });
+    }
+  });
+
+  const ADD_R = 18;
+  const addNode = {
+    id: '__add__', name: '', era: '', domain: '', bio: '', initials: '+',
+    color: 'none', tokens: [], _isAdd: true, x: W / 2 + 120, y: H / 2 - 120,
+  };
+  nodes.push(addNode);
+
+  let hoveredNode = null;
+  let highlightQuery = '';
+  let addBusy = false;
+  let mouseWorld = null;
+
+  const state = { nodes, links, particles, hoveredNode, highlightQuery };
+  _graphState = state;
+
+  const linkForce = d3.forceLink(links).id(d => d.id)
+    .distance(d => Math.max(80, 280 - d.strength * 70))
+    .strength(d => 0.08 + d.strength * 0.15);
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', linkForce)
+    .force('charge', d3.forceManyBody().strength(-600).distanceMax(800))
+    .force('center', d3.forceCenter(W / 2, H / 2).strength(0.03))
+    .force('collision', d3.forceCollide().radius(d => d._isAdd ? ADD_R + 15 : BASE_R + 20))
+    .force('x', d3.forceX(W / 2).strength(0.02))
+    .force('y', d3.forceY(H / 2).strength(0.02))
+    .alphaDecay(0.015);
+  _graphSim = sim;
+
+  const time = { now: 0 };
+
+  function draw() {
+    time.now = performance.now();
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.k, transform.k);
+
+    const matchIds = new Set();
+    if (state.highlightQuery) {
+      const q = state.highlightQuery.toLowerCase();
+      nodes.forEach(n => {
+        if (n.name.toLowerCase().includes(q) || n.domain.toLowerCase().includes(q) || n.era.toLowerCase().includes(q))
+          matchIds.add(n.id);
+      });
+    }
+    const filtering = matchIds.size > 0;
+
+    for (const l of links) {
+      const s = l.source, t = l.target;
+      const dimmed = filtering && !matchIds.has(s.id) && !matchIds.has(t.id);
+      const alpha = dimmed ? 0.04 : (0.12 + l.strength * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(t.x, t.y);
+      ctx.strokeStyle = `rgba(160,170,190,${alpha})`;
+      ctx.lineWidth = 0.6 + l.strength * 0.4;
+      ctx.stroke();
+    }
+
+    for (const p of particles) {
+      p.t += p.speed;
+      if (p.t > 1) p.t -= 1;
+      const s = p.link.source, t = p.link.target;
+      const dimmed = filtering && !matchIds.has(s.id) && !matchIds.has(t.id);
+      if (dimmed) continue;
+      const px = s.x + (t.x - s.x) * p.t;
+      const py = s.y + (t.y - s.y) * p.t;
+      ctx.beginPath();
+      ctx.arc(px, py, p.size * transform.k < 0.5 ? 0 : p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(130,150,200,${p.opacity * 0.45})`;
+      ctx.fill();
+    }
+
+    if (state.hoveredNode !== addNode) {
+      let cx = 0, cy = 0, cnt = 0;
+      for (const n of nodes) { if (!n._isAdd) { cx += n.x; cy += n.y; cnt++; } }
+      if (cnt) {
+        cx /= cnt; cy /= cnt;
+        let maxD = 0;
+        for (const n of nodes) { if (!n._isAdd) { const d = Math.hypot(n.x - cx, n.y - cy); if (d > maxD) maxD = d; } }
+        const a = time.now * 0.00015;
+        addNode.x = cx + Math.cos(a) * (maxD + BASE_R * 3.5);
+        addNode.y = cy + Math.sin(a) * (maxD + BASE_R * 3.5);
+      }
+    }
+
+    for (const n of nodes) {
+      if (n._isAdd) {
+        const hov = state.hoveredNode === n;
+        const pulse = 1 + Math.sin(time.now * 0.003) * 0.08;
+        const ar = ADD_R * pulse;
+        const glow = ctx.createRadialGradient(n.x, n.y, ar * 0.3, n.x, n.y, ar * 2.5);
+        glow.addColorStop(0, `rgba(100,130,200,${hov ? 0.12 : 0.04})`);
+        glow.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, ar * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, ar, 0, Math.PI * 2);
+        ctx.fillStyle = hov ? 'rgba(90,120,180,0.15)' : 'rgba(140,160,200,0.08)';
+        ctx.fill();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = `rgba(100,130,180,${hov ? 0.6 : 0.25})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = `rgba(80,110,170,${hov ? 0.8 : 0.45})`;
+        ctx.font = `300 ${ar * 1.1}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(addBusy ? '…' : '+', n.x, n.y + 1);
+
+        if (!addBusy) {
+          ctx.fillStyle = `rgba(80,110,170,${hov ? 0.6 : 0.3})`;
+          ctx.font = '500 9px Inter, sans-serif';
+          ctx.fillText('Discover', n.x, n.y + ar + 13);
+        } else {
+          ctx.fillStyle = 'rgba(80,110,170,0.4)';
+          ctx.font = '500 9px Inter, sans-serif';
+          ctx.fillText('Inviting...', n.x, n.y + ar + 13);
+        }
+        continue;
+      }
+
+      const dimmed = filtering && !matchIds.has(n.id);
+      const hovered = state.hoveredNode === n;
+      const highlighted = filtering && matchIds.has(n.id);
+
+      let r = BASE_R;
+      if (mouseWorld) {
+        const dx = n.x - mouseWorld[0], dy = n.y - mouseWorld[1];
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const focusRadius = 250;
+        if (dist < focusRadius) {
+          const t = 1 - dist / focusRadius;
+          r = BASE_R * (1 + t * 0.7);
+        } else {
+          r = BASE_R * 0.75;
+        }
+      }
+      if (hovered) r = Math.max(r, BASE_R * 1.6);
+      const pulse = 1 + Math.sin(time.now * 0.002 + n.name.length) * 0.04;
+      const rr = r * pulse;
+      const [cr, cg, cb] = _hexToRgb(n.color);
+      const nodeAlpha = dimmed ? 0.12 : 1;
+
+      if (!dimmed) {
+        const glowR = rr * 2.5;
+        const grad = ctx.createRadialGradient(n.x, n.y, rr * 0.5, n.x, n.y, glowR);
+        grad.addColorStop(0, `rgba(${cr},${cg},${cb},${hovered ? 0.15 : 0.05})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      if (n._newAt) {
+        const age = (time.now - n._newAt) / 1000;
+        if (age < 12) {
+          const fade = Math.max(0, 1 - age / 12);
+          const ring = 1 + Math.sin(time.now * 0.004) * 0.5;
+
+          const outerR = rr + 12 + ring * 10;
+          const glowG = ctx.createRadialGradient(n.x, n.y, rr * 0.5, n.x, n.y, outerR);
+          glowG.addColorStop(0, `rgba(34,197,94,${fade * 0.25})`);
+          glowG.addColorStop(0.6, `rgba(34,197,94,${fade * 0.08})`);
+          glowG.addColorStop(1, 'rgba(34,197,94,0)');
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, outerR, 0, Math.PI * 2);
+          ctx.fillStyle = glowG;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, rr + 4 + ring * 3, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(34,197,94,${fade * 0.8})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          const badgeY = n.y - rr - 16;
+          const badgeW = 32, badgeH = 16, badgeR = 8;
+          ctx.beginPath();
+          ctx.roundRect(n.x - badgeW / 2, badgeY - badgeH / 2, badgeW, badgeH, badgeR);
+          ctx.fillStyle = `rgba(34,197,94,${fade * 0.9})`;
+          ctx.fill();
+          ctx.fillStyle = `rgba(255,255,255,${fade * 0.95})`;
+          ctx.font = '700 9px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('NEW', n.x, badgeY);
+        } else {
+          delete n._newAt;
+        }
+      }
+
+      if (n._expanding) {
+        const spinAngle = (time.now * 0.003) % (Math.PI * 2);
+        const spinR = rr + 10;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, spinR, spinAngle, spinAngle + Math.PI * 1.2);
+        ctx.strokeStyle = 'rgba(99,102,241,0.7)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, spinR, spinAngle + Math.PI * 1.5, spinAngle + Math.PI * 1.8);
+        ctx.strokeStyle = 'rgba(99,102,241,0.35)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        const lblY = n.y + rr + 20;
+        const lblTxt = 'Discovering' + '.'.repeat(Math.floor(time.now / 500) % 4);
+        ctx.font = '600 10px Inter, sans-serif';
+        const lblW = ctx.measureText(lblTxt).width + 14;
+        ctx.beginPath();
+        ctx.roundRect(n.x - lblW / 2, lblY - 8, lblW, 16, 8);
+        ctx.fillStyle = 'rgba(99,102,241,0.85)';
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(lblTxt, n.x, lblY);
+      }
+
+      if (highlighted || hovered) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, rr + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${cr},${cg},${cb},${hovered ? 0.5 : 0.3})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, rr, 0, Math.PI * 2);
+      ctx.fillStyle = dimmed ? `rgba(${cr},${cg},${cb},${nodeAlpha})` : n.color;
+      ctx.fill();
+      ctx.strokeStyle = dimmed ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      if (!dimmed) {
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.font = `700 ${rr * 0.6}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(n.initials, n.x, n.y);
+
+        ctx.fillStyle = `rgba(30,35,50,${hovered ? 0.9 : 0.7})`;
+        ctx.font = `600 ${hovered ? 12 : 11}px 'Libre Baskerville', Georgia, serif`;
+        ctx.fillText(n.name, n.x, n.y + rr + 14);
+
+        ctx.fillStyle = 'rgba(100,110,130,0.6)';
+        ctx.font = `400 9px Inter, sans-serif`;
+        ctx.fillText(n.era, n.x, n.y + rr + 27);
+      }
+    }
+
+    ctx.restore();
+    _graphAnim = requestAnimationFrame(draw);
+  }
+
+  sim.on('tick', () => {});
+  draw();
+
+  function _getNodeAt(cx, cy) {
+    const [mx, my] = transform.invert([cx, cy]);
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const n = nodes[i];
+      let hr;
+      if (n._isAdd) {
+        hr = ADD_R + 5;
+      } else {
+        hr = BASE_R;
+        if (mouseWorld) {
+          const dd = Math.sqrt((n.x - mx) * (n.x - mx) + (n.y - my) * (n.y - my));
+          if (dd < 250) hr = BASE_R * (1 + (1 - dd / 250) * 0.7);
+          else hr = BASE_R * 0.75;
+        }
+        hr += 5;
+      }
+      const dx = mx - n.x, dy = my - n.y;
+      if (dx * dx + dy * dy < hr * hr) return n;
+    }
+    return null;
+  }
+
+  const _expandedSet = new Set();
+
+  function _insertMindNode(mind, nearNode) {
+    const newNode = {
+      id: mind.id, name: mind.name, era: mind.era || '',
+      domain: mind.domain || '', bio: mind.bio_summary || '',
+      color: mindColor(mind.name), initials: mindInitials(mind.name),
+      chatCount: 0, tokens: _domainTokens(mind),
+      x: nearNode.x + (Math.random() - 0.5) * 100,
+      y: nearNode.y + (Math.random() - 0.5) * 100,
+      _newAt: performance.now(),
+    };
+    nodes.splice(nodes.length - 1, 0, newNode);
+    for (const existing of nodes) {
+      if (existing._isAdd || existing === newNode) continue;
+      const shared = newNode.tokens.filter(t => existing.tokens.some(u => t === u || t.includes(u) || u.includes(t)));
+      if (shared.length > 0) {
+        const nl = { source: newNode, target: existing, strength: shared.length };
+        links.push(nl);
+        for (let p = 0, c = Math.max(1, Math.round(shared.length * 1.5)); p < c; p++) {
+          particles.push({ link: nl, t: Math.random(), speed: 0.001 + Math.random() * 0.003, size: 1 + Math.random() * 1.5, opacity: 0.3 + Math.random() * 0.5 });
+        }
+      }
+    }
+    sim.nodes(nodes);
+    sim.force('link').links(links);
+    sim.alpha(0.4).restart();
+    return newNode;
+  }
+
+  async function _expandFromNode(node) {
+    if (node._isAdd || _expandedSet.has(node.id)) return;
+    _expandedSet.add(node.id);
+    node._expanding = true;
+    showToast(`Inviting minds related to ${node.name}…`);
+    let addedCount = 0;
+    try {
+      const existingNames = nodes.filter(d => !d._isAdd).map(d => d.name);
+      const resp = await api('/api/minds/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: node.domain, count: 3, exclude: existingNames }),
+      });
+      for (const s of (resp.minds || [])) {
+        if (nodes.some(d => d.name.toLowerCase() === s.name.toLowerCase())) continue;
+        try {
+          const mind = await api('/api/minds/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
+          });
+          allMinds.push(mind);
+          _insertMindNode(mind, node);
+          addedCount++;
+        } catch (err) { console.warn('Expand: failed to generate', s.name, err); }
+      }
+    } catch (err) {
+      console.warn('Expand: suggest failed', err);
+      showToast('Failed to discover minds — please try again.');
+    }
+    node._expanding = false;
+
+    if (addedCount > 0) {
+      showToast(`${addedCount} new mind${addedCount > 1 ? 's' : ''} joined the network!`);
+      setTimeout(() => {
+        const newNodes = nodes.filter(d => d._newAt);
+        if (!newNodes.length) return;
+        let cx = node.x, cy = node.y;
+        for (const nn of newNodes) { cx += nn.x; cy += nn.y; }
+        cx /= (newNodes.length + 1);
+        cy /= (newNodes.length + 1);
+        const targetK = Math.min(transform.k, 1.2);
+        const tx = W / 2 - cx * targetK;
+        const ty = H / 2 - cy * targetK;
+        d3.select(canvas).transition().duration(800).call(
+          zoomBehavior.transform,
+          d3.zoomIdentity.translate(tx, ty).scale(targetK)
+        );
+      }, 500);
+    } else {
+      showToast('No new minds found nearby.');
+    }
+  }
+
+  canvas.addEventListener('mouseleave', () => {
+    mouseWorld = null;
+    state.hoveredNode = null;
+  });
+
+  let _tooltipNode = null;
+  let _tooltipInside = false;
+
+  tooltip.addEventListener('mouseenter', () => { _tooltipInside = true; });
+  tooltip.addEventListener('mouseleave', () => {
+    _tooltipInside = false;
+    _tooltipNode = null;
+    state.hoveredNode = null;
+    tooltip.classList.add('hidden');
+  });
+
+  function _showTooltip(n, anchorX, anchorY) {
+    if (_tooltipNode === n) return;
+    _tooltipNode = n;
+    if (n._isAdd) {
+      tooltip.innerHTML = `
+        <div class="tt-name">Discover More Minds</div>
+        <div class="tt-bio">Click to invite new great minds related to the current network.</div>
+        <div class="tt-action">Click to discover →</div>`;
+    } else {
+      const domains = n.tokens.map(t => `<span class="tt-domain-tag">${t}</span>`).join('');
+      const discoverBtn = _expandedSet.has(n.id) ? '' : n._expanding
+        ? '<div class="tt-action" style="opacity:0.5">Discovering related minds…</div>'
+        : `<button class="tt-discover-btn" data-mind-id="${n.id}">Discover nearby minds →</button>`;
+      tooltip.innerHTML = `
+        <div class="tt-name">${n.name}</div>
+        <div class="tt-era">${n.era}</div>
+        <div class="tt-domains">${domains}</div>
+        <div class="tt-bio">${n.bio}</div>
+        <div class="tt-action">Click to chat →</div>
+        ${discoverBtn}`;
+      const btn = tooltip.querySelector('.tt-discover-btn');
+      if (btn) {
+        btn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          _expandFromNode(n);
+          tooltip.classList.add('hidden');
+          _tooltipNode = null;
+        });
+      }
+    }
+    tooltip.classList.remove('hidden');
+    const tx = anchorX + 16;
+    tooltip.style.left = (tx + 320 > W ? anchorX - 330 : tx) + 'px';
+    tooltip.style.top = (anchorY - 10) + 'px';
+  }
+
+  function _hideTooltip() {
+    if (_tooltipInside) return;
+    _tooltipNode = null;
+    tooltip.classList.add('hidden');
+  }
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+    mouseWorld = transform.invert([cx, cy]);
+    const n = _getNodeAt(cx, cy);
+    state.hoveredNode = n;
+    canvas.style.cursor = n ? 'pointer' : 'grab';
+
+    if (n) {
+      _showTooltip(n, cx, cy);
+    } else if (!_tooltipInside) {
+      _hideTooltip();
+    }
+  });
+
+  canvas.addEventListener('click', async (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const n = _getNodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (!n) return;
+    if (n._isAdd) {
+      if (addBusy) return;
+      addBusy = true;
+      tooltip.classList.add('hidden');
+      try {
+        const existingNames = nodes.filter(d => !d._isAdd).map(d => d.name);
+        const allDomains = [...new Set(nodes.filter(d => !d._isAdd).flatMap(d => d.tokens))];
+        const topic = allDomains.slice(0, 8).join(', ');
+        const resp = await api('/api/minds/suggest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, count: 3, exclude: existingNames }),
+        });
+        const suggestions = resp.minds || [];
+        for (const s of suggestions) {
+          if (nodes.some(d => d.name.toLowerCase() === s.name.toLowerCase())) continue;
+          try {
+            const mind = await api('/api/minds/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
+            });
+            allMinds.push(mind);
+            _insertMindNode(mind, addNode);
+          } catch (err) { console.warn('Failed to generate mind:', s.name, err); }
+        }
+      } catch (err) { console.error('Failed to discover minds:', err); }
+      addBusy = false;
+      return;
+    }
+    window.location.hash = '#/mind/' + n.id;
+  });
+
+  canvas.addEventListener('mouseleave', (e) => {
+    if (e.relatedTarget && tooltip.contains(e.relatedTarget)) return;
+    state.hoveredNode = null;
+    _hideTooltip();
+  });
+
+  d3.select(canvas).call(
+    d3.drag()
+      .subject((e) => {
+        const [mx, my] = transform.invert([e.x, e.y]);
+        const n = nodes.find(d => {
+          const dx = mx - d.x, dy = my - d.y;
+          return dx * dx + dy * dy < (BASE_R + 5) * (BASE_R + 5);
+        });
+        return n || null;
+      })
+      .on('start', (e) => {
+        if (!e.subject) return;
+        if (!e.active) sim.alphaTarget(0.3).restart();
+        e.subject.fx = e.subject.x;
+        e.subject.fy = e.subject.y;
+      })
+      .on('drag', (e) => {
+        if (!e.subject) return;
+        const [mx, my] = transform.invert([e.x, e.y]);
+        e.subject.fx = mx;
+        e.subject.fy = my;
+      })
+      .on('end', (e) => {
+        if (!e.subject) return;
+        if (!e.active) sim.alphaTarget(0);
+        e.subject.fx = null;
+        e.subject.fy = null;
+      })
+  );
+}
+
+function _applyGraphHighlight(query) {
+  if (_graphState) _graphState.highlightQuery = query || '';
 }
 
 async function renderMindDetail(mindId) {
@@ -1538,7 +2186,7 @@ function showAddMindDialog() {
       });
       overlay.remove();
       await loadMinds();
-      if (getRoute().page === 'minds') _renderMindsGrid('');
+      if (getRoute().page === 'minds') _renderMindsGraph();
     } catch (err) {
       btn.textContent = 'Generate';
       btn.disabled = false;
@@ -1547,6 +2195,77 @@ function showAddMindDialog() {
   };
   overlay.querySelector('#add-mind-submit').addEventListener('click', submit);
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+}
+
+function showCreateMindDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'mind-add-dialog';
+  overlay.innerHTML = `
+    <div class="mind-add-form" style="max-width:460px">
+      <h3>Create Your Mind</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px">Paste a Twitter/X profile link, blog URL, or text content to generate a mind agent.</p>
+      <input type="text" id="create-mind-name" placeholder="Name" autocomplete="off" />
+      <input type="text" id="create-mind-url" placeholder="Twitter/X profile or blog URL (optional)" autocomplete="off" style="margin-top:8px" />
+      <textarea id="create-mind-content" placeholder="Or paste text content here — tweets, blog posts, notes, markdown..." rows="5" style="margin-top:8px;width:100%;resize:vertical;font-family:inherit;font-size:13px;padding:10px 12px;border-radius:10px;border:1px solid var(--border-strong);background:var(--bg-main)"></textarea>
+      <input type="file" id="create-mind-file" accept=".md,.txt,.markdown" hidden />
+      <button type="button" id="create-mind-file-btn" style="margin-top:6px;font-size:12px;color:var(--text-muted);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0">or upload a .md / .txt file</button>
+      <div class="mind-add-actions" style="margin-top:14px">
+        <button id="create-mind-cancel">Cancel</button>
+        <button id="create-mind-submit" class="primary-btn">Create Mind</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const nameInput = overlay.querySelector('#create-mind-name');
+  const urlInput = overlay.querySelector('#create-mind-url');
+  const contentArea = overlay.querySelector('#create-mind-content');
+  const fileInput = overlay.querySelector('#create-mind-file');
+  const fileBtn = overlay.querySelector('#create-mind-file-btn');
+
+  nameInput.focus();
+  overlay.querySelector('#create-mind-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  fileBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      contentArea.value = reader.result;
+      if (!nameInput.value.trim()) {
+        nameInput.value = file.name.replace(/\.(md|txt|markdown)$/i, '');
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  const submit = async () => {
+    const name = nameInput.value.trim();
+    const url = urlInput.value.trim();
+    const content = contentArea.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    if (!url && !content) { urlInput.focus(); return; }
+
+    const btn = overlay.querySelector('#create-mind-submit');
+    btn.textContent = 'Creating...';
+    btn.disabled = true;
+    try {
+      await api('/api/minds/create-from-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, source_url: url, content }),
+      });
+      overlay.remove();
+      await loadMinds();
+      if (getRoute().page === 'minds') _renderMindsGraph();
+    } catch (err) {
+      btn.textContent = 'Create Mind';
+      btn.disabled = false;
+      alert('Failed: ' + err.message);
+    }
+  };
+  overlay.querySelector('#create-mind-submit').addEventListener('click', submit);
 }
 
 // Perspectives panel rendering (appended to assistant messages)
@@ -1592,6 +2311,7 @@ async function init() {
     saveCurrentSession();
     currentSessionId = null;
     selectedBooks.clear();
+    selectedMinds.clear();
     window.location.hash = '#/';
   });
 
@@ -1600,6 +2320,7 @@ async function init() {
     saveCurrentSession();
     currentSessionId = null;
     selectedBooks.clear();
+    selectedMinds.clear();
     window.location.hash = '#/';
   });
 
@@ -1609,12 +2330,15 @@ async function init() {
   bindEnterSend(homeInput, handleHomeSend);
   document.getElementById('home-send-btn').addEventListener('click', handleHomeSend);
 
-  // Home + button → popover (upload or select from library)
+  // Home + button → books popover
   const uploadBtn = document.getElementById('upload-btn');
   const uploadInput = document.getElementById('upload-file-input');
   uploadBtn.addEventListener('click', e => { e.stopPropagation(); togglePopover('home-popover', 'home-popover-book-list', 'home-popover-no-books'); });
   document.getElementById('home-popover-upload').addEventListener('click', () => { closeAllPopovers(); uploadInput.click(); });
   uploadInput.addEventListener('change', () => { if (uploadInput.files.length) { handleFileUpload(uploadInput.files, 'home-upload-status'); uploadInput.value = ''; } });
+
+  // Home minds button → minds popover
+  document.getElementById('home-minds-btn').addEventListener('click', e => { e.stopPropagation(); toggleMindPopover('home-minds-popover', 'home-popover-mind-list', 'home-popover-no-minds'); });
 
   // Chat page composer
   const chatInput = document.getElementById('chat-input');
@@ -1622,12 +2346,15 @@ async function init() {
   bindEnterSend(chatInput, handleChatSend);
   document.getElementById('chat-send-btn').addEventListener('click', handleChatSend);
 
-  // Chat + button → popover
+  // Chat + button → books popover
   const chatPlusBtn = document.getElementById('chat-plus-btn');
   const chatUploadInput = document.getElementById('chat-upload-file-input');
   chatPlusBtn.addEventListener('click', e => { e.stopPropagation(); togglePopover('chat-popover', 'popover-book-list', 'popover-no-books'); });
   document.getElementById('popover-upload-action').addEventListener('click', () => { closeAllPopovers(); chatUploadInput.click(); });
   chatUploadInput.addEventListener('change', () => { if (chatUploadInput.files.length) { handleFileUpload(chatUploadInput.files, null); chatUploadInput.value = ''; } });
+
+  // Chat minds button → minds popover
+  document.getElementById('chat-minds-btn').addEventListener('click', e => { e.stopPropagation(); toggleMindPopover('chat-minds-popover', 'popover-mind-list', 'popover-no-minds'); });
   document.addEventListener('click', e => {
     document.querySelectorAll('.composer-popover').forEach(pop => {
       if (!pop.classList.contains('hidden') && !pop.contains(e.target) && !e.target.closest('.composer-icon-btn')) {
@@ -1676,9 +2403,10 @@ async function init() {
 
   // Minds page
   document.getElementById('minds-search').addEventListener('input', e => {
-    _renderMindsGrid(e.target.value.trim());
+    _applyGraphHighlight(e.target.value.trim());
   });
   document.getElementById('minds-add-btn').addEventListener('click', showAddMindDialog);
+  document.getElementById('minds-create-btn').addEventListener('click', showCreateMindDialog);
 
   // Mind chat
   const mindInput = document.getElementById('mind-chat-input');
