@@ -104,7 +104,7 @@ The system auto-selects the best available provider and falls back through the c
 
 ## Community
 
-Join our [Discord](https://discord.gg/BkYSkkwq) to share what you're reading, exchange reading methods, and tell us what you'd like to see in the product — or DM me directly on [Twitter/X](https://x.com/AcademiAI_).
+Join our [Discord](https://discord.gg/BkYSkkwq) to share what you're reading, exchange reading methods, and tell us what you'd like to see in the product — or DM me directly on [Twitter/X](https://x.com/steve_yeow).
 
 ## License
 
