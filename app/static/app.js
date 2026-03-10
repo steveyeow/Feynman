@@ -39,6 +39,11 @@ function getGreeting() {
   return g;
 }
 
+// Minds state
+let allMinds = [];
+let currentMindId = null;
+let mindChatHistory = [];
+
 // ─── Router ───
 function getRoute() {
   const hash = window.location.hash || '#/';
@@ -46,6 +51,9 @@ function getRoute() {
   if (hash === '#/chat') return { page: 'chat' };
   if (hash === '#/chats') return { page: 'chats' };
   if (hash === '#/library') return { page: 'library' };
+  if (hash === '#/minds') return { page: 'minds' };
+  const mm = hash.match(/^#\/mind\/(.+)$/);
+  if (mm) return { page: 'mind', id: mm[1] };
   const m = hash.match(/^#\/book\/(.+)$/);
   if (m) return { page: 'book', id: m[1] };
   return { page: 'home' };
@@ -65,6 +73,11 @@ function navigate() {
     case 'chat': onChatPageShow(); break;
     case 'chats': renderChatsPage(); break;
     case 'library': renderLibrary(); break;
+    case 'minds': renderMindsPage(); break;
+    case 'mind':
+      currentMindId = route.id;
+      renderMindDetail(route.id);
+      break;
     case 'book':
       currentBookId = route.id;
       renderBookDetail(route.id);
@@ -714,6 +727,9 @@ async function sendGlobalChat(message) {
     if (sources.length) loadAgents();
     // Trigger polling if any catalog books are being learned
     ensurePolling();
+
+    // Fetch mind perspectives in background
+    _fetchPerspectives(chatBox, message, bookContext, agentIds);
   } catch (err) {
     if (currentSessionId !== sentSessionId) return;
     removeLoading();
@@ -722,6 +738,66 @@ async function sendGlobalChat(message) {
       : 'Error: ' + err.message;
     appendMsg(chatBox, 'assistant', msg);
     persistSessions();
+  }
+}
+
+async function _fetchPerspectives(chatBox, message, bookContext, agentIds) {
+  try {
+    // Determine whether to suggest based on book or topic
+    const suggestBody = {};
+    if (bookContext && bookContext.length) {
+      suggestBody.book_title = bookContext[0].title;
+      suggestBody.book_author = bookContext[0].author || '';
+    } else {
+      suggestBody.topic = message.slice(0, 100);
+    }
+    suggestBody.count = 3;
+
+    const suggestions = await api('/api/minds/suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(suggestBody),
+    });
+
+    if (!suggestions.minds?.length) return;
+
+    // Ensure minds exist (generate if needed)
+    const mindIds = [];
+    for (const s of suggestions.minds) {
+      try {
+        const mind = await api('/api/minds/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
+        });
+        mindIds.push(mind.id);
+      } catch { /* skip failed minds */ }
+    }
+    if (!mindIds.length) return;
+
+    // Panel chat
+    const panelBody = { message, mind_ids: mindIds };
+    if (bookContext?.length) panelBody.book_context = bookContext;
+    if (agentIds?.length) panelBody.agent_ids = agentIds;
+
+    const panelData = await api('/api/minds/panel-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(panelBody),
+    });
+
+    if (panelData.responses?.length) {
+      // Find the last assistant message in chatBox and append perspectives after it
+      const lastAssistant = chatBox.querySelector('.chat-message.assistant:last-of-type');
+      if (lastAssistant) {
+        renderPerspectives(lastAssistant, panelData.responses);
+      }
+      // Refresh minds list in case new ones were generated
+      loadMinds();
+    }
+  } catch (err) {
+    // Perspectives are optional — fail silently
+    console.log('Perspectives fetch failed:', err.message);
   }
 }
 
@@ -1309,9 +1385,195 @@ function renderMarkdown(text) {
   }
 }
 
+// ─── Great Minds ───
+const MIND_COLORS = ['#6d597a','#355070','#264653','#2a9d8f','#e76f51','#b56576','#0077b6','#588157','#9b2226','#457b9d'];
+function mindColor(name) { let h = 0; for (let i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0; return MIND_COLORS[Math.abs(h) % MIND_COLORS.length]; }
+function mindInitials(name) { return name.split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join(''); }
+
+async function loadMinds() {
+  try { allMinds = await api('/api/minds'); } catch { allMinds = []; }
+}
+
+function renderMindsPage() {
+  const grid = document.getElementById('minds-grid');
+  const search = document.getElementById('minds-search');
+  if (search) search.value = '';
+  _renderMindsGrid('');
+}
+
+function _renderMindsGrid(query) {
+  const grid = document.getElementById('minds-grid');
+  let filtered = [...allMinds];
+  if (query) {
+    const q = query.toLowerCase();
+    filtered = filtered.filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      (m.domain || '').toLowerCase().includes(q) ||
+      (m.era || '').toLowerCase().includes(q)
+    );
+  }
+  if (!filtered.length) {
+    grid.innerHTML = filtered.length === 0 && allMinds.length === 0
+      ? '<div class="empty-state"><p>Minds are being generated... refresh in a moment.</p></div>'
+      : '<div class="empty-state"><p>No minds found.</p></div>';
+    return;
+  }
+  grid.innerHTML = filtered.map(m => {
+    const color = mindColor(m.name);
+    const initials = mindInitials(m.name);
+    const domains = (m.domain || '').split(',').map(d => d.trim()).filter(Boolean);
+    const chatLabel = m.chat_count ? `${m.chat_count} discussions` : 'New';
+    return `<div class="mind-card" onclick="window.location.hash='#/mind/${esc(m.id)}'">
+      <div class="mind-avatar" style="background:${color}">${initials}</div>
+      <div class="mind-card-name">${esc(m.name)}</div>
+      <div class="mind-card-era">${esc(m.era)}</div>
+      <div class="mind-card-domain">${domains.map(d => `<span class="mind-domain-tag">${esc(d)}</span>`).join('')}</div>
+      <div class="mind-card-bio">${esc(m.bio_summary)}</div>
+      <div class="mind-card-footer">
+        <span class="mind-chat-count">${chatLabel}</span>
+        <button class="mind-chat-btn" onclick="event.stopPropagation();window.location.hash='#/mind/${esc(m.id)}'">Chat &rarr;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function renderMindDetail(mindId) {
+  const headerEl = document.getElementById('mind-header');
+  const chatBox = document.getElementById('mind-chat-messages');
+  const metaSidebar = document.getElementById('mind-meta-sidebar');
+  chatBox.innerHTML = '';
+  mindChatHistory = [];
+
+  let mind = allMinds.find(m => m.id === mindId);
+  if (!mind) {
+    try { mind = await api('/api/minds/' + mindId); } catch {}
+  }
+  if (!mind) {
+    headerEl.innerHTML = '<div class="mind-inline-info"><h2>Mind not found</h2></div>';
+    return;
+  }
+
+  const color = mindColor(mind.name);
+  const initials = mindInitials(mind.name);
+  headerEl.innerHTML = `
+    <div class="mind-avatar" style="background:${color};width:40px;height:40px;font-size:16px">${initials}</div>
+    <div class="mind-inline-info"><h2>${esc(mind.name)}</h2><p>${esc(mind.era)} · ${esc(mind.domain)}</p></div>`;
+
+  const domains = (mind.domain || '').split(',').map(d => d.trim()).filter(Boolean);
+  const works = mind.works || [];
+  metaSidebar.innerHTML = `
+    <h3 class="sidebar-title">ABOUT</h3>
+    <div class="mind-avatar" style="background:${color};width:64px;height:64px;font-size:28px;margin:0 auto 12px">${initials}</div>
+    <p style="font-size:14px;font-weight:600;text-align:center;margin-bottom:4px">${esc(mind.name)}</p>
+    <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:12px">${esc(mind.era)}</p>
+    ${mind.bio_summary ? `<p style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">${esc(mind.bio_summary)}</p>` : ''}
+    ${domains.length ? `<div style="margin-bottom:12px">${domains.map(d => `<span class="mind-domain-tag">${esc(d)}</span> `).join('')}</div>` : ''}
+    ${works.length ? `<h3 class="sidebar-title" style="margin-top:16px">WORKS</h3><ul style="font-size:12px;color:var(--text-secondary);padding-left:16px;margin:0">${works.map(w => `<li style="margin-bottom:4px">${esc(w)}</li>`).join('')}</ul>` : ''}
+    <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${mind.chat_count || 0} discussions</p>`;
+}
+
+async function sendMindChat(mindId, message) {
+  const chatBox = document.getElementById('mind-chat-messages');
+  const input = document.getElementById('mind-chat-input');
+  appendMsg(chatBox, 'user', message);
+  if (input) input.value = '';
+  showLoading(chatBox);
+
+  const body = { message };
+  if (mindChatHistory.length) body.history = mindChatHistory;
+
+  // Add selected books as context
+  if (selectedBooks.size) {
+    body.book_context = [...selectedBooks.values()].map(b => ({ title: b.title, author: b.author || '' }));
+    body.agent_ids = [...selectedBooks.values()].map(b => b.agentId);
+  }
+
+  try {
+    const data = await api('/api/minds/' + mindId + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    removeLoading();
+    const msgOpts = {};
+    if (data.references?.length) msgOpts.references = data.references;
+    if (data.usage) msgOpts.usage = data.usage;
+    appendMsg(chatBox, 'assistant', data.response, null, msgOpts);
+    mindChatHistory.push({ role: 'user', content: message });
+    mindChatHistory.push({ role: 'assistant', content: data.response });
+  } catch (err) {
+    removeLoading();
+    appendMsg(chatBox, 'assistant', 'Error: ' + err.message);
+  }
+}
+
+function showAddMindDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'mind-add-dialog';
+  overlay.innerHTML = `
+    <div class="mind-add-form">
+      <h3>Add a Great Mind</h3>
+      <input type="text" id="add-mind-name" placeholder="Name (e.g., Socrates, Ada Lovelace)" autocomplete="off" />
+      <div class="mind-add-actions">
+        <button id="add-mind-cancel">Cancel</button>
+        <button id="add-mind-submit" class="primary-btn">Generate</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const nameInput = overlay.querySelector('#add-mind-name');
+  nameInput.focus();
+  overlay.querySelector('#add-mind-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  const submit = async () => {
+    const name = nameInput.value.trim();
+    if (!name) return;
+    const btn = overlay.querySelector('#add-mind-submit');
+    btn.textContent = 'Generating...';
+    btn.disabled = true;
+    try {
+      await api('/api/minds/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      overlay.remove();
+      await loadMinds();
+      if (getRoute().page === 'minds') _renderMindsGrid('');
+    } catch (err) {
+      btn.textContent = 'Generate';
+      btn.disabled = false;
+      alert('Failed: ' + err.message);
+    }
+  };
+  overlay.querySelector('#add-mind-submit').addEventListener('click', submit);
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+}
+
+// Perspectives panel rendering (appended to assistant messages)
+function renderPerspectives(container, perspectives) {
+  if (!perspectives || !perspectives.length) return;
+  const panel = document.createElement('div');
+  panel.className = 'perspectives-panel';
+  let html = '<div class="perspectives-header"><span>Great Minds</span></div>';
+  for (const p of perspectives) {
+    const color = mindColor(p.mind_name);
+    const initials = mindInitials(p.mind_name);
+    html += `<div class="perspective-item">
+      <div class="perspective-mind-row">
+        <div class="perspective-avatar" style="background:${color}">${initials}</div>
+        <span class="perspective-name">${esc(p.mind_name)}</span>
+      </div>
+      <div class="perspective-text">${renderMarkdown(p.response)}</div>
+    </div>`;
+  }
+  panel.innerHTML = html;
+  container.appendChild(panel);
+  container.scrollTop = container.scrollHeight;
+}
+
 // ─── Init ───
 async function init() {
-  await Promise.all([loadAgents(), loadVotes(), loadTopics()]);
+  await Promise.all([loadAgents(), loadVotes(), loadTopics(), loadMinds()]);
   buildBookList();
   restoreSessions();
   renderChatHistory();
@@ -1410,6 +1672,24 @@ async function init() {
       libraryFilter = btn.dataset.filter;
       renderLibraryGrid();
     });
+  });
+
+  // Minds page
+  document.getElementById('minds-search').addEventListener('input', e => {
+    _renderMindsGrid(e.target.value.trim());
+  });
+  document.getElementById('minds-add-btn').addEventListener('click', showAddMindDialog);
+
+  // Mind chat
+  const mindInput = document.getElementById('mind-chat-input');
+  autoResize(mindInput);
+  bindEnterSend(mindInput, () => {
+    const msg = mindInput.value.trim();
+    if (msg && currentMindId) { mindInput.value = ''; sendMindChat(currentMindId, msg); }
+  });
+  document.getElementById('mind-send-btn').addEventListener('click', () => {
+    const msg = mindInput.value.trim();
+    if (msg && currentMindId) { mindInput.value = ''; sendMindChat(currentMindId, msg); }
   });
 
   navigate();

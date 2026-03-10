@@ -91,6 +91,55 @@ def init_db() -> None:
         )
 
 
+        # ─── Minds tables ───
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS minds (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                era TEXT,
+                domain TEXT,
+                bio_summary TEXT,
+                persona TEXT NOT NULL,
+                thinking_style TEXT,
+                typical_phrases TEXT,
+                works TEXT,
+                avatar_seed TEXT,
+                version INTEGER DEFAULT 1,
+                chat_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_minds_name ON minds(LOWER(name))")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mind_works (
+                mind_id TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                PRIMARY KEY (mind_id, agent_id),
+                FOREIGN KEY (mind_id) REFERENCES minds(id),
+                FOREIGN KEY (agent_id) REFERENCES agents(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mind_memories (
+                id TEXT PRIMARY KEY,
+                mind_id TEXT NOT NULL,
+                user_id TEXT,
+                summary TEXT NOT NULL,
+                topic TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (mind_id) REFERENCES minds(id)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mind_memories_mind ON mind_memories(mind_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mind_memories_user ON mind_memories(mind_id, user_id)")
+
+
 def create_agent(name: str, agent_type: str, source: str | None, meta: dict[str, Any]) -> str:
     agent_id = str(uuid.uuid4())
     with get_conn() as conn:
@@ -311,4 +360,124 @@ def create_catalog_agent(title: str, author: str = "", isbn: str | None = None,
             (agent_id, title, "catalog", author, "catalog", json.dumps(meta), _utcnow()),
         )
     return agent_id
+
+
+# ─── Minds CRUD ───
+
+def create_mind(data: dict[str, Any]) -> str:
+    """Insert a new mind agent. Returns mind_id."""
+    mind_id = str(uuid.uuid4())
+    with get_conn() as conn:
+        conn.execute(
+            """INSERT INTO minds
+               (id, name, era, domain, bio_summary, persona, thinking_style,
+                typical_phrases, works, avatar_seed, version, chat_count, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)""",
+            (
+                mind_id,
+                data["name"],
+                data.get("era", ""),
+                data.get("domain", ""),
+                data.get("bio_summary", ""),
+                data["persona"],
+                data.get("thinking_style", ""),
+                json.dumps(data.get("typical_phrases", [])),
+                json.dumps(data.get("works", [])),
+                data.get("avatar_seed", data["name"].lower().replace(" ", "-")),
+                _utcnow(),
+            ),
+        )
+    return mind_id
+
+
+def get_mind(mind_id: str) -> dict[str, Any] | None:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM minds WHERE id = ?", (mind_id,)).fetchone()
+        if not row:
+            return None
+        return _row_to_mind(row)
+
+
+def find_mind_by_name(name: str) -> dict[str, Any] | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM minds WHERE LOWER(name) = LOWER(?)", (name,)
+        ).fetchone()
+        if not row:
+            return None
+        return _row_to_mind(row)
+
+
+def list_minds() -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM minds ORDER BY chat_count DESC, created_at ASC").fetchall()
+        return [_row_to_mind(r) for r in rows]
+
+
+def _row_to_mind(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "era": row["era"] or "",
+        "domain": row["domain"] or "",
+        "bio_summary": row["bio_summary"] or "",
+        "persona": row["persona"],
+        "thinking_style": row["thinking_style"] or "",
+        "typical_phrases": json.loads(row["typical_phrases"] or "[]"),
+        "works": json.loads(row["works"] or "[]"),
+        "avatar_seed": row["avatar_seed"] or "",
+        "version": row["version"],
+        "chat_count": row["chat_count"],
+        "created_at": row["created_at"],
+    }
+
+
+def increment_mind_chat_count(mind_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE minds SET chat_count = chat_count + 1 WHERE id = ?", (mind_id,))
+
+
+def link_mind_work(mind_id: str, agent_id: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO mind_works (mind_id, agent_id) VALUES (?, ?)",
+            (mind_id, agent_id),
+        )
+
+
+def get_mind_work_ids(mind_id: str) -> list[str]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT agent_id FROM mind_works WHERE mind_id = ?", (mind_id,)
+        ).fetchall()
+        return [r["agent_id"] for r in rows]
+
+
+# ─── Mind memories ───
+
+def add_mind_memory(mind_id: str, summary: str, topic: str = "", user_id: str | None = None) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO mind_memories (id, mind_id, user_id, summary, topic, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (str(uuid.uuid4()), mind_id, user_id, summary, topic, _utcnow()),
+        )
+
+
+def list_mind_memories(mind_id: str, user_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        if user_id:
+            rows = conn.execute(
+                """SELECT summary, topic, created_at FROM mind_memories
+                   WHERE mind_id = ? AND (user_id IS NULL OR user_id = ?)
+                   ORDER BY created_at DESC LIMIT ?""",
+                (mind_id, user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT summary, topic, created_at FROM mind_memories
+                   WHERE mind_id = ? AND user_id IS NULL
+                   ORDER BY created_at DESC LIMIT ?""",
+                (mind_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
 

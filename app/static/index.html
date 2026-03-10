@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Feynman</title>
-    <link rel="stylesheet" href="/static/styles.css?v=31" />
+    <link rel="stylesheet" href="/static/styles.css?v=32" />
   </head>
   <body>
     <div class="app-layout" id="app-layout">
@@ -27,6 +27,10 @@
         <a href="#/library" class="sidebar-nav-link sidebar-library-link" title="Library">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           <span class="sidebar-label">Library</span>
+        </a>
+        <a href="#/minds" class="sidebar-nav-link sidebar-minds-link" title="Great Minds">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="sidebar-label">Great Minds</span>
         </a>
         <div class="sidebar-history" id="chat-history-list"></div>
         <div class="sidebar-bottom">
@@ -201,6 +205,48 @@
           </div>
         </div>
 
+        <!-- ─── MINDS PAGE ─── -->
+        <div id="page-minds" class="page-view minds-page hidden">
+          <div class="minds-content">
+            <h1 class="page-title">Great Minds</h1>
+            <div class="minds-toolbar">
+              <input type="text" id="minds-search" placeholder="Search minds..." autocomplete="off" />
+              <button id="minds-add-btn" class="minds-add-btn" title="Add a mind">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add a Mind
+              </button>
+            </div>
+            <div id="minds-grid" class="minds-grid"></div>
+          </div>
+        </div>
+
+        <!-- ─── MIND CHAT PAGE ─── -->
+        <div id="page-mind" class="page-view mind-page hidden">
+          <nav class="page-nav">
+            <a href="#/minds" class="nav-link-back">&larr; Great Minds</a>
+          </nav>
+          <div class="mind-detail-layout">
+            <main class="chat-main">
+              <div id="mind-header" class="mind-inline-header"></div>
+              <div id="mind-chat-messages" class="chat-messages"></div>
+              <div class="chat-input-area">
+                <div class="chat-composer-inline">
+                  <textarea id="mind-chat-input" class="composer-input" rows="1" placeholder="Ask this mind a question..."></textarea>
+                  <div class="composer-toolbar">
+                    <div class="composer-left"></div>
+                    <button type="button" id="mind-send-btn" class="composer-send-btn" title="Send">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </main>
+            <aside class="chat-sidebar-right">
+              <div id="mind-meta-sidebar"></div>
+            </aside>
+          </div>
+        </div>
+
         <!-- ─── BOOK DETAIL PAGE ─── -->
         <div id="page-book" class="page-view book-page hidden">
           <nav class="page-nav">
@@ -234,6 +280,6 @@
       </div><!-- .app-main -->
     </div><!-- .app-layout -->
 
-    <script src="/static/app.js?v=31"></script>
+    <script src="/static/app.js?v=32"></script>
   </body>
 </html>

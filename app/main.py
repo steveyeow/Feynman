@@ -29,10 +29,13 @@ from .core.db import (
     create_vote,
     delete_agent,
     find_agent_by_name,
+    find_mind_by_name,
     get_agent,
+    get_mind,
     init_db,
     list_agents,
     list_messages,
+    list_minds,
     list_questions,
     list_votes,
     update_agent_meta,
@@ -42,6 +45,15 @@ from .core.db import (
 from .core.indexer import index_text
 from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, pick_provider
 from .core.rag import build_context, retrieve, retrieve_cross_book
+from .core.minds import (
+    SEED_MINDS,
+    extract_and_save_memory,
+    get_or_create_mind,
+    mind_chat,
+    panel_chat,
+    suggest_minds_for_book,
+    suggest_minds_for_topic,
+)
 from .core.skills import resolve_multi_agent, resolve_skills
 from .core.sources import fetch_book_content, fetch_wikipedia_summary
 from .core.text_utils import extract_text_from_file
@@ -286,11 +298,28 @@ def _process_recommendations(text: str) -> None:
 
 # ─── Startup ───
 
+def _seed_minds() -> None:
+    """Background task: pre-generate seed minds on first startup."""
+    for seed in SEED_MINDS:
+        try:
+            existing = find_mind_by_name(seed["name"])
+            if existing:
+                continue
+            get_or_create_mind(seed["name"], era=seed["era"], domain=seed["domain"])
+            log.info("Seeded mind: %s", seed["name"])
+        except Exception as exc:
+            log.warning("Failed to seed mind %s: %s", seed["name"], exc)
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
+
+    # Pre-generate seed minds in background
+    t_minds = threading.Thread(target=_seed_minds, daemon=True)
+    t_minds.start()
 
     # Start discovery daemon if enabled
     if DISCOVERY_INTERVAL > 0:
@@ -821,3 +850,192 @@ def api_upvote(vote_id: str, background_tasks: BackgroundTasks) -> dict[str, Any
         elif existing["status"] == "catalog":
             background_tasks.add_task(_learn_agent, existing["id"])
     return result
+
+
+# ─── Great Minds endpoints ───
+
+class MindGenerateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    era: str = ""
+    domain: str = ""
+
+
+class MindSuggestRequest(BaseModel):
+    book_title: str = ""
+    book_author: str = ""
+    topic: str = ""
+    exclude: list[str] = Field(default_factory=list)
+    count: int = Field(default=3, ge=1, le=6)
+
+
+class MindChatRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    agent_ids: list[str] | None = None
+    book_context: list[BookContext] | None = None
+    history: list[HistoryMessage] | None = None
+
+
+class PanelChatRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    mind_ids: list[str] = Field(..., min_items=1)
+    target_minds: list[str] | None = None
+    agent_ids: list[str] | None = None
+    book_context: list[BookContext] | None = None
+    history: list[HistoryMessage] | None = None
+
+
+@app.get("/api/minds")
+def api_list_minds() -> list[dict[str, Any]]:
+    minds = list_minds()
+    for m in minds:
+        m.pop("persona", None)
+    return minds
+
+
+@app.get("/api/minds/{mind_id}")
+def api_get_mind(mind_id: str) -> dict[str, Any]:
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    mind.pop("persona", None)
+    return mind
+
+
+@app.post("/api/minds/generate")
+def api_generate_mind(payload: MindGenerateRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    try:
+        mind = get_or_create_mind(payload.name.strip(), era=payload.era, domain=payload.domain)
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Mind generation failed: {exc}")
+    # Trigger learning for linked works
+    from .core.db import get_mind_work_ids
+    for agent_id in get_mind_work_ids(mind["id"]):
+        agent = get_agent(agent_id)
+        if agent and agent["status"] == "catalog":
+            background_tasks.add_task(_learn_agent, agent_id)
+    safe = {k: v for k, v in mind.items() if k != "persona"}
+    return safe
+
+
+@app.post("/api/minds/suggest")
+def api_suggest_minds(payload: MindSuggestRequest) -> dict[str, Any]:
+    try:
+        if payload.book_title:
+            suggestions, usage = suggest_minds_for_book(
+                payload.book_title, payload.book_author,
+                count=payload.count,
+            )
+        elif payload.topic:
+            suggestions, usage = suggest_minds_for_topic(
+                payload.topic, count=payload.count,
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Provide book_title or topic")
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Suggestion failed: {exc}")
+
+    # Filter out excluded names
+    if payload.exclude:
+        excluded = {n.lower() for n in payload.exclude}
+        suggestions = [s for s in suggestions if s.get("name", "").lower() not in excluded]
+
+    return {"minds": suggestions, "usage": usage}
+
+
+@app.post("/api/minds/{mind_id}/chat")
+def api_mind_chat(mind_id: str, payload: MindChatRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+
+    book_ctx = ""
+    agent_ids = payload.agent_ids or []
+    if payload.book_context:
+        titles = [f'"{b.title}" by {b.author}' if b.author else f'"{b.title}"' for b in payload.book_context]
+        book_ctx = "Books being discussed: " + ", ".join(titles)
+        for bc in payload.book_context:
+            agent = find_agent_by_name(bc.title)
+            if agent and agent["id"] not in agent_ids:
+                agent_ids.append(agent["id"])
+
+    history = None
+    if payload.history:
+        history = [{"role": m.role, "content": m.content} for m in payload.history]
+
+    try:
+        result = mind_chat(
+            mind, payload.message,
+            book_context=book_ctx,
+            agent_ids=agent_ids if agent_ids else None,
+            history=history,
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    background_tasks.add_task(
+        extract_and_save_memory, mind["id"], payload.message, result["response"]
+    )
+
+    return result
+
+
+@app.post("/api/minds/panel-chat")
+def api_panel_chat(payload: PanelChatRequest, background_tasks: BackgroundTasks) -> dict[str, Any]:
+    minds = []
+    for mid in payload.mind_ids:
+        m = get_mind(mid)
+        if m:
+            minds.append(m)
+    if not minds:
+        raise HTTPException(status_code=400, detail="No valid minds found")
+
+    # Filter to targeted minds if @mentions are used
+    if payload.target_minds:
+        targets = {n.lower() for n in payload.target_minds}
+        minds = [m for m in minds if m["name"].lower() in targets]
+        if not minds:
+            raise HTTPException(status_code=400, detail="No matching target minds")
+
+    book_ctx = ""
+    agent_ids = payload.agent_ids or []
+    if payload.book_context:
+        titles = [f'"{b.title}" by {b.author}' if b.author else f'"{b.title}"' for b in payload.book_context]
+        book_ctx = "Books being discussed: " + ", ".join(titles)
+        for bc in payload.book_context:
+            agent = find_agent_by_name(bc.title)
+            if agent and agent["id"] not in agent_ids:
+                agent_ids.append(agent["id"])
+
+    history = None
+    if payload.history:
+        history = [{"role": m.role, "content": m.content} for m in payload.history]
+
+    try:
+        results = panel_chat(
+            minds, payload.message,
+            book_context=book_ctx,
+            agent_ids=agent_ids if agent_ids else None,
+            history=history,
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    # Save memories in background
+    for r in results:
+        if r.get("response") and not r["response"].startswith("["):
+            background_tasks.add_task(
+                extract_and_save_memory, r["mind_id"], payload.message, r["response"]
+            )
+
+    total_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    for r in results:
+        for k in total_usage:
+            total_usage[k] += r.get("usage", {}).get(k, 0)
+
+    return {"responses": results, "total_usage": total_usage}
