@@ -542,6 +542,7 @@ function persistSessions() {
       books: s.books instanceof Map ? [...s.books.entries()] : [],
       activeMinds: s.activeMinds instanceof Map ? [...s.activeMinds.entries()] : [],
       updatedAt: s.updatedAt || 0,
+      ...(s.mindId ? { mindId: s.mindId } : {}),
     }));
     localStorage.setItem('chatSessions', JSON.stringify(data));
     localStorage.setItem('sessionCounter', String(sessionCounter));
@@ -561,6 +562,7 @@ function restoreSessions() {
       books: new Map(s.books || []),
       activeMinds: new Map(s.activeMinds || []),
       updatedAt: migrated ? (s.updatedAt || 0) : 0,
+      mindId: s.mindId || null,
     }));
     if (!migrated) localStorage.setItem('ts_migrated', '1');
     sessionCounter = parseInt(localStorage.getItem('sessionCounter') || '0', 10);
@@ -586,6 +588,14 @@ function saveCurrentSession() {
   if (!currentSessionId) return;
   const session = chatSessions.find(s => s.id === currentSessionId);
   if (!session) return;
+
+  if (session.mindId) {
+    const mindPage = document.getElementById('page-mind');
+    const chatBox = document.getElementById('mind-chat-messages');
+    if (chatBox && mindPage && !mindPage.classList.contains('hidden')) _saveMindSession(chatBox);
+    return;
+  }
+
   const msgs = [];
   document.querySelectorAll('#chat-messages .chat-message:not(#loading-msg):not(.minds-loading-notice), #chat-messages .mind-join-notice').forEach(el => {
     if (el.classList.contains('mind-join-notice')) {
@@ -615,6 +625,12 @@ function switchToSession(id) {
   const session = chatSessions.find(s => s.id === id);
   if (!session) return;
   currentSessionId = id;
+
+  if (session.mindId) {
+    window.location.hash = '#/mind/' + session.mindId;
+    return;
+  }
+
   selectedBooks = new Map(session.books);
   selectedMinds = new Map(session.minds || []);
   activeMinds = new Map(session.activeMinds || []);
@@ -695,9 +711,11 @@ function _renderChatsList(query) {
     return;
   }
   emptyEl.classList.add('hidden');
+  const chatIcon = `<svg class="chat-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+  const mindIcon = `<svg class="chat-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="9" y1="8" x2="15" y2="16"/></svg>`;
   listEl.innerHTML = sessions.map(s =>
     `<div class="chats-list-item" data-sid="${s.id}">
-      <svg class="chat-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      ${s.mindId ? mindIcon : chatIcon}
       <div class="chats-item-body">
         <div class="chat-item-title">${esc(s.title)}</div>
         ${s.updatedAt ? `<div class="chats-item-time">Last message ${timeAgo(s.updatedAt)}</div>` : ''}
@@ -898,6 +916,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds) {
       }
       loadMinds();
     }
+    _saveMindSession(chatBox);
   } catch (err) {
     removeMindsLoading();
     console.log('Mind chat failed:', err.message);
@@ -1443,7 +1462,7 @@ function renderSelectedChips() {
   });
   const homeInput = document.getElementById('home-input');
   if (homeInput) {
-    homeInput.placeholder = (selectedBooks.size || selectedMinds.size) ? 'Ask your question...' : 'Ask about books or topics — great minds will join in...';
+    homeInput.placeholder = (selectedBooks.size || selectedMinds.size) ? 'Ask your question...' : 'Chat with books and great minds — ask anything...';
   }
   // Re-render starters to match selected books
   if (getRoute().page === 'home') renderStarters();
@@ -2200,27 +2219,52 @@ function _applyGraphHighlight(query) {
 }
 
 async function renderMindDetail(mindId) {
-  const headerEl = document.getElementById('mind-header');
+  saveCurrentSession();
   const chatBox = document.getElementById('mind-chat-messages');
   const metaSidebar = document.getElementById('mind-meta-sidebar');
   chatBox.innerHTML = '';
   mindChatHistory = [];
+  activeMinds.clear();
 
   let mind = allMinds.find(m => m.id === mindId);
   if (!mind) {
     try { mind = await api('/api/minds/' + mindId); } catch {}
   }
   if (!mind) {
-    headerEl.innerHTML = '<div class="mind-inline-info"><h2>Mind not found</h2></div>';
+    metaSidebar.innerHTML = '<p style="padding:20px;color:var(--text-muted)">Mind not found</p>';
     return;
+  }
+
+  const existingSession = chatSessions.find(s => s.mindId === mindId);
+  if (existingSession) {
+    currentSessionId = existingSession.id;
+    activeMinds = new Map(existingSession.activeMinds || []);
+    for (const m of existingSession.messages) {
+      if (m.role === 'mind') {
+        appendMindMsg(chatBox, m.mindName, m.content);
+        mindChatHistory.push({ role: 'assistant', content: `[${m.mindName}]: ${m.content}` });
+      } else if (m.role === 'system-notice') {
+        appendJoinNotice(chatBox, m.mindNames || []);
+      } else if (m.role === 'user') {
+        appendMsg(chatBox, 'user', m.content);
+        mindChatHistory.push({ role: 'user', content: m.content });
+      } else {
+        appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
+        mindChatHistory.push({ role: m.role, content: m.content });
+      }
+    }
+  } else {
+    saveCurrentSession();
+    const id = 's-' + (++sessionCounter);
+    const session = { id, title: `Chat with ${mind.name}`, messages: [], books: new Map(), activeMinds: new Map(), mindId, updatedAt: Date.now() };
+    chatSessions.unshift(session);
+    currentSessionId = id;
+    renderChatHistory();
+    persistSessions();
   }
 
   const color = mindColor(mind.name);
   const initials = mindInitials(mind.name);
-  headerEl.innerHTML = `
-    <div class="mind-avatar" style="background:${color};width:40px;height:40px;font-size:16px">${initials}</div>
-    <div class="mind-inline-info"><h2>${esc(mind.name)}</h2><p>${esc(mind.era)} · ${esc(mind.domain)}</p></div>`;
-
   const domains = (mind.domain || '').split(',').map(d => d.trim()).filter(Boolean);
   const works = mind.works || [];
   metaSidebar.innerHTML = `
@@ -2244,10 +2288,13 @@ async function sendMindChat(mindId, message) {
   const body = { message };
   if (mindChatHistory.length) body.history = mindChatHistory;
 
-  // Add selected books as context
+  const bookContext = [];
+  const agentIds = [];
   if (selectedBooks.size) {
     body.book_context = [...selectedBooks.values()].map(b => ({ title: b.title, author: b.author || '' }));
     body.agent_ids = [...selectedBooks.values()].map(b => b.agentId);
+    bookContext.push(...body.book_context);
+    agentIds.push(...body.agent_ids);
   }
 
   try {
@@ -2257,16 +2304,50 @@ async function sendMindChat(mindId, message) {
       body: JSON.stringify(body),
     });
     removeLoading();
-    const msgOpts = {};
-    if (data.references?.length) msgOpts.references = data.references;
-    if (data.usage) msgOpts.usage = data.usage;
-    appendMsg(chatBox, 'assistant', data.response, null, msgOpts);
+
+    const mind = allMinds.find(m => m.id === mindId);
+    const mindName = mind?.name || 'Mind';
+    appendMindMsg(chatBox, mindName, data.response);
+
     mindChatHistory.push({ role: 'user', content: message });
-    mindChatHistory.push({ role: 'assistant', content: data.response });
+    mindChatHistory.push({ role: 'assistant', content: `[${mindName}]: ${data.response}` });
+
+    if (!activeMinds.has(mindId) && mind) {
+      activeMinds.set(mindId, { id: mindId, name: mind.name });
+    }
+
+    _saveMindSession(chatBox);
+    _inviteMindsToChat(chatBox, message, bookContext, agentIds);
   } catch (err) {
     removeLoading();
     appendMsg(chatBox, 'assistant', 'Error: ' + err.message);
   }
+}
+
+let _mindSaving = false;
+function _saveMindSession(chatBox) {
+  if (_mindSaving) return;
+  if (!currentSessionId) return;
+  const session = chatSessions.find(s => s.id === currentSessionId);
+  if (!session) return;
+  const msgs = [];
+  chatBox.querySelectorAll('.chat-message:not(#loading-msg):not(.minds-loading-notice), .mind-join-notice').forEach(el => {
+    if (el.classList.contains('mind-join-notice')) {
+      const fullNames = el.querySelector('span:last-child')?.textContent?.replace(' joined the discussion', '') || '';
+      msgs.push({ role: 'system-notice', content: '', mindNames: fullNames.split(/ and |, /).map(s => s.trim()).filter(Boolean) });
+    } else if (el.classList.contains('mind-message')) {
+      msgs.push({ role: 'mind', content: el.dataset.raw || '', mindName: el.dataset.mindName || '' });
+    } else {
+      const role = el.classList.contains('user') ? 'user' : 'assistant';
+      msgs.push({ role, content: el.dataset.raw || el.textContent });
+    }
+  });
+  session.messages = msgs;
+  session.activeMinds = new Map(activeMinds);
+  session.updatedAt = Date.now();
+  _mindSaving = true;
+  persistSessions();
+  _mindSaving = false;
 }
 
 function showAddMindDialog() {

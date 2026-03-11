@@ -1152,17 +1152,24 @@ body {
 .mind-chat-btn:hover { background: var(--bg-sidebar); }
 
 /* Mind detail / chat page */
+.mind-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.mind-page .page-nav {
+  flex-shrink: 0;
+}
 .mind-page .mind-detail-layout {
+  flex: 1;
   display: flex;
-  height: calc(100vh - 50px);
+  overflow: hidden;
 }
-.mind-inline-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+.mind-page .mind-detail-layout > .chat-sidebar-right {
+  display: block;
 }
+/* mind-inline-header removed — info shown in sidebar only */
 .mind-inline-info h2 {
   font-size: 18px;
   font-weight: 600;
