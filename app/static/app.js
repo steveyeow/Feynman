@@ -97,33 +97,47 @@ async function initSupabase() {
 }
 
 function updateAuthUI() {
-  const bottomEl = document.getElementById('sidebar-bottom');
-  if (!bottomEl) return;
+  const wrap = document.getElementById('sidebar-user-wrap');
+  if (!wrap) return;
   if (!window.FEYNMAN_PRO) return;
-  const oldProfile = bottomEl.querySelector('.sidebar-profile, .sidebar-profile-row, .sidebar-signin-row');
-  const html = currentUser
-    ? `<a href="#/subscription" class="sidebar-profile-row" title="Manage subscription">
-        <div class="profile-avatar">
-          ${currentUser.user_metadata?.avatar_url
-            ? `<img src="${currentUser.user_metadata.avatar_url}" referrerpolicy="no-referrer" style="width:28px;height:28px;border-radius:50%" />`
-            : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
-          }
-        </div>
-        <div class="sidebar-label profile-info">
-          <span class="profile-name">${esc(userName || 'Account')}</span>
-          <span class="profile-tier">${esc(currentUser.email || '')}</span>
-        </div>
-      </a>`
-    : `<a href="#/login" class="sidebar-profile-row sidebar-signin-row" title="Sign in">
-        <div class="profile-avatar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-        </div>
-        <span class="sidebar-label">Sign in</span>
-      </a>`;
-  if (oldProfile) {
-    oldProfile.outerHTML = html;
+
+  const profileBtn = wrap.querySelector('.sidebar-profile');
+  const menuEl = document.getElementById('sidebar-user-menu');
+
+  if (currentUser) {
+    const avatarHtml = currentUser.user_metadata?.avatar_url
+      ? `<img src="${currentUser.user_metadata.avatar_url}" referrerpolicy="no-referrer" style="width:28px;height:28px;border-radius:50%" />`
+      : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    profileBtn.innerHTML = `<div class="profile-avatar">${avatarHtml}</div>
+      <div class="sidebar-label profile-info">
+        <span class="profile-name">${esc(userName || 'Account')}</span>
+        <span class="profile-tier">${esc(currentUser.email || '')}</span>
+      </div>`;
+    profileBtn.title = userName || 'Account';
+
+    menuEl.innerHTML = `<div class="user-menu-header">
+        <span class="user-menu-name">${esc(userName || 'Account')}</span>
+        <span class="user-menu-email">${esc(currentUser.email || '')}</span>
+      </div>
+      <div class="user-menu-divider"></div>
+      <a class="user-menu-item" href="#/subscription">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg>
+        Subscription
+      </a>
+      <button class="user-menu-item user-menu-signout" onclick="signOut()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign out
+      </button>`;
   } else {
-    bottomEl.insertAdjacentHTML('beforeend', html);
+    profileBtn.innerHTML = `<div class="profile-avatar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>`;
+    profileBtn.title = 'Account';
+
+    menuEl.innerHTML = `<a class="user-menu-item" href="#/login">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Sign in
+      </a>`;
   }
 }
 
@@ -3845,6 +3859,26 @@ async function init() {
     document.documentElement.classList.toggle('light', !isDark);
     localStorage.setItem('feynman-theme', isDark ? 'dark' : 'light');
   });
+
+  // User profile menu toggle
+  const profileBtn = document.getElementById('sidebar-profile-btn');
+  const userMenu = document.getElementById('sidebar-user-menu');
+  if (profileBtn && userMenu) {
+    profileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userMenu.classList.toggle('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!userMenu.contains(e.target) && !profileBtn.contains(e.target)) {
+        userMenu.classList.remove('open');
+      }
+    });
+    userMenu.addEventListener('click', (e) => {
+      if (e.target.closest('.user-menu-item')) {
+        userMenu.classList.remove('open');
+      }
+    });
+  }
 
   // Chats page
   document.getElementById('chats-search').addEventListener('input', e => {
