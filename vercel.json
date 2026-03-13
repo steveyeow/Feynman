@@ -6,7 +6,7 @@
     { "src": "/(.*)", "dest": "app/main.py" }
   ],
   "crons": [
-    { "path": "/api/cron/seed-minds", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/discover", "schedule": "0 */6 * * *" }
+    { "path": "/api/cron/seed-minds", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/discover", "schedule": "0 0 * * *" }
   ]
 }
