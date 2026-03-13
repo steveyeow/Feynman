@@ -1793,8 +1793,10 @@ body {
 /* ═══════════════════════════════════════
    LANDING PAGE
    ═══════════════════════════════════════ */
-.app-layout.landing-active .app-sidebar { display: none !important; }
-.app-layout.landing-active .sidebar-float-btn { display: none !important; }
+.app-layout.landing-active .app-sidebar,
+.app-layout.login-active .app-sidebar { display: none !important; }
+.app-layout.landing-active .sidebar-float-btn,
+.app-layout.login-active .sidebar-float-btn { display: none !important; }
 
 .landing-page {
   flex: 1; display: flex; flex-direction: column;
@@ -1961,7 +1963,8 @@ body {
 
 /* Left: hero text */
 .lp-hero-left {
-  flex: 0 0 280px;
+  flex: 0 0 auto;
+  min-width: 340px;
   position: relative;
   z-index: 1;
 }
