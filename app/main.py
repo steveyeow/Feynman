@@ -503,8 +503,8 @@ def pro_config() -> dict[str, Any]:
     """Public config for frontend — safe to expose."""
     return {
         "auth_enabled": bool(os.getenv("ENABLE_AUTH")),
-        "supabase_url": os.getenv("SUPABASE_URL", ""),
-        "supabase_key": os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", "")),
+        "supabase_url": os.getenv("SUPABASE_URL", "").strip(),
+        "supabase_key": os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", "")).strip(),
         "stripe_enabled": bool(os.getenv("STRIPE_SECRET_KEY")),
     }
 

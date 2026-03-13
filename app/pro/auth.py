@@ -12,7 +12,7 @@ from ..core.db import get_or_create_user
 
 log = logging.getLogger(__name__)
 
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "").strip()
 JWT_ALGORITHMS = ["HS256"]
 
 PUBLIC_PATHS = {
