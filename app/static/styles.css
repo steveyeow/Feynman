@@ -1451,6 +1451,7 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  background: var(--bg-chat);
 }
 .mind-page .page-nav {
   flex-shrink: 0;
