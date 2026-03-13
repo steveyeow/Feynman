@@ -78,30 +78,31 @@ async function initSupabase() {
 function updateAuthUI() {
   const bottomEl = document.getElementById('sidebar-bottom');
   if (!bottomEl) return;
-  if (window.FEYNMAN_PRO) {
-    if (currentUser) {
-      bottomEl.innerHTML = `
-        <a href="#/subscription" class="sidebar-profile-row" title="Manage subscription">
-          <div class="profile-avatar">
-            ${currentUser.user_metadata?.avatar_url
-              ? `<img src="${esc(currentUser.user_metadata.avatar_url)}" style="width:28px;height:28px;border-radius:50%" />`
-              : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
-            }
-          </div>
-          <div class="sidebar-label profile-info">
-            <span class="profile-name">${esc(userName || 'Account')}</span>
-            <span class="profile-tier">${esc(currentUser.email || '')}</span>
-          </div>
-        </a>`;
-    } else {
-      bottomEl.innerHTML = `
-        <a href="#/login" class="sidebar-profile-row sidebar-signin-row" title="Sign in">
-          <div class="profile-avatar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-          </div>
-          <span class="sidebar-label">Sign in</span>
-        </a>`;
-    }
+  if (!window.FEYNMAN_PRO) return;
+  const oldProfile = bottomEl.querySelector('.sidebar-profile, .sidebar-profile-row, .sidebar-signin-row');
+  const html = currentUser
+    ? `<a href="#/subscription" class="sidebar-profile-row" title="Manage subscription">
+        <div class="profile-avatar">
+          ${currentUser.user_metadata?.avatar_url
+            ? `<img src="${esc(currentUser.user_metadata.avatar_url)}" style="width:28px;height:28px;border-radius:50%" />`
+            : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
+          }
+        </div>
+        <div class="sidebar-label profile-info">
+          <span class="profile-name">${esc(userName || 'Account')}</span>
+          <span class="profile-tier">${esc(currentUser.email || '')}</span>
+        </div>
+      </a>`
+    : `<a href="#/login" class="sidebar-profile-row sidebar-signin-row" title="Sign in">
+        <div class="profile-avatar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        </div>
+        <span class="sidebar-label">Sign in</span>
+      </a>`;
+  if (oldProfile) {
+    oldProfile.outerHTML = html;
+  } else {
+    bottomEl.insertAdjacentHTML('beforeend', html);
   }
 }
 
@@ -698,9 +699,9 @@ function _renderLandingMindsGraph() {
   window._lpGraphLinks = links;
   window._lpGraphParticles = particles;
 
-  const heroW = 340, heroH = 300;
+  const heroW = 300, heroH = 200;
   const heroCx = W * 0.06 + heroW / 2, heroCy = H / 2;
-  const heroHalfW = heroW / 2 + 60, heroHalfH = heroH / 2 + 50;
+  const heroHalfW = heroW / 2 + 30, heroHalfH = heroH / 2 + 10;
 
   const cardW = Math.min(620, W * 0.55);
   const cardH = Math.min(520, H - 120);
@@ -711,7 +712,6 @@ function _renderLandingMindsGraph() {
 
   const clearZones = [
     { cx: heroCx, cy: heroCy, hw: heroHalfW, hh: heroHalfH },
-    { cx: cardCx, cy: cardCy, hw: cardHalfW, hh: cardHalfH },
   ];
 
   function makeAvoidForce() {
@@ -757,13 +757,14 @@ function _renderLandingMindsGraph() {
     return force;
   }
 
+  const graphCx = W * 0.55;
   const sim = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id).distance(d => Math.max(80, 280 - d.strength * 70)).strength(d => 0.08 + d.strength * 0.15))
     .force('charge', d3.forceManyBody().strength(-600).distanceMax(800))
-    .force('center', d3.forceCenter(W / 2, H / 2).strength(0.03))
+    .force('center', d3.forceCenter(graphCx, H / 2).strength(0.02))
     .force('collision', d3.forceCollide().radius(d => d._isAdd ? ADD_R + 15 : BASE_R + 20))
-    .force('x', d3.forceX(W / 2).strength(0.02))
-    .force('y', d3.forceY(H / 2).strength(0.02))
+    .force('x', d3.forceX(graphCx).strength(0.01))
+    .force('y', d3.forceY(H / 2).strength(0.01))
     .force('avoid', makeAvoidForce())
     .force('bounds', makeBoundsForce())
     .alphaDecay(0.03)

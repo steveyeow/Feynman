@@ -1958,31 +1958,31 @@ body {
   flex: 1 1 auto;
   max-width: 620px;
   height: min(520px, calc(100vh - 140px));
-  background: rgba(255,255,255,0.35);
-  backdrop-filter: blur(48px) saturate(1.6);
-  -webkit-backdrop-filter: blur(48px) saturate(1.6);
-  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 16px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.25);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.03), inset 0 1px 0 rgba(255,255,255,0.15);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 html.light .lp-chat-card {
-  background: rgba(255,255,255,0.42);
-  border-color: rgba(255,255,255,0.35);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.2);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.2);
 }
 html.dark .lp-chat-card {
-  background: rgba(44,44,46,0.35);
-  border-color: rgba(255,255,255,0.06);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
+  background: rgba(44,44,46,0.2);
+  border-color: rgba(255,255,255,0.04);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.03);
 }
 @media (prefers-color-scheme: dark) {
   html:not(.light) .lp-chat-card {
-    background: rgba(44,44,46,0.35);
-    border-color: rgba(255,255,255,0.06);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.04);
+    background: rgba(44,44,46,0.2);
+    border-color: rgba(255,255,255,0.04);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.03);
   }
 }
 
