@@ -3,6 +3,4 @@
   <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#e5e5e7" stroke-width="3" stroke-linecap="round"/>
   <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#e5e5e7" stroke-width="3" stroke-linecap="round"/>
   <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#e5e5e7" stroke-width="3" stroke-linecap="round"/>
-  <polygon fill="#e5e5e7" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
-  <polygon fill="#e5e5e7" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
 </svg>
