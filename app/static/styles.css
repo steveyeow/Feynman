@@ -1206,6 +1206,10 @@ body {
   opacity: 0.85;
   filter: brightness(1.15);
 }
+.popover-pro-label {
+  font-weight: 800;
+  margin-right: 1px;
+}
 .popover-mind-avatar {
   width: 22px; height: 22px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
