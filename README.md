@@ -135,6 +135,30 @@ The system auto-selects the best available provider and falls back through the c
 - **RAG**: Cosine similarity over embeddings + Gemini Search Grounding
 - **Persistence**: Chat sessions in localStorage, book data in SQLite
 
+## Logo
+
+<p align="center">
+  <img src="app/static/logo-final.svg" width="80" alt="Feynman logo" />
+</p>
+
+The design started from a simple insight: Richard Feynman invented Feynman diagrams — particle interaction diagrams where lines meet at vertices and wavy propagators carry forces between them. That visual language maps perfectly onto what this product does: minds meeting, exchanging knowledge, and leaving enriched.
+
+We explored several directions built on this idea:
+
+<p align="center">
+  <img src="app/static/logo-concept-1-feynman-diagram.svg" width="56" alt="Classic diagram" />&nbsp;&nbsp;&nbsp;
+  <img src="app/static/logo-concept-2-book-diagram.svg" width="56" alt="Book diagram" />&nbsp;&nbsp;&nbsp;
+  <img src="app/static/logo-concept-5-vertex.svg" width="56" alt="Minimal vertex" />&nbsp;&nbsp;&nbsp;
+  <img src="app/static/logo-concept-8-elegant.svg" width="56" alt="Pure form" />&nbsp;&nbsp;&nbsp;
+  <img src="app/static/logo-final.svg" width="56" alt="Final logo" />
+</p>
+
+From left to right: a classic Feynman diagram with two vertices and a wavy propagator; an open book whose spine becomes a diagram vertex with knowledge radiating upward; a minimal single vertex where two fermion lines form the shape of **人** (the Chinese character for "person"); the same 人 form with a wavy propagator rising from the mind; and the final version.
+
+We chose the last one because the two lines read simultaneously as **人** (a person — the learner) and **a book placed face-down** (covers flaring open, spine at the top), while the wavy propagator rising from the vertex is unmistakably a Feynman diagram element — an idea ascending from the point where person meets book. Four meanings in one mark: person, book, tree of knowledge, Feynman diagram.
+
+All nine concept SVGs are included in `app/static/` — run the app and visit `/static/logo-preview.html` to preview them at multiple sizes in light and dark mode.
+
 ## Product Updates
 
 ### Mar 10, 2026 — Chat with Great Minds
