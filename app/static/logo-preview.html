@@ -2,405 +2,398 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Feynman Logo Concepts</title>
+<title>Feynman Logo — Inverted Book</title>
 <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #f8f7f4;
-    font-family: 'DM Sans', sans-serif;
-    color: #1d1d1f;
-    padding: 48px 40px 80px;
-  }
-  h1 {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 36px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    letter-spacing: -0.02em;
-  }
-  .subtitle {
-    font-size: 16px;
-    color: #6e6e73;
-    margin-bottom: 48px;
-    max-width: 680px;
-    line-height: 1.6;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-    gap: 32px;
-  }
-  .card {
-    background: #fff;
-    border-radius: 16px;
-    padding: 32px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-  }
-  .card-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-  .card-num {
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
-    background: #1d1d1f;
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
-  .card-title {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 18px;
-    font-weight: 700;
-  }
-  .logo-row {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 28px;
-    margin: 24px 0;
-    padding: 32px;
-    background: #fafafa;
-    border-radius: 12px;
-    border: 1px solid rgba(0,0,0,0.04);
-  }
-  .logo-row.dark-row {
-    background: #1c1c1e;
-  }
-  .logo-row.dark-row svg { filter: invert(1); }
-  .logo-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-  .logo-size-label {
-    font-size: 11px;
-    color: #86868b;
-  }
-  .dark-row .logo-size-label { color: #86868b; }
-  .tag {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: #e8f2fe;
-    color: #0071e3;
-    margin-bottom: 12px;
-  }
-  .tag.rec {
-    background: #e3f8f0;
-    color: #15803d;
-  }
-  .description {
-    font-size: 14px;
-    line-height: 1.65;
-    color: #4a4a4f;
-  }
-  .rationale {
-    margin-top: 56px;
-    padding: 32px;
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  }
-  .rationale h2 {
-    font-family: 'Libre Baskerville', serif;
-    font-size: 22px;
-    margin-bottom: 16px;
-  }
-  .rationale p {
-    font-size: 14px;
-    line-height: 1.7;
-    color: #4a4a4f;
-    max-width: 720px;
-  }
-  .rationale ul {
-    margin: 12px 0 0 20px;
-    font-size: 14px;
-    line-height: 1.8;
-    color: #4a4a4f;
-  }
+  body { background: #f8f7f4; font-family: 'DM Sans', sans-serif; color: #1d1d1f; padding: 48px 40px 80px; }
+  h1 { font-family: 'Libre Baskerville', serif; font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  .subtitle { font-size: 14px; color: #6e6e73; margin-bottom: 40px; max-width: 680px; line-height: 1.6; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 28px; }
+  .card { background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .card-num { font-size: 12px; font-weight: 600; color: #fff; background: #1d1d1f; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .card-title { font-family: 'Libre Baskerville', serif; font-size: 16px; font-weight: 700; }
+  .previews { display: flex; gap: 16px; margin: 16px 0; }
+  .preview-box { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 20px; padding: 28px 12px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.04); }
+  .preview-box.light { background: #fafafa; }
+  .preview-box.dark { background: #1c1c1e; }
+  .preview-box.dark svg .s { stroke: #f5f5f7; }
+  .preview-box.dark svg .f { fill: #f5f5f7; }
+  .logo-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .logo-size-label { font-size: 10px; color: #999; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; margin-bottom: 8px; }
+  .tag.a { background: #e8f2fe; color: #0071e3; }
+  .tag.b { background: #e3f8f0; color: #15803d; }
+  .tag.c { background: #fef3cd; color: #92400e; }
+  .tag.d { background: #fce7f3; color: #9d174d; }
+  .description { font-size: 13px; line-height: 1.6; color: #4a4a4f; }
+  .ref-section { margin-top: 40px; padding: 24px; background: #fff; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .ref-section h2 { font-family: 'Libre Baskerville', serif; font-size: 18px; margin-bottom: 12px; }
+  .ref-section p { font-size: 13px; color: #6e6e73; margin-bottom: 12px; }
+  .ref-row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .ref-label { font-size: 11px; color: #999; margin-top: 4px; text-align: center; }
+
+  .context-section { margin-top: 40px; padding: 28px; background: #fff; border-radius: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .context-section h2 { font-family: 'Libre Baskerville', serif; font-size: 18px; margin-bottom: 16px; }
+  .context-row { display: flex; gap: 24px; flex-wrap: wrap; }
+  .mock-sidebar { width: 200px; border-radius: 12px; padding: 14px; border: 1px solid rgba(0,0,0,0.06); }
+  .mock-sidebar.lm { background: #fafafa; }
+  .mock-sidebar.dm { background: #2c2c2e; border-color: rgba(255,255,255,0.08); }
+  .mock-header { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(0,0,0,0.06); }
+  .dm .mock-header { border-color: rgba(255,255,255,0.08); }
+  .mock-brand { font-family: 'Libre Baskerville', serif; font-size: 15px; font-weight: 500; color: #1d1d1f; }
+  .dm .mock-brand { color: #f5f5f7; }
+  .dm svg .s { stroke: #f5f5f7; }
+  .dm svg .f { fill: #f5f5f7; }
+  .mock-item { padding: 6px 0; font-size: 12.5px; color: #6e6e73; }
+  .dm .mock-item { color: #999; }
+  .home-mock { display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 12px; padding: 32px 24px; border: 1px solid rgba(0,0,0,0.06); min-height: 180px; }
+  .home-mock.lm { background: #fafafa; }
+  .home-mock.dm { background: #2c2c2e; border-color: rgba(255,255,255,0.08); }
+  .home-mock .greeting-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .home-mock .greeting { font-size: 26px; font-weight: 400; color: #1d1d1f; letter-spacing: -0.01em; }
+  .dm .greeting { color: #f5f5f7; }
+  .home-mock .input-mock { width: 300px; height: 40px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); background: #fff; }
+  .dm .input-mock { background: #3a3a3c; border-color: rgba(255,255,255,0.1); }
 </style>
 </head>
 <body>
-  <h1>Feynman — Logo Concepts</h1>
-  <p class="subtitle">Five logo concepts built on a core idea: <strong>Feynman diagrams</strong> as a visual metaphor for the exchange of knowledge between minds, books, and ideas. Each uses the visual language of particle physics — vertices, propagators, fermion lines — to represent conversation and learning.</p>
+  <h1>Feynman Logo — Face-down Book</h1>
+  <p class="subtitle">重新设计：下半部分是一本真正<strong>倒扣着的书</strong>——书脊在上（即vertex点），两侧封面/书页向下展开，底边有翻翘或厚度感。上方依然是wavy propagator（思想升腾）。</p>
 
-  <div class="grid">
+  <!-- Reference: what a face-down book looks like -->
+  <div class="ref-section">
+    <h2>Reference — Original Concept C vs New</h2>
+    <p>Left: original straight-line 人. Right: the new inverted book variations.</p>
+    <div class="ref-row">
+      <div class="logo-item">
+        <svg viewBox="0 0 64 64" width="80" height="80">
+          <line x1="8" y1="58" x2="32" y2="30" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round" class="s"/>
+          <line x1="56" y1="58" x2="32" y2="30" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round" class="s"/>
+          <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+          <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round" class="s"/>
+        </svg>
+        <div class="ref-label">Original C (人)</div>
+      </div>
+      <div style="font-size:24px;color:#ccc;">→</div>
+    </div>
+  </div>
 
-    <!-- Concept 1 -->
+  <div class="grid" style="margin-top: 32px;">
+
+    <!-- A: Clean inverted book — two straight sides + flared bottom edges -->
     <div class="card">
       <div class="card-header">
-        <div class="card-num">1</div>
-        <div class="card-title">Classic Feynman Diagram</div>
+        <div class="card-num">A</div>
+        <div class="card-title">Flared Pages</div>
       </div>
-      <span class="tag">iconic</span>
-      <div class="logo-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
-            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">80px</span>
+      <span class="tag a">clean</span>
+      <div class="previews">
+        <div class="preview-box light">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <!-- Left cover: straight down then flare out at bottom -->
+              <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Right cover: straight down then flare out at bottom -->
+              <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Vertex / book spine top -->
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <!-- Wavy propagator -->
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">80px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="40" height="42">
+              <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">40px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="24" height="26">
+              <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">24px</span>
+          </div>
         </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
-            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">40px</span>
-        </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="24" height="24">
-            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
-            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">24px</span>
+        <div class="preview-box dark">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+            </svg>
+            <span class="logo-size-label">dark</span>
+          </div>
         </div>
       </div>
-      <p class="description">The most recognizable physics diagram in history. Two vertices connected by a wavy propagator (photon line) with fermion lines extending out. Directly references Feynman the physicist. The wavy line = knowledge exchange; the vertices = meeting points of minds.</p>
+      <p class="description">两条直线从书脊（vertex）向下展开如人字，底端各加一个向外的小翘——像书页/封面落地时自然翘起的边缘。最小改动，既保留了人的感觉，又增加了书的暗示。</p>
     </div>
 
-    <!-- Concept 2 -->
+    <!-- B: Book with visible page thickness -->
     <div class="card">
       <div class="card-header">
-        <div class="card-num">2</div>
-        <div class="card-title">Book → Diagram</div>
+        <div class="card-num">B</div>
+        <div class="card-title">Page Thickness</div>
       </div>
-      <span class="tag">narrative</span>
-      <div class="logo-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <line x1="32" y1="52" x2="32" y2="32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="32" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="32" y1="32" x2="8" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="32" y1="32" x2="56" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M32,32 C28,24 36,20 32,12 C28,4 36,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="8" cy="14" r="2.5" fill="#1d1d1f"/>
-            <circle cx="56" cy="14" r="2.5" fill="#1d1d1f"/>
-            <path d="M32,52 C24,48 14,46 8,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M32,52 C40,48 50,46 56,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">80px</span>
+      <span class="tag b">structural</span>
+      <div class="previews">
+        <div class="preview-box light">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <!-- Left cover -->
+              <line x1="32" y1="30" x2="8" y2="58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+              <!-- Right cover -->
+              <line x1="32" y1="30" x2="56" y2="58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+              <!-- Page edges — short horizontal lines at the bottom, showing thickness -->
+              <line x1="8" y1="58" x2="3" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.2" stroke-linecap="round" class="s"/>
+              <line x1="56" y1="58" x2="61" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.2" stroke-linecap="round" class="s"/>
+              <!-- Inner page lines — slightly inside the covers, showing layered pages -->
+              <line x1="32" y1="32" x2="12" y2="56" fill="none" stroke="#1d1d1f" stroke-width="1.2" stroke-linecap="round" class="s" opacity="0.4"/>
+              <line x1="32" y1="32" x2="52" y2="56" fill="none" stroke="#1d1d1f" stroke-width="1.2" stroke-linecap="round" class="s" opacity="0.4"/>
+              <!-- Vertex / book spine -->
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <!-- Wavy propagator -->
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">80px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="40" height="42">
+              <line x1="32" y1="30" x2="8" y2="58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+              <line x1="32" y1="30" x2="56" y2="58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+              <line x1="8" y1="58" x2="3" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.2" stroke-linecap="round" class="s"/>
+              <line x1="56" y1="58" x2="61" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.2" stroke-linecap="round" class="s"/>
+              <line x1="32" y1="32" x2="12" y2="56" fill="none" stroke="#1d1d1f" stroke-width="1.2" stroke-linecap="round" class="s" opacity="0.4"/>
+              <line x1="32" y1="32" x2="52" y2="56" fill="none" stroke="#1d1d1f" stroke-width="1.2" stroke-linecap="round" class="s" opacity="0.4"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">40px</span>
+          </div>
         </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <line x1="32" y1="52" x2="32" y2="32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="32" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="32" y1="32" x2="8" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="32" y1="32" x2="56" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <path d="M32,32 C28,24 36,20 32,12 C28,4 36,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="8" cy="14" r="2.5" fill="#1d1d1f"/>
-            <circle cx="56" cy="14" r="2.5" fill="#1d1d1f"/>
-            <path d="M32,52 C24,48 14,46 8,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M32,52 C40,48 50,46 56,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">40px</span>
+        <div class="preview-box dark">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <line x1="32" y1="30" x2="8" y2="58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+              <line x1="32" y1="30" x2="56" y2="58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+              <line x1="8" y1="58" x2="3" y2="56" fill="none" stroke="#f5f5f7" stroke-width="2.2" stroke-linecap="round"/>
+              <line x1="56" y1="58" x2="61" y2="56" fill="none" stroke="#f5f5f7" stroke-width="2.2" stroke-linecap="round"/>
+              <line x1="32" y1="32" x2="12" y2="56" fill="none" stroke="#f5f5f7" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+              <line x1="32" y1="32" x2="52" y2="56" fill="none" stroke="#f5f5f7" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
+              <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+            </svg>
+            <span class="logo-size-label">dark</span>
+          </div>
         </div>
       </div>
-      <p class="description">An open book at the bottom whose spine becomes the vertex of a Feynman diagram. Knowledge radiates upward as particle lines — two fermion lines diverge toward separate mind-dots, and a wavy propagator rises to the top. Books generating ideas, literally.</p>
+      <p class="description">在人字形的基础上，底端加向外的短横线表示书页厚度（像翻开的封面边缘），两条淡色内线暗示里面的书页层叠。让"书"的感觉更明确，但小尺寸下细节可能丢失。</p>
     </div>
 
-    <!-- Concept 3 — Recommended -->
+    <!-- C: Tent/ridge shape with bottom bar -->
     <div class="card">
       <div class="card-header">
-        <div class="card-num">3</div>
-        <div class="card-title">The "F" Diagram</div>
+        <div class="card-num">C</div>
+        <div class="card-title">Spine + Open Covers</div>
       </div>
-      <span class="tag rec">recommended</span>
-      <div class="logo-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
-            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
-            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
-          </svg>
-          <span class="logo-size-label">80px</span>
+      <span class="tag c">book-like</span>
+      <div class="previews">
+        <div class="preview-box light">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <!-- Left cover with slight outward curve at bottom -->
+              <path d="M32,30 L8,56 Q4,60 6,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Right cover with slight outward curve at bottom -->
+              <path d="M32,30 L56,56 Q60,60 58,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Spine line — short segment below vertex showing the ridge -->
+              <line x1="32" y1="30" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2" stroke-linecap="round" class="s"/>
+              <!-- Vertex / spine top -->
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <!-- Wavy propagator -->
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">80px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="48" height="51">
+              <path d="M32,30 L8,56 Q4,60 6,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M32,30 L56,56 Q60,60 58,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <line x1="32" y1="30" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2" stroke-linecap="round" class="s"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">48px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="24" height="26">
+              <path d="M32,30 L8,56 Q4,60 6,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M32,30 L56,56 Q60,60 58,62" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <line x1="32" y1="30" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2" stroke-linecap="round" class="s"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">24px</span>
+          </div>
         </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
-            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
-            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
-          </svg>
-          <span class="logo-size-label">40px</span>
-        </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="24" height="24">
-            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
-            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
-            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
-          </svg>
-          <span class="logo-size-label">24px</span>
-        </div>
-      </div>
-      <div class="logo-row dark-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
-            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
-            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
-          </svg>
-          <span class="logo-size-label">dark mode</span>
-        </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
-            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
-            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
-            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
-          </svg>
-          <span class="logo-size-label">dark mode</span>
+        <div class="preview-box dark">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <path d="M32,30 L8,56 Q4,60 6,62" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M32,30 L56,56 Q60,60 58,62" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="32" y1="30" x2="32" y2="36" fill="none" stroke="#f5f5f7" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+            </svg>
+            <span class="logo-size-label">dark</span>
+          </div>
         </div>
       </div>
-      <p class="description"><strong>My top recommendation.</strong> The letter "F" (for Feynman) constructed entirely from Feynman diagram elements: a vertical fermion line as the stem, a wavy propagator (photon line) as the top bar, a straight line (fermion) as the middle bar, with interaction vertices (dots) at the junctions and a directional arrow. It's the initial + the diagram fused into one mark. Instantly readable as an "F" while being unmistakably a physics diagram to anyone who recognizes it.</p>
+      <p class="description">书脊在上（vertex下方有一小段竖线表示书脊），两侧封面向下展开，底边向外翘起（Q曲线）——像一本倒扣在桌上的书，封面自然撑开，边角微微翘起。书脊线让"书"的结构更明确。</p>
     </div>
 
-    <!-- Concept 4 -->
+    <!-- D: Most book-like — covers + page block visible -->
     <div class="card">
       <div class="card-header">
-        <div class="card-num">4</div>
-        <div class="card-title">Chat Bubble Diagram</div>
+        <div class="card-num">D</div>
+        <div class="card-title">Full Inverted Book</div>
       </div>
-      <span class="tag">conversational</span>
-      <div class="logo-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <path d="M12,8 h32 a6,6 0 0 1 6,6 v16 a6,6 0 0 1 -6,6 h-14 l-6,8 -2,-8 h-10 a6,6 0 0 1 -6,-6 v-16 a6,6 0 0 1 6,-6 z" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="22" cy="22" r="2.5" fill="#1d1d1f"/>
-            <path d="M22,22 C26,17 30,27 34,22 C38,17 42,27 44,22" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="44" cy="22" r="2.5" fill="#1d1d1f"/>
-            <line x1="22" y1="22" x2="16" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="22" y1="22" x2="16" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="44" y1="22" x2="48" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="44" y1="22" x2="48" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">80px</span>
+      <span class="tag d">most book-like</span>
+      <div class="previews">
+        <div class="preview-box light">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <!-- Left cover -->
+              <line x1="32" y1="30" x2="6" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Right cover -->
+              <line x1="32" y1="30" x2="58" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <!-- Bottom edges flaring outward — page corners lifting -->
+              <path d="M6,56 Q3,58 4,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <path d="M58,56 Q61,58 60,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <!-- Page block — visible between covers near the spine -->
+              <path d="M28,34 L14,54" fill="none" stroke="#1d1d1f" stroke-width="1.4" stroke-linecap="round" class="s" opacity="0.3"/>
+              <path d="M36,34 L50,54" fill="none" stroke="#1d1d1f" stroke-width="1.4" stroke-linecap="round" class="s" opacity="0.3"/>
+              <!-- Vertex / spine -->
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <!-- Wavy propagator -->
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">80px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="48" height="51">
+              <line x1="32" y1="30" x2="6" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <line x1="32" y1="30" x2="58" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M6,56 Q3,58 4,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <path d="M58,56 Q61,58 60,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <path d="M28,34 L14,54" fill="none" stroke="#1d1d1f" stroke-width="1.4" stroke-linecap="round" class="s" opacity="0.3"/>
+              <path d="M36,34 L50,54" fill="none" stroke="#1d1d1f" stroke-width="1.4" stroke-linecap="round" class="s" opacity="0.3"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">48px</span>
+          </div>
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="24" height="26">
+              <line x1="32" y1="30" x2="6" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <line x1="32" y1="30" x2="58" y2="56" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" class="s"/>
+              <path d="M6,56 Q3,58 4,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <path d="M58,56 Q61,58 60,61" fill="none" stroke="#1d1d1f" stroke-width="2.4" stroke-linecap="round" class="s"/>
+              <circle cx="32" cy="30" r="3.5" fill="#1d1d1f" class="f"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" class="s"/>
+            </svg>
+            <span class="logo-size-label">24px</span>
+          </div>
         </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <path d="M12,8 h32 a6,6 0 0 1 6,6 v16 a6,6 0 0 1 -6,6 h-14 l-6,8 -2,-8 h-10 a6,6 0 0 1 -6,-6 v-16 a6,6 0 0 1 6,-6 z" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="22" cy="22" r="2.5" fill="#1d1d1f"/>
-            <path d="M22,22 C26,17 30,27 34,22 C38,17 42,27 44,22" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="44" cy="22" r="2.5" fill="#1d1d1f"/>
-            <line x1="22" y1="22" x2="16" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="22" y1="22" x2="16" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="44" y1="22" x2="48" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="44" y1="22" x2="48" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span class="logo-size-label">40px</span>
-        </div>
-      </div>
-      <p class="description">A speech bubble containing a Feynman diagram inside — conversation and physics fused. Two vertices with a wavy propagator between them, fermion lines bouncing off the bubble walls. Emphasizes the "chat" aspect of the product. More playful and approachable.</p>
-    </div>
-
-    <!-- Concept 5 -->
-    <div class="card">
-      <div class="card-header">
-        <div class="card-num">5</div>
-        <div class="card-title">Minimal Vertex</div>
-      </div>
-      <span class="tag">minimalist</span>
-      <div class="logo-row">
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="80" height="80">
-            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
-            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
-            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
-          </svg>
-          <span class="logo-size-label">80px</span>
-        </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="40" height="40">
-            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
-            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
-            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
-          </svg>
-          <span class="logo-size-label">40px</span>
-        </div>
-        <div class="logo-item">
-          <svg viewBox="0 0 64 64" width="24" height="24">
-            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
-            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
-            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
-            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
-          </svg>
-          <span class="logo-size-label">24px</span>
+        <div class="preview-box dark">
+          <div class="logo-item">
+            <svg viewBox="0 0 64 68" width="80" height="85">
+              <line x1="32" y1="30" x2="6" y2="56" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="32" y1="30" x2="58" y2="56" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6,56 Q3,58 4,61" fill="none" stroke="#f5f5f7" stroke-width="2.4" stroke-linecap="round"/>
+              <path d="M58,56 Q61,58 60,61" fill="none" stroke="#f5f5f7" stroke-width="2.4" stroke-linecap="round"/>
+              <path d="M28,34 L14,54" fill="none" stroke="#f5f5f7" stroke-width="1.4" stroke-linecap="round" opacity="0.3"/>
+              <path d="M36,34 L50,54" fill="none" stroke="#f5f5f7" stroke-width="1.4" stroke-linecap="round" opacity="0.3"/>
+              <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+            </svg>
+            <span class="logo-size-label">dark</span>
+          </div>
         </div>
       </div>
-      <p class="description">The most minimal option — a single interaction vertex. Two fermion lines converge from below with directional arrows, and a wavy propagator rises upward like an idea ascending. The simplest Feynman diagram: one moment of interaction. Clean enough for a favicon. Two people meeting, generating something new.</p>
+      <p class="description">最完整的倒扣书形态：两侧封面向下展开（粗线），底端边角向外翘起（曲线），内侧有淡色页面线暗示书页厚度。上方wavy propagator = 从书中升起的思想。信息最丰富，但也最复杂。</p>
     </div>
 
   </div>
 
-  <div class="rationale">
-    <h2>Design Rationale</h2>
-    <p>Why Feynman diagrams as the logo concept:</p>
-    <ul>
-      <li><strong>Direct reference</strong> — Richard Feynman literally invented these diagrams. No other visual element is more intrinsically "Feynman."</li>
-      <li><strong>Perfect metaphor</strong> — Feynman diagrams depict particle interactions: things meeting, exchanging something, and diverging changed. That's exactly what happens in this product — minds meet, exchange knowledge, and leave enriched.</li>
-      <li><strong>The wavy propagator</strong> — the signature wavy line represents a force carrier (photon/boson). In the logo, it becomes the carrier of knowledge and ideas between minds.</li>
-      <li><strong>Vertices as meeting points</strong> — in physics, vertices are where interactions happen. In the product, they're where you meet books and great minds.</li>
-      <li><strong>Visual distinctiveness</strong> — no other app uses Feynman diagram aesthetics. The wavy-line-with-dots visual language is immediately distinctive and ownable.</li>
-      <li><strong>Scalability</strong> — line art with dots works at any size, from favicon (16px) to splash screen.</li>
-    </ul>
-    <p style="margin-top:16px"><strong>My recommendation: Concept 3 ("The F Diagram")</strong> — it combines brand recognition (the letter F), intellectual gravitas (the Feynman diagram), and visual clarity. It's the only concept that works as both an abstract mark and a readable letter, giving it a natural advantage for branding.</p>
+  <!-- In-context -->
+  <div class="context-section">
+    <h2>In Context — Sidebar & Homepage</h2>
+    <p style="font-size:13px;color:#6e6e73;margin-bottom:16px;">Using Concept A (cleanest) in the app.</p>
+    <div class="context-row">
+      <div class="mock-sidebar lm">
+        <div class="mock-header">
+          <svg viewBox="0 0 64 68" width="20" height="21">
+            <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="30" r="3.5" fill="#1d1d1f"/>
+            <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round"/>
+          </svg>
+          <span class="mock-brand">Feynman</span>
+        </div>
+        <div class="mock-item">New Chat</div>
+        <div class="mock-item">Chats</div>
+        <div class="mock-item">Library</div>
+        <div class="mock-item">Great Minds</div>
+      </div>
+      <div class="mock-sidebar dm">
+        <div class="mock-header">
+          <svg viewBox="0 0 64 68" width="20" height="21">
+            <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+            <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+          </svg>
+          <span class="mock-brand">Feynman</span>
+        </div>
+        <div class="mock-item">New Chat</div>
+        <div class="mock-item">Chats</div>
+        <div class="mock-item">Library</div>
+        <div class="mock-item">Great Minds</div>
+      </div>
+      <div class="home-mock lm">
+        <div class="greeting-row">
+          <svg viewBox="0 0 64 68" width="36" height="38">
+            <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="30" r="3.5" fill="#1d1d1f"/>
+            <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.8" stroke-linecap="round"/>
+          </svg>
+          <span class="greeting">Good evening, Steve</span>
+        </div>
+        <div class="input-mock"></div>
+      </div>
+      <div class="home-mock dm">
+        <div class="greeting-row">
+          <svg viewBox="0 0 64 68" width="36" height="38">
+            <path d="M32,30 L10,58 C8,60 6,60 4,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M32,30 L54,58 C56,60 58,60 60,58" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="30" r="3.5" fill="#f5f5f7"/>
+            <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" fill="none" stroke="#f5f5f7" stroke-width="2.8" stroke-linecap="round"/>
+          </svg>
+          <span class="greeting">Good evening, Steve</span>
+        </div>
+        <div class="input-mock"></div>
+      </div>
+    </div>
   </div>
 
 </body>

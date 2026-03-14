@@ -199,8 +199,10 @@ body {
 .app-layout.sidebar-collapsed .app-sidebar {
   width: 52px;
 }
-.app-layout.sidebar-collapsed .sidebar-logo { display: none; }
+.app-layout.sidebar-collapsed .sidebar-logo { font-size: 0; gap: 0; cursor: pointer; }
+.app-layout.sidebar-collapsed .sidebar-logo-icon { display: block; }
 .app-layout.sidebar-collapsed .sidebar-label { display: none; }
+.app-layout.sidebar-collapsed #sidebar-toggle-btn { display: none; }
 .app-layout.sidebar-collapsed .sidebar-header {
   justify-content: center; padding: 14px 0 10px;
 }
@@ -236,8 +238,10 @@ body {
   text-decoration: none; color: var(--text);
   white-space: nowrap;
   font-family: 'Libre Baskerville', Georgia, serif;
+  display: flex; align-items: center; gap: 7px;
 }
 .sidebar-logo:hover { color: var(--text-secondary); }
+.sidebar-logo-icon { flex-shrink: 0; }
 
 .sidebar-icon-btn {
   width: 32px; height: 32px;
@@ -1435,22 +1439,22 @@ body {
 }
 .minds-tooltip .tt-chat-icon-btn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: none;
   background: var(--accent);
   color: #fff;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
   cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
   transition: all 0.15s;
 }
 .minds-tooltip .tt-chat-icon-btn:hover {
-  background: var(--accent);
   opacity: 0.85;
-  transform: scale(1.08);
 }
 .minds-tooltip .tt-domains {
   display: flex;
@@ -1870,98 +1874,6 @@ body {
   .sub-page { padding: 24px 16px 48px; }
 }
 
-/* ─── Upgrade Modal ─── */
-.upgrade-overlay {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.upgrade-overlay.visible { opacity: 1; }
-.upgrade-overlay.visible .upgrade-card {
-  transform: translateY(0) scale(1);
-  opacity: 1;
-}
-.upgrade-card {
-  position: relative;
-  background: var(--dialog-bg);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 36px 32px 28px;
-  width: 380px;
-  max-width: 90vw;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.2);
-  text-align: center;
-  transform: translateY(12px) scale(0.97);
-  opacity: 0;
-  transition: transform 0.25s ease, opacity 0.25s ease;
-}
-.upgrade-close {
-  position: absolute;
-  top: 12px; right: 14px;
-  background: none; border: none;
-  font-size: 20px; color: var(--text-muted);
-  cursor: pointer; padding: 4px 8px;
-  line-height: 1; border-radius: 8px;
-  transition: background 0.15s;
-}
-.upgrade-close:hover { background: var(--hover-bg); }
-.upgrade-icon {
-  font-size: 28px;
-  margin-bottom: 8px;
-  color: var(--accent);
-}
-.upgrade-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
-.upgrade-msg {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-  margin: 0 0 24px;
-}
-.upgrade-cta {
-  display: block;
-  width: 100%;
-  padding: 12px 16px;
-  border: none;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
-}
-.upgrade-cta:hover { opacity: 0.9; }
-.upgrade-cta:active { transform: scale(0.98); }
-.upgrade-skip {
-  display: block;
-  width: 100%;
-  margin-top: 10px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-.upgrade-skip:hover { color: var(--text-secondary); }
 
 /* ═══════════════════════════════════════
    LANDING PAGE

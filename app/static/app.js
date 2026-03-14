@@ -173,30 +173,6 @@ async function signOut() {
 }
 window.signOut = signOut;
 
-function showUpgradeModal(detail) {
-  const overlay = document.createElement('div');
-  overlay.className = 'upgrade-overlay';
-  const msg = detail?.message || 'Upgrade to Pro for unlimited access to all features.';
-  overlay.innerHTML = `
-    <div class="upgrade-card">
-      <button class="upgrade-close" id="upgrade-dismiss">&times;</button>
-      <div class="upgrade-icon">✦</div>
-      <h3 class="upgrade-title">Unlock Pro</h3>
-      <p class="upgrade-msg">${esc(msg)}</p>
-      <button class="upgrade-cta" id="upgrade-go">See Plans & Upgrade</button>
-      <button class="upgrade-skip" id="upgrade-later">Maybe later</button>
-    </div>`;
-  document.body.appendChild(overlay);
-  requestAnimationFrame(() => overlay.classList.add('visible'));
-  const close = () => { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); };
-  overlay.querySelector('#upgrade-dismiss').addEventListener('click', close);
-  overlay.querySelector('#upgrade-later').addEventListener('click', close);
-  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  overlay.querySelector('#upgrade-go').addEventListener('click', () => {
-    close();
-    window.location.hash = '#/subscription';
-  });
-}
 
 const MOCK_QUESTIONS = [
   'What is the central thesis of this book?',
@@ -331,7 +307,7 @@ function renderSubscriptionPage() {
       'Chat with any book in your library',
       'Four-layer answers: text, metadata, web, LLM',
       'Great minds join once per chat',
-      'Discover topics and books',
+      'Discover books & topics (3/day)',
       'Upload your own books (PDF / TXT)',
     ];
     const proFeatures = [
@@ -348,7 +324,7 @@ function renderSubscriptionPage() {
     el.innerHTML = `<div class="sub-page">
       <div class="sub-header">
         <h1 class="sub-title">Plans</h1>
-        <p class="sub-subtitle">Read smarter. Think deeper. Learn from the greatest minds in history.</p>
+        <p class="sub-subtitle">Read smarter. Think deeper. Learn with the greatest minds in history and today's world.</p>
       </div>
       <div class="sub-cards">
         <div class="sub-card ${!isPro ? 'sub-card-active' : ''}">
@@ -1386,7 +1362,7 @@ function navigate() {
     case 'subscription': renderSubscriptionPage(); break;
     case 'mind':
       if (!isProUser()) {
-        showUpgradeModal({ message: 'Chat one-on-one with great minds — upgrade to Pro for full access.' });
+        window.location.hash = '#/subscription';
         window.location.hash = '#/minds';
         return;
       }
@@ -1417,7 +1393,7 @@ async function api(path, opts = {}) {
   let d;
   try { d = await r.json(); } catch { d = { detail: r.statusText || 'Request failed' }; }
   if (r.status === 429 && d.detail?.code === 'quota_exceeded') {
-    showUpgradeModal(d.detail);
+    window.location.hash = '#/subscription';
     throw new Error(d.detail.message || 'Quota exceeded');
   }
   // Token expired or invalid — try refreshing the session before giving up
@@ -2439,7 +2415,6 @@ function renderLibraryGrid() {
         <div class="card-body"><h3 class="card-title" style="color:var(--text-muted)">Discover more</h3><p class="card-author">${esc(label)}</p></div>
       </div>`);
     document.getElementById('discover-more-card').addEventListener('click', () => {
-      if (!isProUser()) { showUpgradeModal({ message: 'Discover new topics and expand your library with Pro.' }); return; }
       discoverMore(topics);
     });
   }
@@ -3450,7 +3425,8 @@ function _renderMindsGraph() {
             <div class="tt-era">${n.era}</div>
           </div>
           <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span>Chat</span>
           </button>
         </div>
         <div class="tt-domains">${domains}</div>
@@ -3461,7 +3437,7 @@ function _renderMindsGraph() {
         chatBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           const mindId = chatBtn.dataset.mindId;
-          if (!isProUser()) { showUpgradeModal({ message: 'Chat one-on-one with great minds like ' + n.name + ' with Pro.' }); return; }
+          if (!isProUser()) { window.location.hash = '#/subscription'; return; }
           tooltip.classList.add('hidden');
           _tooltipNode = null;
           window.location.hash = '#/mind/' + mindId;
@@ -3471,7 +3447,7 @@ function _renderMindsGraph() {
       if (btn) {
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          if (!isProUser()) { showUpgradeModal({ message: 'Discover related minds and expand the network with Pro.' }); return; }
+          if (!isProUser()) { window.location.hash = '#/subscription'; return; }
           _expandFromNode(n);
           tooltip.classList.add('hidden');
           _tooltipNode = null;
@@ -3515,7 +3491,7 @@ function _renderMindsGraph() {
     const n = _getNodeAt(e.clientX - rect.left, e.clientY - rect.top);
     if (!n) return;
     if (n._isAdd) {
-      if (!isProUser()) { showUpgradeModal({ message: 'Discover and expand the great minds network with Pro.' }); return; }
+      if (!isProUser()) { window.location.hash = '#/subscription'; return; }
       if (addBusy) return;
       addBusy = true;
       tooltip.classList.add('hidden');
@@ -3545,7 +3521,7 @@ function _renderMindsGraph() {
       addBusy = false;
       return;
     }
-    if (!isProUser()) { showUpgradeModal({ message: 'Chat one-on-one with great minds like ' + n.name + ' with Pro.' }); return; }
+    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     window.location.hash = '#/mind/' + n.id;
   });
 
@@ -3873,6 +3849,12 @@ async function init() {
   // Sidebar toggle
   document.getElementById('sidebar-toggle-btn').addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-float-btn').addEventListener('click', toggleSidebar);
+  document.querySelector('.sidebar-logo').addEventListener('click', (e) => {
+    if (document.getElementById('app-layout').classList.contains('sidebar-collapsed')) {
+      e.preventDefault();
+      toggleSidebar();
+    }
+  });
 
   document.getElementById('sidebar-theme-toggle').addEventListener('click', () => {
     const isDark = document.documentElement.classList.toggle('dark');
@@ -3946,7 +3928,7 @@ async function init() {
   // Home minds button → minds popover
   document.getElementById('home-minds-btn').addEventListener('click', e => {
     e.stopPropagation();
-    if (!isProUser()) { showUpgradeModal({ message: 'Invite great minds to your conversations with Pro. They\'ll join your discussions and share their unique perspectives.' }); return; }
+    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     toggleMindPopover('home-minds-popover', 'home-popover-mind-list', 'home-popover-no-minds');
   });
 
@@ -3966,7 +3948,7 @@ async function init() {
   // Chat minds button → minds popover
   document.getElementById('chat-minds-btn').addEventListener('click', e => {
     e.stopPropagation();
-    if (!isProUser()) { showUpgradeModal({ message: 'Invite great minds to your conversations with Pro. They\'ll join your discussions and share their unique perspectives.' }); return; }
+    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     toggleMindPopover('chat-minds-popover', 'popover-mind-list', 'popover-no-minds');
   });
   document.addEventListener('click', e => {
@@ -4017,7 +3999,6 @@ async function init() {
 
   // Discover button
   document.getElementById('discover-books-btn').addEventListener('click', () => {
-    if (!isProUser()) { showUpgradeModal({ message: 'Discover new topics and expand your library with Pro.' }); return; }
     if (activeTopics.size) {
       discoverMore([...activeTopics]);
     } else {
@@ -4035,11 +4016,11 @@ async function init() {
     _applyGraphHighlight(e.target.value.trim());
   });
   document.getElementById('minds-add-btn').addEventListener('click', () => {
-    if (!isProUser()) { showUpgradeModal({ message: 'Invite famous thinkers like Socrates or Einstein to your network with Pro.' }); return; }
+    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     showAddMindDialog();
   });
   document.getElementById('minds-create-btn').addEventListener('click', () => {
-    if (!isProUser()) { showUpgradeModal({ message: 'Create custom minds from any source — Twitter profiles, blogs, or your own content — with Pro.' }); return; }
+    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     showCreateMindDialog();
   });
 

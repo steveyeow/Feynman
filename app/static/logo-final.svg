@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .dot { fill: #1d1d1f; }
+    </style>
+  </defs>
+  <!-- Inverted book pages  curves bowing outward like pages falling open -->
+  <path class="ln" d="M8,60 C10,46 22,36 32,30"/>
+  <path class="ln" d="M56,60 C54,46 42,36 32,30"/>
+  <!-- Vertex  the mind -->
+  <circle class="dot" cx="32" cy="30" r="3.5"/>
+  <!-- Wavy propagator  idea rising -->
+  <path class="ln" d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4"/>
+</svg>
