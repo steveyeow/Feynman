@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Concept 3: Abstract "F" formed by Feynman diagram elements.
+       A vertical fermion line forms the stem of F, with a wavy propagator
+       as the top bar and a straight line as the middle bar.
+       Vertices marked with dots where lines meet. -->
+  <defs>
+    <style>
+      .line { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; }
+      .wave { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; }
+      .dot { fill: #1d1d1f; }
+    </style>
+  </defs>
+  <!-- Vertical stem of F (fermion line with arrow hint) -->
+  <line class="line" x1="16" y1="10" x2="16" y2="54"/>
+  <!-- Top vertex -->
+  <circle class="dot" cx="16" cy="14" r="3"/>
+  <!-- Top bar: wavy propagator (photon/boson line) -->
+  <path class="wave" d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14"/>
+  <!-- Middle vertex -->
+  <circle class="dot" cx="16" cy="32" r="3"/>
+  <!-- Middle bar: straight line (fermion) -->
+  <line class="line" x1="16" y1="32" x2="42" y2="32"/>
+  <!-- Small dot at end of middle bar -->
+  <circle class="dot" cx="42" cy="32" r="2.5"/>
+  <!-- Arrow on the stem (Feynman convention) -->
+  <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+</svg>

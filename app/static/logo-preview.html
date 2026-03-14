@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feynman Logo Concepts</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f8f7f4;
+    font-family: 'DM Sans', sans-serif;
+    color: #1d1d1f;
+    padding: 48px 40px 80px;
+  }
+  h1 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: 16px;
+    color: #6e6e73;
+    margin-bottom: 48px;
+    max-width: 680px;
+    line-height: 1.6;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 32px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .card-num {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    background: #1d1d1f;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .card-title {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .logo-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 28px;
+    margin: 24px 0;
+    padding: 32px;
+    background: #fafafa;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.04);
+  }
+  .logo-row.dark-row {
+    background: #1c1c1e;
+  }
+  .logo-row.dark-row svg { filter: invert(1); }
+  .logo-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .logo-size-label {
+    font-size: 11px;
+    color: #86868b;
+  }
+  .dark-row .logo-size-label { color: #86868b; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #e8f2fe;
+    color: #0071e3;
+    margin-bottom: 12px;
+  }
+  .tag.rec {
+    background: #e3f8f0;
+    color: #15803d;
+  }
+  .description {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #4a4a4f;
+  }
+  .rationale {
+    margin-top: 56px;
+    padding: 32px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .rationale h2 {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
+  .rationale p {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #4a4a4f;
+    max-width: 720px;
+  }
+  .rationale ul {
+    margin: 12px 0 0 20px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #4a4a4f;
+  }
+</style>
+</head>
+<body>
+  <h1>Feynman — Logo Concepts</h1>
+  <p class="subtitle">Five logo concepts built on a core idea: <strong>Feynman diagrams</strong> as a visual metaphor for the exchange of knowledge between minds, books, and ideas. Each uses the visual language of particle physics — vertices, propagators, fermion lines — to represent conversation and learning.</p>
+
+  <div class="grid">
+
+    <!-- Concept 1 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-num">1</div>
+        <div class="card-title">Classic Feynman Diagram</div>
+      </div>
+      <span class="tag">iconic</span>
+      <div class="logo-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
+            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">80px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
+            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">40px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="24" height="24">
+            <line x1="6" y1="12" x2="18" y2="28" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="6" y1="52" x2="18" y2="36" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="18" cy="32" r="3" fill="#1d1d1f"/>
+            <path d="M18,32 C22,26 26,38 30,32 C34,26 38,38 42,32 C46,26 46,32 46,32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="46" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="46" y1="32" x2="58" y2="12" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="46" y1="32" x2="58" y2="52" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">24px</span>
+        </div>
+      </div>
+      <p class="description">The most recognizable physics diagram in history. Two vertices connected by a wavy propagator (photon line) with fermion lines extending out. Directly references Feynman the physicist. The wavy line = knowledge exchange; the vertices = meeting points of minds.</p>
+    </div>
+
+    <!-- Concept 2 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-num">2</div>
+        <div class="card-title">Book → Diagram</div>
+      </div>
+      <span class="tag">narrative</span>
+      <div class="logo-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <line x1="32" y1="52" x2="32" y2="32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="32" y1="32" x2="8" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="32" y1="32" x2="56" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M32,32 C28,24 36,20 32,12 C28,4 36,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="8" cy="14" r="2.5" fill="#1d1d1f"/>
+            <circle cx="56" cy="14" r="2.5" fill="#1d1d1f"/>
+            <path d="M32,52 C24,48 14,46 8,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M32,52 C40,48 50,46 56,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">80px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <line x1="32" y1="52" x2="32" y2="32" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="32" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="32" y1="32" x2="8" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="32" y1="32" x2="56" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M32,32 C28,24 36,20 32,12 C28,4 36,0 32,-4" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="8" cy="14" r="2.5" fill="#1d1d1f"/>
+            <circle cx="56" cy="14" r="2.5" fill="#1d1d1f"/>
+            <path d="M32,52 C24,48 14,46 8,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M32,52 C40,48 50,46 56,48" fill="none" stroke="#1d1d1f" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">40px</span>
+        </div>
+      </div>
+      <p class="description">An open book at the bottom whose spine becomes the vertex of a Feynman diagram. Knowledge radiates upward as particle lines — two fermion lines diverge toward separate mind-dots, and a wavy propagator rises to the top. Books generating ideas, literally.</p>
+    </div>
+
+    <!-- Concept 3 — Recommended -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-num">3</div>
+        <div class="card-title">The "F" Diagram</div>
+      </div>
+      <span class="tag rec">recommended</span>
+      <div class="logo-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
+            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
+            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+          </svg>
+          <span class="logo-size-label">80px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
+            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
+            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+          </svg>
+          <span class="logo-size-label">40px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="24" height="24">
+            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
+            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
+            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+          </svg>
+          <span class="logo-size-label">24px</span>
+        </div>
+      </div>
+      <div class="logo-row dark-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
+            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
+            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+          </svg>
+          <span class="logo-size-label">dark mode</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <line x1="16" y1="10" x2="16" y2="54" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="3" fill="#1d1d1f"/>
+            <path d="M16,14 C22,8 28,20 34,14 C40,8 46,20 50,14" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="16" cy="32" r="3" fill="#1d1d1f"/>
+            <line x1="16" y1="32" x2="42" y2="32" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="42" cy="32" r="2.5" fill="#1d1d1f"/>
+            <polygon fill="#1d1d1f" points="13,42 16,48 19,42"/>
+          </svg>
+          <span class="logo-size-label">dark mode</span>
+        </div>
+      </div>
+      <p class="description"><strong>My top recommendation.</strong> The letter "F" (for Feynman) constructed entirely from Feynman diagram elements: a vertical fermion line as the stem, a wavy propagator (photon line) as the top bar, a straight line (fermion) as the middle bar, with interaction vertices (dots) at the junctions and a directional arrow. It's the initial + the diagram fused into one mark. Instantly readable as an "F" while being unmistakably a physics diagram to anyone who recognizes it.</p>
+    </div>
+
+    <!-- Concept 4 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-num">4</div>
+        <div class="card-title">Chat Bubble Diagram</div>
+      </div>
+      <span class="tag">conversational</span>
+      <div class="logo-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <path d="M12,8 h32 a6,6 0 0 1 6,6 v16 a6,6 0 0 1 -6,6 h-14 l-6,8 -2,-8 h-10 a6,6 0 0 1 -6,-6 v-16 a6,6 0 0 1 6,-6 z" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="22" cy="22" r="2.5" fill="#1d1d1f"/>
+            <path d="M22,22 C26,17 30,27 34,22 C38,17 42,27 44,22" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="44" cy="22" r="2.5" fill="#1d1d1f"/>
+            <line x1="22" y1="22" x2="16" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="22" y1="22" x2="16" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="44" y1="22" x2="48" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="44" y1="22" x2="48" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">80px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <path d="M12,8 h32 a6,6 0 0 1 6,6 v16 a6,6 0 0 1 -6,6 h-14 l-6,8 -2,-8 h-10 a6,6 0 0 1 -6,-6 v-16 a6,6 0 0 1 6,-6 z" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="22" cy="22" r="2.5" fill="#1d1d1f"/>
+            <path d="M22,22 C26,17 30,27 34,22 C38,17 42,27 44,22" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="44" cy="22" r="2.5" fill="#1d1d1f"/>
+            <line x1="22" y1="22" x2="16" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="22" y1="22" x2="16" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="44" y1="22" x2="48" y2="14" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="44" y1="22" x2="48" y2="30" fill="none" stroke="#1d1d1f" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span class="logo-size-label">40px</span>
+        </div>
+      </div>
+      <p class="description">A speech bubble containing a Feynman diagram inside — conversation and physics fused. Two vertices with a wavy propagator between them, fermion lines bouncing off the bubble walls. Emphasizes the "chat" aspect of the product. More playful and approachable.</p>
+    </div>
+
+    <!-- Concept 5 -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-num">5</div>
+        <div class="card-title">Minimal Vertex</div>
+      </div>
+      <span class="tag">minimalist</span>
+      <div class="logo-row">
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="80" height="80">
+            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
+            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
+            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
+          </svg>
+          <span class="logo-size-label">80px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="40" height="40">
+            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
+            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
+            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
+          </svg>
+          <span class="logo-size-label">40px</span>
+        </div>
+        <div class="logo-item">
+          <svg viewBox="0 0 64 64" width="24" height="24">
+            <circle cx="32" cy="36" r="3.5" fill="#1d1d1f"/>
+            <line x1="10" y1="56" x2="32" y2="36" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <line x1="32" y1="36" x2="54" y2="56" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <path d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2" fill="none" stroke="#1d1d1f" stroke-width="3" stroke-linecap="round"/>
+            <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
+            <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
+          </svg>
+          <span class="logo-size-label">24px</span>
+        </div>
+      </div>
+      <p class="description">The most minimal option — a single interaction vertex. Two fermion lines converge from below with directional arrows, and a wavy propagator rises upward like an idea ascending. The simplest Feynman diagram: one moment of interaction. Clean enough for a favicon. Two people meeting, generating something new.</p>
+    </div>
+
+  </div>
+
+  <div class="rationale">
+    <h2>Design Rationale</h2>
+    <p>Why Feynman diagrams as the logo concept:</p>
+    <ul>
+      <li><strong>Direct reference</strong> — Richard Feynman literally invented these diagrams. No other visual element is more intrinsically "Feynman."</li>
+      <li><strong>Perfect metaphor</strong> — Feynman diagrams depict particle interactions: things meeting, exchanging something, and diverging changed. That's exactly what happens in this product — minds meet, exchange knowledge, and leave enriched.</li>
+      <li><strong>The wavy propagator</strong> — the signature wavy line represents a force carrier (photon/boson). In the logo, it becomes the carrier of knowledge and ideas between minds.</li>
+      <li><strong>Vertices as meeting points</strong> — in physics, vertices are where interactions happen. In the product, they're where you meet books and great minds.</li>
+      <li><strong>Visual distinctiveness</strong> — no other app uses Feynman diagram aesthetics. The wavy-line-with-dots visual language is immediately distinctive and ownable.</li>
+      <li><strong>Scalability</strong> — line art with dots works at any size, from favicon (16px) to splash screen.</li>
+    </ul>
+    <p style="margin-top:16px"><strong>My recommendation: Concept 3 ("The F Diagram")</strong> — it combines brand recognition (the letter F), intellectual gravitas (the Feynman diagram), and visual clarity. It's the only concept that works as both an abstract mark and a readable letter, giving it a natural advantage for branding.</p>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Concept 5: Minimal "interaction vertex"  the most iconic element
+       of a Feynman diagram. Three lines meet at a single point:
+       two straight (fermion) lines and one wavy (boson/photon) line.
+       This is the simplest possible representation  a single moment
+       of interaction/exchange. Clean, bold, memorable.
+       Rotated so the wavy line goes up (like an idea rising). -->
+  <defs>
+    <style>
+      .line { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; }
+      .wave { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; }
+      .dot { fill: #1d1d1f; }
+    </style>
+  </defs>
+  <!-- Central vertex -->
+  <circle class="dot" cx="32" cy="36" r="3.5"/>
+  <!-- Fermion line: bottom-left incoming -->
+  <line class="line" x1="10" y1="56" x2="32" y2="36"/>
+  <!-- Fermion line: bottom-right outgoing -->
+  <line class="line" x1="32" y1="36" x2="54" y2="56"/>
+  <!-- Wavy propagator going upward  the "idea" / "knowledge exchange" -->
+  <path class="wave" d="M32,36 C27,30 37,24 32,18 C27,12 37,6 32,2"/>
+  <!-- Arrow hints on fermion lines (showing direction/flow) -->
+  <polygon fill="#1d1d1f" points="18,50 22.5,45 24,49.5" opacity="0.9"/>
+  <polygon fill="#1d1d1f" points="45,49.5 41.5,45 46,50" opacity="0.9"/>
+</svg>

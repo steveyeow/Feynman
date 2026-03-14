@@ -177,21 +177,12 @@ function showUpgradeModal(detail) {
   const overlay = document.createElement('div');
   overlay.className = 'upgrade-overlay';
   const msg = detail?.message || 'Upgrade to Pro for unlimited access to all features.';
-  const features = [
-    'Great minds continuously join your chats',
-    'Create & discover minds from any source',
-    'Discover more books and topics',
-    'Higher daily usage limits',
-  ];
   overlay.innerHTML = `
     <div class="upgrade-card">
       <button class="upgrade-close" id="upgrade-dismiss">&times;</button>
       <div class="upgrade-icon">✦</div>
       <h3 class="upgrade-title">Unlock Pro</h3>
       <p class="upgrade-msg">${esc(msg)}</p>
-      <div class="upgrade-features">
-        ${features.map(f => `<div class="upgrade-feature"><span class="upgrade-check">✓</span>${esc(f)}</div>`).join('')}
-      </div>
       <button class="upgrade-cta" id="upgrade-go">See Plans & Upgrade</button>
       <button class="upgrade-skip" id="upgrade-later">Maybe later</button>
     </div>`;
@@ -3453,12 +3444,29 @@ function _renderMindsGraph() {
         ? '<div class="tt-action" style="opacity:0.5">Discovering related minds…</div>'
         : `<button class="tt-discover-btn" data-mind-id="${n.id}">Discover nearby minds →</button>`;
       tooltip.innerHTML = `
-        <div class="tt-name">${n.name}</div>
-        <div class="tt-era">${n.era}</div>
+        <div class="tt-header-row">
+          <div>
+            <div class="tt-name">${n.name}</div>
+            <div class="tt-era">${n.era}</div>
+          </div>
+          <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+        </div>
         <div class="tt-domains">${domains}</div>
         <div class="tt-bio">${n.bio}</div>
-        <div class="tt-action">Click to chat →</div>
         ${discoverBtn}`;
+      const chatBtn = tooltip.querySelector('.tt-chat-icon-btn');
+      if (chatBtn) {
+        chatBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const mindId = chatBtn.dataset.mindId;
+          if (!isProUser()) { showUpgradeModal({ message: 'Chat one-on-one with great minds like ' + n.name + ' with Pro.' }); return; }
+          tooltip.classList.add('hidden');
+          _tooltipNode = null;
+          window.location.hash = '#/mind/' + mindId;
+        });
+      }
       const btn = tooltip.querySelector('.tt-discover-btn');
       if (btn) {
         btn.addEventListener('click', (ev) => {
@@ -4005,6 +4013,21 @@ async function init() {
       libraryFilter = btn.dataset.filter;
       renderLibraryGrid();
     });
+  });
+
+  // Discover button
+  document.getElementById('discover-books-btn').addEventListener('click', () => {
+    if (!isProUser()) { showUpgradeModal({ message: 'Discover new topics and expand your library with Pro.' }); return; }
+    if (activeTopics.size) {
+      discoverMore([...activeTopics]);
+    } else {
+      const pick = topicTags[Math.floor(Math.random() * topicTags.length)];
+      if (pick) {
+        activeTopics.add(pick);
+        renderTopicTags();
+        discoverMore([pick]);
+      }
+    }
   });
 
   // Minds page

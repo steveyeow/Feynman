@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Concept 6: Fusion of 2 + 5
+       Bottom: two lines converge upward like º / open book pages
+       Center: vertex (interaction point / trunk)
+       Top: wavy propagator rises  idea/knowledge ascending like a tree crown
+       Book curves at bottom hint at open pages -->
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1d1d1f; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+      .dot { fill: #1d1d1f; }
+    </style>
+  </defs>
+  <!-- º / Book legs -->
+  <line class="ln" x1="12" y1="58" x2="32" y2="32"/>
+  <line class="ln" x1="52" y1="58" x2="32" y2="32"/>
+  <!-- Central vertex -->
+  <circle class="dot" cx="32" cy="32" r="3.2"/>
+  <!-- Wavy propagator rising (knowledge/idea ascending like a tree) -->
+  <path class="ln" d="M32,32 C27,26 37,20 32,14 C27,8 37,2 32,-2"/>
+  <!-- Book page curves at bottom -->
+  <path class="ln" d="M12,58 C18,54 26,53 32,55" style="stroke-width:1.6"/>
+  <path class="ln" d="M52,58 C46,54 38,53 32,55" style="stroke-width:1.6"/>
+</svg>

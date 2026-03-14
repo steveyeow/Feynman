@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Concept 8: Cleanest fusion  no book curves, just the pure form.
+       º shape + single wavy propagator rising.
+       The purest expression: a person standing, with an idea
+       rising from their mind. Feynman diagram + º + tree trunk.
+       Wider stance, more balanced proportions. -->
+  <defs>
+    <style>
+      .ln { fill: none; stroke: #1d1d1f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .dot { fill: #1d1d1f; }
+    </style>
+  </defs>
+  <!-- º legs  wider, more confident stance -->
+  <line class="ln" x1="8" y1="58" x2="32" y2="30"/>
+  <line class="ln" x1="56" y1="58" x2="32" y2="30"/>
+  <!-- Vertex  the mind / interaction point -->
+  <circle class="dot" cx="32" cy="30" r="3.5"/>
+  <!-- Wavy propagator  idea rising from the mind -->
+  <path class="ln" d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4"/>
+</svg>

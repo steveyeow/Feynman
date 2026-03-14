@@ -1274,6 +1274,21 @@ body {
 .topic-tag.active { background: var(--btn-solid-bg); color: var(--btn-solid-color); border-color: var(--btn-solid-bg); }
 .topic-tag.loading { opacity: 0.5; pointer-events: none; }
 
+/* Discover button */
+.discover-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px; border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent; color: var(--accent);
+  font-weight: 500; font-size: 13px; cursor: pointer;
+  font-family: inherit; transition: all 0.18s;
+  white-space: nowrap;
+}
+.discover-btn:hover {
+  background: var(--accent); color: #fff;
+}
+.discover-btn svg { flex-shrink: 0; }
+
 /* Discover more card */
 .discover-more-card { border-style: dashed; opacity: 0.7; }
 .discover-more-card:hover { opacity: 1; }
@@ -1401,6 +1416,13 @@ body {
   transition: opacity 0.15s;
 }
 .minds-tooltip.hidden { display: none; }
+.minds-tooltip .tt-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
 .minds-tooltip .tt-name {
   font-size: 15px;
   font-weight: 600;
@@ -1410,7 +1432,25 @@ body {
 .minds-tooltip .tt-era {
   font-size: 11px;
   color: var(--text-muted);
-  margin-bottom: 6px;
+}
+.minds-tooltip .tt-chat-icon-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.minds-tooltip .tt-chat-icon-btn:hover {
+  background: var(--accent);
+  opacity: 0.85;
+  transform: scale(1.08);
 }
 .minds-tooltip .tt-domains {
   display: flex;
@@ -1888,27 +1928,7 @@ body {
   font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.55;
-  margin: 0 0 20px;
-}
-.upgrade-features {
-  text-align: left;
-  margin: 0 auto 24px;
-  max-width: 300px;
-}
-.upgrade-feature {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  font-size: 13.5px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-.upgrade-check {
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 14px;
-  flex-shrink: 0;
+  margin: 0 0 24px;
 }
 .upgrade-cta {
   display: block;
