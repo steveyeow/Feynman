@@ -1179,6 +1179,24 @@ body {
 .popover-mind-item.selected .popover-mind-check {
   background: var(--accent); border-color: var(--accent); color: #fff;
 }
+.popover-mind-item.locked {
+  opacity: 0.45;
+  cursor: default;
+}
+.popover-mind-item.locked:hover {
+  background: rgba(128,128,128,0.04);
+}
+.popover-pro-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+}
 .popover-mind-avatar {
   width: 22px; height: 22px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -1763,6 +1781,54 @@ body {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+/* ═══════════════════════════════════════
+   PRO UPGRADE OVERLAY
+   ═══════════════════════════════════════ */
+.pro-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.pro-overlay.visible { opacity: 1; }
+.pro-overlay-inner {
+  position: relative;
+  background: var(--bg-home);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.25);
+  max-width: 760px;
+  width: 92vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.pro-overlay-close {
+  position: absolute;
+  top: 16px; right: 20px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-chat);
+  color: var(--text-muted);
+  font-size: 22px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.pro-overlay-close:hover {
+  background: var(--border);
+  color: var(--text);
 }
 
 /* ═══════════════════════════════════════

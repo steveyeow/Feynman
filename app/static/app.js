@@ -23,7 +23,6 @@ let activeMinds = new Map();
 let _mindsJoinedOnce = false;
 let chatSessions = [];
 let currentSessionId = null;
-let sessionCounter = 0;
 
 // Topic state
 let topicTags = [];
@@ -381,6 +380,107 @@ function renderSubscriptionPage() {
       });
     }
     const manageBtn = document.getElementById('sub-manage-btn');
+    if (manageBtn) {
+      manageBtn.addEventListener('click', async () => {
+        try {
+          const data = await api('/api/pro/create-portal-session', { method: 'POST' });
+          if (data.url) window.location.href = data.url;
+        } catch (err) { alert('Portal failed: ' + err.message); }
+      });
+    }
+  })();
+}
+
+function showProOverlay() {
+  const existing = document.getElementById('pro-overlay');
+  if (existing) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'pro-overlay';
+  overlay.className = 'pro-overlay';
+  const closeBtn = `<button class="pro-overlay-close" id="pro-overlay-close" title="Close">&times;</button>`;
+  overlay.innerHTML = `<div class="pro-overlay-inner">${closeBtn}<div class="sub-page"><div class="sub-loading"><span class="loading-dot">Loading...</span></div></div></div>`;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+  const close = () => { overlay.classList.remove('visible'); setTimeout(() => overlay.remove(), 200); };
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.getElementById('pro-overlay-close').addEventListener('click', close);
+
+  (async () => {
+    let sub = { tier: 'free', subscription: null };
+    try { sub = await api('/api/pro/subscription'); } catch {}
+    const isPro = sub.tier === 'pro';
+    const freeFeatures = [
+      'Chat with any book in your library',
+      'Four-layer answers: text, metadata, web, LLM',
+      'Great minds join once per chat',
+      'Discover books & topics (3/day)',
+      'Upload your own books (PDF / TXT)',
+    ];
+    const proFeatures = [
+      'Everything in Free',
+      'Discover more books in chat & library',
+      'Great minds continuously join chats',
+      'Invite great minds into your chats',
+      'Upload your own minds or from any source',
+      'Discover & expand the minds network',
+      'Higher daily usage limits',
+      'Priority access',
+    ];
+    const featureRow = (text, pro) => `<div class="sub-feature-row"><span class="sub-feature-check ${pro ? 'pro-check' : ''}">\u2713</span><span class="sub-feature-label">${esc(text)}</span></div>`;
+    const inner = overlay.querySelector('.pro-overlay-inner');
+    inner.innerHTML = `${closeBtn}<div class="sub-page">
+      <div class="sub-header">
+        <h1 class="sub-title">Plans</h1>
+        <p class="sub-subtitle">Read smarter. Think deeper.<br>Learn with the greatest minds in history and today's world.</p>
+      </div>
+      <div class="sub-cards">
+        <div class="sub-card ${!isPro ? 'sub-card-active' : ''}">
+          <div class="sub-card-head">
+            <div class="sub-plan-name"><span>Free</span>${!isPro ? '<span class="sub-badge">Current</span>' : ''}</div>
+            <div class="sub-price">$0<span>/mo</span></div>
+            <p class="sub-price-note">Get started, no credit card needed</p>
+          </div>
+          <div class="sub-card-body">
+            ${freeFeatures.map(f => featureRow(f, false)).join('')}
+          </div>
+          ${!isPro ? '<div class="sub-card-foot"><button class="sub-btn sub-btn-secondary" disabled>Current Plan</button></div>' : ''}
+        </div>
+        <div class="sub-card sub-card-pro ${isPro ? 'sub-card-active' : ''}">
+          <div class="sub-card-head">
+            <div class="sub-plan-name"><span>Pro</span>${isPro ? '<span class="sub-badge sub-badge-pro">Current</span>' : ''}</div>
+            <div class="sub-price">$9.90<span>/mo</span></div>
+            <p class="sub-price-note">For power users who read and learn every day</p>
+          </div>
+          <div class="sub-card-body">
+            ${proFeatures.map(f => featureRow(f, true)).join('')}
+          </div>
+          <div class="sub-card-foot">
+            ${isPro
+              ? `<button class="sub-btn sub-btn-manage" id="overlay-manage-btn">Manage Subscription</button>${sub.subscription?.cancel_at_period_end ? '<p class="sub-cancel-note">Cancels at end of billing period</p>' : ''}`
+              : '<button class="sub-btn sub-btn-primary" id="overlay-upgrade-btn">Upgrade to Pro</button>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+    document.getElementById('pro-overlay-close').addEventListener('click', close);
+    const upgradeBtn = document.getElementById('overlay-upgrade-btn');
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener('click', async () => {
+        if (!currentUser) { close(); window.location.hash = '#/login'; return; }
+        if (!proConfig?.stripe_enabled) { alert('Payments are not configured on this server.'); return; }
+        upgradeBtn.textContent = 'Redirecting...';
+        upgradeBtn.disabled = true;
+        try {
+          const data = await api('/api/pro/create-checkout-session', { method: 'POST' });
+          if (data.url) window.location.href = data.url;
+        } catch (err) {
+          alert('Checkout failed: ' + err.message);
+          upgradeBtn.textContent = 'Upgrade to Pro';
+          upgradeBtn.disabled = false;
+        }
+      });
+    }
+    const manageBtn = document.getElementById('overlay-manage-btn');
     if (manageBtn) {
       manageBtn.addEventListener('click', async () => {
         try {
@@ -1370,7 +1470,7 @@ function navigate() {
     case 'subscription': renderSubscriptionPage(); break;
     case 'mind':
       if (!isProUser()) {
-        window.location.hash = '#/subscription';
+        showProOverlay();
         window.location.hash = '#/minds';
         return;
       }
@@ -1401,7 +1501,7 @@ async function api(path, opts = {}) {
   let d;
   try { d = await r.json(); } catch { d = { detail: r.statusText || 'Request failed' }; }
   if (r.status === 429 && d.detail?.code === 'quota_exceeded') {
-    window.location.hash = '#/subscription';
+    showProOverlay();
     throw new Error(d.detail.message || 'Quota exceeded');
   }
   // Token expired or invalid — try refreshing the session before giving up
@@ -1837,101 +1937,102 @@ function showLoading(c) {
 }
 function removeLoading() { document.getElementById('loading-msg')?.remove(); }
 
-// ─── Chat sessions ───
-function persistSessions() {
-  saveCurrentSession();
+// ─── Chat sessions (DB-backed) ───
+
+async function restoreSessions() {
   try {
-    const data = chatSessions.map(s => ({
-      id: s.id, title: s.title, messages: s.messages,
-      books: s.books instanceof Map ? [...s.books.entries()] : [],
-      minds: s.minds instanceof Map ? [...s.minds.entries()] : [],
-      activeMinds: s.activeMinds instanceof Map ? [...s.activeMinds.entries()] : [],
-      updatedAt: s.updatedAt || 0,
-      ...(s.mindId ? { mindId: s.mindId } : {}),
+    const sessions = await api('/api/sessions');
+    chatSessions = sessions.map(s => ({
+      id: s.id,
+      title: s.title,
+      messages: [],
+      books: new Map(Object.entries(s.meta?.books || {})),
+      minds: new Map(Object.entries(s.meta?.minds || {})),
+      activeMinds: new Map(Object.entries(s.meta?.activeMinds || {})),
+      updatedAt: new Date(s.updated_at).getTime(),
+      mindId: s.mind_id || null,
     }));
-    localStorage.setItem('chatSessions', JSON.stringify(data));
-    localStorage.setItem('sessionCounter', String(sessionCounter));
-    localStorage.setItem('currentSessionId', currentSessionId || '');
-  } catch {}
+    // Migrate from localStorage if DB is empty but localStorage has data
+    if (!chatSessions.length) {
+      const raw = localStorage.getItem('chatSessions');
+      if (raw) {
+        const localData = JSON.parse(raw);
+        for (const s of localData) {
+          const books = s.books instanceof Array ? Object.fromEntries(s.books) : {};
+          const minds = s.minds instanceof Array ? Object.fromEntries(s.minds) : {};
+          const activeMinds = s.activeMinds instanceof Array ? Object.fromEntries(s.activeMinds) : {};
+          const created = await api('/api/sessions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: s.title, session_type: s.mindId ? 'mind' : 'chat', mind_id: s.mindId || null, meta: { books, minds, activeMinds } }),
+          });
+          for (const m of (s.messages || [])) {
+            const msgMeta = {};
+            if (m.sources) msgMeta.sources = m.sources;
+            if (m.opts) msgMeta.opts = m.opts;
+            if (m.mindName) msgMeta.mindName = m.mindName;
+            if (m.mindNames) msgMeta.mindNames = m.mindNames;
+            await api(`/api/sessions/${created.id}/messages`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: m.role, content: m.content || '', meta: msgMeta }),
+            });
+          }
+          chatSessions.push({
+            id: created.id, title: s.title, messages: s.messages || [],
+            books: new Map(s.books || []), minds: new Map(s.minds || []),
+            activeMinds: new Map(s.activeMinds || []),
+            updatedAt: s.updatedAt || 0, mindId: s.mindId || null,
+          });
+        }
+        localStorage.removeItem('chatSessions');
+        localStorage.removeItem('sessionCounter');
+        localStorage.removeItem('currentSessionId');
+      }
+    }
+    currentSessionId = localStorage.getItem('currentSessionId') || (chatSessions.length ? chatSessions[0].id : null);
+  } catch (e) {
+    console.warn('Failed to restore sessions from DB:', e);
+  }
 }
 
-function restoreSessions() {
-  try {
-    const raw = localStorage.getItem('chatSessions');
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    // One-time migration: reset polluted updatedAt values
-    const migrated = localStorage.getItem('ts_migrated');
-    chatSessions = data.map(s => ({
-      ...s,
-      books: new Map(s.books || []),
-      minds: new Map(s.minds || []),
-      activeMinds: new Map(s.activeMinds || []),
-      updatedAt: migrated ? (s.updatedAt || 0) : 0,
-      mindId: s.mindId || null,
-    }));
-    if (!migrated) localStorage.setItem('ts_migrated', '1');
-    sessionCounter = parseInt(localStorage.getItem('sessionCounter') || '0', 10);
-    currentSessionId = localStorage.getItem('currentSessionId') || null;
-  } catch {}
-}
-
-function createSession() {
-  saveCurrentSession();
-  const id = 's-' + (++sessionCounter);
-  const session = { id, title: 'New chat', messages: [], books: new Map(), activeMinds: new Map(), updatedAt: Date.now() };
+async function createSession(mindId) {
+  const body = { title: 'New chat', session_type: mindId ? 'mind' : 'chat' };
+  if (mindId) body.mind_id = mindId;
+  const created = await api('/api/sessions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const session = {
+    id: created.id, title: 'New chat', messages: [],
+    books: new Map(), minds: new Map(), activeMinds: new Map(),
+    updatedAt: Date.now(), mindId: mindId || null,
+  };
   chatSessions.unshift(session);
-  currentSessionId = id;
+  currentSessionId = session.id;
+  localStorage.setItem('currentSessionId', currentSessionId);
   activeMinds.clear();
   _mindsInvitedOnce = false;
-  document.getElementById('chat-messages').innerHTML = '';
-  hideChatRightSidebar();
+  if (!mindId) {
+    document.getElementById('chat-messages').innerHTML = '';
+    hideChatRightSidebar();
+  }
   renderChatHistory();
-  persistSessions();
   return session;
 }
 
-function saveCurrentSession() {
-  if (!currentSessionId) return;
-  const session = chatSessions.find(s => s.id === currentSessionId);
-  if (!session) return;
-
-  if (session.mindId) {
-    const mindPage = document.getElementById('page-mind');
-    const chatBox = document.getElementById('mind-chat-messages');
-    if (chatBox && mindPage && !mindPage.classList.contains('hidden')) _saveMindSession(chatBox);
-    return;
-  }
-
-  const msgs = [];
-  document.querySelectorAll('#chat-messages .chat-message:not(#loading-msg):not(.minds-loading-notice), #chat-messages .mind-join-notice').forEach(el => {
-    if (el.classList.contains('mind-join-notice')) {
-      const names = [...el.querySelectorAll('.join-avatar')].map(a => a.textContent);
-      const fullNames = el.querySelector('span:last-child')?.textContent?.replace(' joined the discussion', '') || '';
-      msgs.push({ role: 'system-notice', content: '', mindNames: fullNames.split(/ and |, /).map(s => s.trim()).filter(Boolean) });
-    } else if (el.classList.contains('mind-message')) {
-      msgs.push({ role: 'mind', content: el.dataset.raw || '', mindName: el.dataset.mindName || '' });
-    } else {
-      const role = el.classList.contains('user') ? 'user' : 'assistant';
-      const msg = { role, content: el.dataset.raw || el.textContent };
-      if (el.dataset.sources) try { msg.sources = JSON.parse(el.dataset.sources); } catch {}
-      if (el.dataset.opts) try { msg.opts = JSON.parse(el.dataset.opts); } catch {}
-      msgs.push(msg);
-    }
-  });
-  session.messages = msgs;
-  session.books = new Map(selectedBooks);
-  session.minds = new Map(selectedMinds);
-  session.activeMinds = new Map(activeMinds);
-  if (msgs.length) session.updatedAt = Date.now();
+function persistSessions() {
+  localStorage.setItem('currentSessionId', currentSessionId || '');
 }
 
-function switchToSession(id) {
+function saveCurrentSession() {
+  // No-op: messages are now saved to DB individually as they're sent/received
+}
+
+async function switchToSession(id) {
   const alreadyCurrent = id === currentSessionId;
-  if (!alreadyCurrent) saveCurrentSession();
   const session = chatSessions.find(s => s.id === id);
   if (!session) return;
   currentSessionId = id;
+  localStorage.setItem('currentSessionId', currentSessionId);
 
   if (session.mindId) {
     window.location.hash = '#/mind/' + session.mindId;
@@ -1944,6 +2045,15 @@ function switchToSession(id) {
     activeMinds = new Map(session.activeMinds || []);
     const chatBox = document.getElementById('chat-messages');
     chatBox.innerHTML = '';
+
+    // Load messages from DB
+    try {
+      const msgs = await api(`/api/sessions/${id}/messages`);
+      session.messages = msgs.map(m => ({ role: m.role, content: m.content, ...m.meta }));
+    } catch (e) {
+      console.warn('Failed to load session messages:', e);
+    }
+
     for (const m of session.messages) {
       if (m.role === 'mind') {
         appendMindMsg(chatBox, m.mindName, m.content);
@@ -1953,7 +2063,6 @@ function switchToSession(id) {
         appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
       }
     }
-    persistSessions();
     renderSelectedChips();
     restoreChatSidebar(session.messages);
     renderChatHistory();
@@ -1963,16 +2072,17 @@ function switchToSession(id) {
   }
 }
 
-function deleteSession(id) {
+async function deleteSession(id) {
   chatSessions = chatSessions.filter(s => s.id !== id);
   if (currentSessionId === id) {
     currentSessionId = null;
+    localStorage.setItem('currentSessionId', '');
     document.getElementById('chat-messages').innerHTML = '';
     hideChatRightSidebar();
   }
-  persistSessions();
   renderChatHistory();
   if (getRoute().page === 'chats') _renderChatsList(document.getElementById('chats-search')?.value?.trim().toLowerCase() || '');
+  try { await api(`/api/sessions/${id}`, { method: 'DELETE' }); } catch (e) { console.warn('Failed to delete session:', e); }
 }
 
 function updateSessionTitle(message) {
@@ -1980,6 +2090,10 @@ function updateSessionTitle(message) {
   if (session && session.title === 'New chat') {
     session.title = message.length > 40 ? message.slice(0, 40) + '...' : message;
     renderChatHistory();
+    api(`/api/sessions/${session.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: session.title }),
+    }).catch(() => {});
   }
 }
 
@@ -2063,12 +2177,15 @@ async function sendGlobalChat(message) {
     return;
   }
 
-  if (!currentSessionId) createSession();
+  if (!currentSessionId) await createSession();
   updateSessionTitle(message);
   const sentSessionId = currentSessionId;
 
   appendMsg(chatBox, 'user', message);
   showLoading(chatBox);
+
+  // Save user message to DB
+  _saveMessageToDB(sentSessionId, 'user', message);
 
   try {
     const body = { message };
@@ -2083,17 +2200,11 @@ async function sendGlobalChat(message) {
       body.book_context = bookContext;
     }
 
-    // Collect conversation history (exclude the message we just appended and loading)
-    const history = [];
-    chatBox.querySelectorAll('.chat-message:not(#loading-msg)').forEach(el => {
-      const role = el.classList.contains('user') ? 'user' : 'assistant';
-      const content = el.dataset.raw || el.textContent;
-      history.push({ role, content });
-    });
-    // Remove the last entry (the message we just appended as user)
-    if (history.length && history[history.length - 1].role === 'user') {
-      history.pop();
-    }
+    // Collect conversation history from in-memory session
+    const session = chatSessions.find(s => s.id === sentSessionId);
+    const history = (session?.messages || [])
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
     if (history.length) body.history = history;
 
     const data = await api('/api/chat', {
@@ -2109,12 +2220,16 @@ async function sendGlobalChat(message) {
     if (data.references?.length) msgOpts.references = data.references;
     if (data.usage) msgOpts.usage = data.usage;
 
-    // If user switched sessions while waiting, save to the original session without touching DOM
+    // Save assistant message to DB
+    const assistMeta = {};
+    if (sources.length) assistMeta.sources = sources;
+    if (Object.keys(msgOpts).length) assistMeta.opts = msgOpts;
+    _saveMessageToDB(sentSessionId, 'assistant', data.answer, assistMeta);
+
+    // If user switched sessions while waiting, update in-memory only
     if (currentSessionId !== sentSessionId) {
-      const session = chatSessions.find(s => s.id === sentSessionId);
       if (session) {
         session.messages.push({ role: 'assistant', content: data.answer, sources, opts: msgOpts });
-        persistSessions();
       }
       return;
     }
@@ -2123,10 +2238,7 @@ async function sendGlobalChat(message) {
     appendMsg(chatBox, 'assistant', data.answer, sources, msgOpts);
     renderChatSidebar(sources, message);
     showChatRightSidebar();
-    persistSessions();
-    // Refresh agents if new books were discovered via chat
     if (sources.length) loadAgents();
-    // Trigger polling if any catalog books are being learned
     ensurePolling();
 
     _inviteMindsToChat(chatBox, message, bookContext, agentIds);
@@ -2137,8 +2249,19 @@ async function sendGlobalChat(message) {
       ? 'No LLM API key configured. Please add GEMINI_API_KEY, OPENAI_API_KEY, or KIMI_API_KEY to your .env file and restart the server.'
       : 'Error: ' + err.message;
     appendMsg(chatBox, 'assistant', msg);
-    persistSessions();
   }
+}
+
+function _saveMessageToDB(sessionId, role, content, meta) {
+  const body = { role, content: content || '' };
+  if (meta && Object.keys(meta).length) body.meta = meta;
+  api(`/api/sessions/${sessionId}/messages`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(() => {
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) session.messages.push({ role, content, ...meta });
+  }).catch(e => console.warn('Failed to save message:', e));
 }
 
 let _mindsInvitedOnce = false;
@@ -2261,15 +2384,32 @@ function handleChatSend() {
   sendGlobalChat(msg);
 }
 
-function onChatPageShow() {
+async function onChatPageShow() {
   renderSelectedChips();
   renderChatHistory();
   // Restore messages if chat box is empty and we have a current session
   const chatBox = document.getElementById('chat-messages');
   if (currentSessionId && !chatBox.children.length) {
     const session = chatSessions.find(s => s.id === currentSessionId);
+    // Load from DB if not cached in memory
+    if (session && !session.messages?.length) {
+      try {
+        const msgs = await api(`/api/sessions/${currentSessionId}/messages`);
+        session.messages = msgs.map(m => ({ role: m.role, content: m.content, ...m.meta }));
+      } catch (e) {
+        console.warn('Failed to load session messages:', e);
+      }
+    }
     if (session?.messages?.length) {
-      session.messages.forEach(m => appendMsg(chatBox, m.role, m.content, m.sources, m.opts));
+      for (const m of session.messages) {
+        if (m.role === 'mind') {
+          appendMindMsg(chatBox, m.mindName, m.content);
+        } else if (m.role === 'system-notice') {
+          appendJoinNotice(chatBox, m.mindNames || []);
+        } else {
+          appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
+        }
+      }
       restoreChatSidebar(session.messages);
     }
   }
@@ -2724,6 +2864,8 @@ function renderPopoverMindList(listId, emptyId) {
   const list = document.getElementById(listId);
   const empty = document.getElementById(emptyId);
   if (!list || !empty) return;
+  const pro = isProUser();
+  document.querySelectorAll('.popover-pro-badge').forEach(b => b.style.display = pro ? 'none' : '');
   if (!allMinds.length) { list.innerHTML = ''; empty.classList.remove('hidden'); return; }
   empty.classList.add('hidden');
   const sorted = [...allMinds].sort((a, b) => a.name.localeCompare(b.name));
@@ -2731,7 +2873,7 @@ function renderPopoverMindList(listId, emptyId) {
     const sel = selectedMinds.has(m.id);
     const color = mindColor(m.name);
     const initials = mindInitials(m.name);
-    return `<div class="popover-mind-item ${sel ? 'selected' : ''}" data-mid="${m.id}">
+    return `<div class="popover-mind-item ${sel ? 'selected' : ''}${!pro ? ' locked' : ''}" data-mid="${m.id}">
       <div class="popover-mind-check">${sel ? '&#10003;' : ''}</div>
       <div class="popover-mind-avatar" style="background:${color}">${initials}</div>
       <span>${esc(m.name)}</span>
@@ -2739,6 +2881,7 @@ function renderPopoverMindList(listId, emptyId) {
   }).join('');
   list.querySelectorAll('.popover-mind-item').forEach(el => {
     el.addEventListener('click', () => {
+      if (!pro) { closeAllPopovers(); showProOverlay(); return; }
       const id = el.dataset.mid;
       if (selectedMinds.has(id)) {
         selectedMinds.delete(id);
@@ -3431,7 +3574,7 @@ function _renderMindsGraph() {
         chatBtn.addEventListener('click', (ev) => {
           ev.stopPropagation();
           const mindId = chatBtn.dataset.mindId;
-          if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+          if (!isProUser()) { showProOverlay(); return; }
           tooltip.classList.add('hidden');
           _tooltipNode = null;
           window.location.hash = '#/mind/' + mindId;
@@ -3441,7 +3584,7 @@ function _renderMindsGraph() {
       if (btn) {
         btn.addEventListener('click', (ev) => {
           ev.stopPropagation();
-          if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+          if (!isProUser()) { showProOverlay(); return; }
           _expandFromNode(n);
           tooltip.classList.add('hidden');
           _tooltipNode = null;
@@ -3485,7 +3628,7 @@ function _renderMindsGraph() {
     const n = _getNodeAt(e.clientX - rect.left, e.clientY - rect.top);
     if (!n) return;
     if (n._isAdd) {
-      if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+      if (!isProUser()) { showProOverlay(); return; }
       if (addBusy) return;
       addBusy = true;
       tooltip.classList.add('hidden');
@@ -3515,7 +3658,7 @@ function _renderMindsGraph() {
       addBusy = false;
       return;
     }
-    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+    if (!isProUser()) { showProOverlay(); return; }
     window.location.hash = '#/mind/' + n.id;
   });
 
@@ -3922,7 +4065,6 @@ async function init() {
   // Home minds button → minds popover
   document.getElementById('home-minds-btn').addEventListener('click', e => {
     e.stopPropagation();
-    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     toggleMindPopover('home-minds-popover', 'home-popover-mind-list', 'home-popover-no-minds');
   });
 
@@ -3942,7 +4084,6 @@ async function init() {
   // Chat minds button → minds popover
   document.getElementById('chat-minds-btn').addEventListener('click', e => {
     e.stopPropagation();
-    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
     toggleMindPopover('chat-minds-popover', 'popover-mind-list', 'popover-no-minds');
   });
   document.addEventListener('click', e => {
@@ -4014,11 +4155,11 @@ async function init() {
     _applyGraphHighlight(e.target.value.trim());
   });
   document.getElementById('minds-add-btn').addEventListener('click', () => {
-    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+    if (!isProUser()) { showProOverlay(); return; }
     showAddMindDialog();
   });
   document.getElementById('minds-create-btn').addEventListener('click', () => {
-    if (!isProUser()) { window.location.hash = '#/subscription'; return; }
+    if (!isProUser()) { showProOverlay(); return; }
     showCreateMindDialog();
   });
 
