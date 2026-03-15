@@ -3471,13 +3471,25 @@ function _matchStrength(tokensA, tokensB) {
 }
 
 function _buildGraphData(minds) {
-  const nodes = minds.map(m => ({
-    id: m.id, name: m.name, era: m.era || '',
-    domain: m.domain || '', bio: m.bio_summary || '',
-    color: mindColor(m.name), initials: mindInitials(m.name),
-    chatCount: m.chat_count || 0,
-    tokens: _domainTokens(m),
-  }));
+  const now = Date.now();
+  const NEW_THRESHOLD_MS = 5 * 60 * 1000;
+  const nodes = minds.map(m => {
+    const node = {
+      id: m.id, name: m.name, era: m.era || '',
+      domain: m.domain || '', bio: m.bio_summary || '',
+      color: mindColor(m.name), initials: mindInitials(m.name),
+      chatCount: m.chat_count || 0,
+      tokens: _domainTokens(m),
+    };
+    if (m.created_at) {
+      const createdMs = new Date(m.created_at).getTime();
+      const age = now - createdMs;
+      if (age < NEW_THRESHOLD_MS) {
+        node._newAt = performance.now() - age;
+      }
+    }
+    return node;
+  });
 
   const links = [];
   for (let i = 0; i < nodes.length; i++) {
