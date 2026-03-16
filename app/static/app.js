@@ -4881,7 +4881,7 @@ async function init() {
 
   await Promise.all([loadAgents(), loadVotes(), loadTopics(), loadMinds()]);
   buildBookList();
-  restoreSessions();
+  await restoreSessions();
   renderChatHistory();
   updateAuthUI();
 
