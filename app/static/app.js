@@ -3677,6 +3677,45 @@ function _renderMindsGraph() {
 
   const time = { now: 0 };
 
+  const _flashNodes = [];
+  const _flashLinks = [];
+  const FLASH_DURATION = 2000;
+  const FLASH_CASCADE_DELAY = 150;
+
+  function _triggerConnectFlash(nodeA, nodeB, newLink) {
+    const t0 = performance.now();
+    _flashNodes.push({ node: nodeA, startAt: t0 });
+    _flashNodes.push({ node: nodeB, startAt: t0 });
+    _flashLinks.push({ link: newLink, startAt: t0 });
+
+    const visited = new Set([nodeA.id, nodeB.id]);
+    let frontier = [nodeB];
+    let wave = 1;
+    while (wave <= 3 && frontier.length > 0) {
+      const nextFrontier = [];
+      for (const fn of frontier) {
+        for (const l of links) {
+          if (l === newLink) continue;
+          const s = typeof l.source === 'object' ? l.source : null;
+          const t = typeof l.target === 'object' ? l.target : null;
+          if (!s || !t) continue;
+          let neighbor = null;
+          if (s.id === fn.id && !visited.has(t.id)) neighbor = t;
+          else if (t.id === fn.id && !visited.has(s.id)) neighbor = s;
+          if (neighbor) {
+            visited.add(neighbor.id);
+            const delay = wave * FLASH_CASCADE_DELAY;
+            _flashNodes.push({ node: neighbor, startAt: t0 + delay });
+            _flashLinks.push({ link: l, startAt: t0 + delay });
+            nextFrontier.push(neighbor);
+          }
+        }
+      }
+      frontier = nextFrontier;
+      wave++;
+    }
+  }
+
   function draw() {
     time.now = performance.now();
     ctx.save();
@@ -4418,45 +4457,6 @@ function _renderMindsGraph() {
         _dragStartPos = null;
       })
   );
-
-  const _flashNodes = [];
-  const _flashLinks = [];
-  const FLASH_DURATION = 2000;
-  const FLASH_CASCADE_DELAY = 150;
-
-  function _triggerConnectFlash(nodeA, nodeB, newLink) {
-    const t0 = performance.now();
-    _flashNodes.push({ node: nodeA, startAt: t0 });
-    _flashNodes.push({ node: nodeB, startAt: t0 });
-    _flashLinks.push({ link: newLink, startAt: t0 });
-
-    const visited = new Set([nodeA.id, nodeB.id]);
-    let frontier = [nodeB];
-    let wave = 1;
-    while (wave <= 3 && frontier.length > 0) {
-      const nextFrontier = [];
-      for (const fn of frontier) {
-        for (const l of links) {
-          if (l === newLink) continue;
-          const s = typeof l.source === 'object' ? l.source : null;
-          const t = typeof l.target === 'object' ? l.target : null;
-          if (!s || !t) continue;
-          let neighbor = null;
-          if (s.id === fn.id && !visited.has(t.id)) neighbor = t;
-          else if (t.id === fn.id && !visited.has(s.id)) neighbor = s;
-          if (neighbor) {
-            visited.add(neighbor.id);
-            const delay = wave * FLASH_CASCADE_DELAY;
-            _flashNodes.push({ node: neighbor, startAt: t0 + delay });
-            _flashLinks.push({ link: l, startAt: t0 + delay });
-            nextFrontier.push(neighbor);
-          }
-        }
-      }
-      frontier = nextFrontier;
-      wave++;
-    }
-  }
 
   function _saveCustomLink(sourceId, targetId) {
     try {
