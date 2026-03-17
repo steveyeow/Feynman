@@ -88,6 +88,54 @@ def backfill_mind_embeddings(batch_size: int = 10) -> int:
     return count
 
 
+def compute_mind_layout() -> list[dict[str, Any]]:
+    """Project each mind's embedding to 2D via PCA.
+
+    Returns [{id, rx, ry}] where rx/ry are in [0.05, 0.95] — ready to use
+    as fractional canvas coordinates for the graph layout force.
+    """
+    rows = list_minds_with_embeddings()
+    if len(rows) < 2:
+        return []
+
+    ids = []
+    vecs = []
+    for r in rows:
+        if not r.get("embedding"):
+            continue
+        emb = bytes(r["embedding"]) if isinstance(r["embedding"], memoryview) else r["embedding"]
+        arr = np.frombuffer(emb, dtype=np.float32, count=r["embedding_dim"])
+        norm = r["embedding_norm"] or float(np.linalg.norm(arr)) or 1.0
+        vecs.append(arr / norm)
+        ids.append(r["id"])
+
+    if len(vecs) < 2:
+        return []
+
+    mat = np.stack(vecs)
+    centered = mat - mat.mean(axis=0)
+    _, _, Vt = np.linalg.svd(centered, full_matrices=False)
+    coords = centered @ Vt[:2].T  # shape (n, 2)
+
+    # Normalize each axis to [0.05, 0.95]
+    result = []
+    for axis in range(2):
+        col = coords[:, axis]
+        lo, hi = col.min(), col.max()
+        if hi > lo:
+            coords[:, axis] = 0.08 + 0.84 * (col - lo) / (hi - lo)
+        else:
+            coords[:, axis] = 0.5
+
+    for i, mind_id in enumerate(ids):
+        result.append({
+            "id": mind_id,
+            "rx": round(float(coords[i, 0]), 4),
+            "ry": round(float(coords[i, 1]), 4),
+        })
+    return result
+
+
 def compute_mind_similarities() -> list[dict[str, Any]]:
     """Compute pairwise cosine similarities between all minds with embeddings.
 
@@ -119,14 +167,31 @@ def compute_mind_similarities() -> list[dict[str, Any]]:
     mat = np.stack(vecs)
     sims = mat @ mat.T
 
-    results = []
+    # For each node keep only its top-K strongest neighbors (regardless of absolute threshold).
+    # This bounds total link count to ~n*TOP_K/2 regardless of how close embeddings are,
+    # preventing the graph from collapsing when all intellectual personas sit near each
+    # other in embedding space.
+    TOP_K = 4
+    from collections import defaultdict
+    top_per_node: dict[int, list[tuple[float, int]]] = defaultdict(list)
     for i in range(len(ids)):
         for j in range(i + 1, len(ids)):
             s = float(sims[i, j])
-            if s > 0.65:
+            if s > 0.45:
+                top_per_node[i].append((s, j))
+                top_per_node[j].append((s, i))
+
+    seen: set[tuple] = set()
+    results = []
+    for node_i, neighbors in top_per_node.items():
+        neighbors.sort(reverse=True)
+        for s, node_j in neighbors[:TOP_K]:
+            pair = (min(node_i, node_j), max(node_i, node_j))
+            if pair not in seen:
+                seen.add(pair)
                 results.append({
-                    "source": ids[i],
-                    "target": ids[j],
+                    "source": ids[node_i],
+                    "target": ids[node_j],
                     "strength": round(s, 4),
                 })
     results.sort(key=lambda x: x["strength"], reverse=True)

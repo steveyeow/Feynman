@@ -3585,7 +3585,25 @@ function _matchStrength(tokensA, tokensB) {
   return strength;
 }
 
-function _buildGraphData(minds, vectorLinks) {
+// ─── Embedding-based layout force ───
+// Each node carries _layoutPos {rx, ry} derived from PCA of its embedding vector.
+// The force nudges every node toward its own semantic position in 2D space.
+
+function _makeEmbeddingForce(strength, W, H) {
+  let ns;
+  function force(alpha) {
+    for (const n of ns) {
+      if (n._isAdd || !n._layoutPos) continue;
+      n.vx += (n._layoutPos.rx * W - n.x) * strength * alpha;
+      n.vy += (n._layoutPos.ry * H - n.y) * strength * alpha;
+    }
+  }
+  force.initialize = nodes => { ns = nodes; };
+  return force;
+}
+
+function _buildGraphData(minds, vectorLinks, layoutPositions) {
+  const layoutMap = new Map((layoutPositions || []).map(p => [p.id, { rx: p.rx, ry: p.ry }]));
   const now = Date.now();
   const lastVisit = parseInt(localStorage.getItem('minds_last_visit') || '0', 10);
   const NEW_FALLBACK_MS = 24 * 60 * 60 * 1000;
@@ -3599,6 +3617,7 @@ function _buildGraphData(minds, vectorLinks) {
       color: mindColor(m.name), initials: mindInitials(m.name),
       chatCount: m.chat_count || 0,
       tokens: _domainTokens(m),
+      _layoutPos: layoutMap.get(m.id) || null,
     };
     if (m.created_at) {
       const createdMs = new Date(m.created_at).getTime();
@@ -3689,29 +3708,29 @@ function renderMindsPage() {
   _renderMindsGraphAsync();
 }
 
-let _cachedVectorLinks = null;
-let _vectorLinksFetchedAt = 0;
+let _cachedGraphData = null;
+let _graphDataFetchedAt = 0;
 const _VECTOR_CACHE_MS = 60000;
 
-async function _fetchVectorLinks() {
+async function _fetchGraphData() {
   const now = Date.now();
-  if (_cachedVectorLinks && (now - _vectorLinksFetchedAt) < _VECTOR_CACHE_MS) {
-    return _cachedVectorLinks;
+  if (_cachedGraphData && (now - _graphDataFetchedAt) < _VECTOR_CACHE_MS) {
+    return _cachedGraphData;
   }
   try {
     const resp = await api('/api/minds/similarities');
-    _cachedVectorLinks = resp.links || [];
-    _vectorLinksFetchedAt = Date.now();
-    return _cachedVectorLinks;
+    _cachedGraphData = { links: resp.links || [], layout: resp.layout || [] };
+    _graphDataFetchedAt = Date.now();
+    return _cachedGraphData;
   } catch (err) {
-    console.warn('Failed to fetch vector similarities, falling back to tag matching', err);
-    return [];
+    console.warn('Failed to fetch graph data, falling back to tag matching', err);
+    return { links: [], layout: [] };
   }
 }
 
 async function _renderMindsGraphAsync() {
-  const vectorLinks = await _fetchVectorLinks();
-  _renderMindsGraph(vectorLinks);
+  const { links, layout } = await _fetchGraphData();
+  _renderMindsGraph(links, layout);
 }
 
 function _hexToRgb(hex) {
@@ -3719,7 +3738,7 @@ function _hexToRgb(hex) {
   return [r, g, b];
 }
 
-function _renderMindsGraph(vectorLinks) {
+function _renderMindsGraph(vectorLinks, layoutPositions) {
   const container = document.getElementById('minds-graph');
   const tooltip = document.getElementById('minds-tooltip');
   if (!container) return;
@@ -3734,11 +3753,20 @@ function _renderMindsGraph(vectorLinks) {
     return;
   }
 
-  const { nodes, links, pendingNew } = _buildGraphData(allMinds, vectorLinks);
+  const { nodes, links, pendingNew } = _buildGraphData(allMinds, vectorLinks, layoutPositions);
   const dpr = window.devicePixelRatio || 1;
   const W = container.clientWidth || 900;
   const H = container.clientHeight || 600;
   const BASE_R = Math.max(20, Math.min(30, W / (nodes.length * 2)));
+
+  // Seed initial positions from PCA layout so simulation starts near final state
+  for (const n of nodes) {
+    if (n._isAdd) continue;
+    if (n._layoutPos) {
+      n.x = n._layoutPos.rx * W + (Math.random() - 0.5) * 80;
+      n.y = n._layoutPos.ry * H + (Math.random() - 0.5) * 80;
+    }
+  }
 
   const canvas = document.createElement('canvas');
   canvas.width = W * dpr;
@@ -3881,16 +3909,14 @@ function _renderMindsGraph(vectorLinks) {
   _graphState = state;
 
   const linkForce = d3.forceLink(links).id(d => d.id)
-    .distance(d => Math.max(80, 280 - d.strength * 70))
-    .strength(d => 0.08 + d.strength * 0.15);
+    .distance(d => Math.max(100, 300 - d.strength * 60))
+    .strength(d => 0.04 + d.strength * 0.08);
 
   const sim = d3.forceSimulation(nodes)
     .force('link', linkForce)
-    .force('charge', d3.forceManyBody().strength(-600).distanceMax(800))
-    .force('center', d3.forceCenter(W / 2, H / 2).strength(0.03))
-    .force('collision', d3.forceCollide().radius(d => d._isAdd ? ADD_R + 15 : BASE_R + 20))
-    .force('x', d3.forceX(W / 2).strength(0.02))
-    .force('y', d3.forceY(H / 2).strength(0.02))
+    .force('charge', d3.forceManyBody().strength(-900).distanceMax(600))
+    .force('embedding', _makeEmbeddingForce(0.20, W, H))
+    .force('collision', d3.forceCollide().radius(d => d._isAdd ? ADD_R + 15 : BASE_R + 15))
     .alphaDecay(0.015);
   _graphSim = sim;
 
@@ -4417,7 +4443,7 @@ function _renderMindsGraph(vectorLinks) {
     node._expanding = false;
 
     if (addedCount > 0) {
-      _cachedVectorLinks = null;
+      _cachedGraphData = null;
       showToast(`${addedCount} new mind${addedCount > 1 ? 's' : ''} joined the network!`);
       setTimeout(() => {
         const newNodes = nodes.filter(d => d._newAt);
@@ -4951,7 +4977,7 @@ function showCreateMindDialog() {
       });
       overlay.remove();
       await loadMinds();
-      _cachedVectorLinks = null;
+      _cachedGraphData = null;
       if (getRoute().page === 'minds') _renderMindsGraphAsync();
     } catch (err) {
       btn.textContent = 'Upload & Connect';

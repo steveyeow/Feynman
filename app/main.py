@@ -1269,8 +1269,8 @@ def api_list_minds(background_tasks: BackgroundTasks) -> list[dict[str, Any]]:
 
 @app.get("/api/minds/similarities")
 def api_mind_similarities() -> dict[str, Any]:
-    from .core.minds import compute_mind_similarities
-    return {"links": compute_mind_similarities()}
+    from .core.minds import compute_mind_similarities, compute_mind_layout
+    return {"links": compute_mind_similarities(), "layout": compute_mind_layout()}
 
 
 @app.get("/api/minds/{mind_id}")
