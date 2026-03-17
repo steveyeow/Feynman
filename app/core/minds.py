@@ -101,7 +101,8 @@ def compute_mind_similarities() -> list[dict[str, Any]]:
     for r in rows:
         if not r.get("embedding"):
             continue
-        arr = np.frombuffer(r["embedding"], dtype=np.float32, count=r["embedding_dim"])
+        emb = bytes(r["embedding"]) if isinstance(r["embedding"], memoryview) else r["embedding"]
+        arr = np.frombuffer(emb, dtype=np.float32, count=r["embedding_dim"])
         norm = r["embedding_norm"] or float(np.linalg.norm(arr)) or 1.0
         vecs.append(arr / norm)
         ids.append(r["id"])

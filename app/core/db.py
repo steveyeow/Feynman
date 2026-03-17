@@ -890,22 +890,29 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def update_mind_embedding(mind_id: str, vector_bytes: bytes, dim: int, norm: float) -> None:
+    blob = _pg().Binary(vector_bytes) if _USE_PG else vector_bytes
     with get_conn() as conn:
         _execute(conn, _q(
             "UPDATE minds SET embedding = ?, embedding_dim = ?, embedding_norm = ? WHERE id = ?"
-        ), (vector_bytes, dim, norm, mind_id))
+        ), (blob, dim, norm, mind_id))
 
 
 def list_minds_with_embeddings() -> list[dict[str, Any]]:
     with get_conn() as conn:
-        rows = _fetchall(conn, "SELECT id, name, domain, embedding, embedding_dim, embedding_norm FROM minds WHERE embedding IS NOT NULL")
-        return [dict(r) for r in rows]
+        try:
+            rows = _fetchall(conn, _q("SELECT id, name, domain, embedding, embedding_dim, embedding_norm FROM minds WHERE embedding IS NOT NULL"))
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
 
 
 def list_minds_missing_embeddings() -> list[dict[str, Any]]:
     with get_conn() as conn:
-        rows = _fetchall(conn, "SELECT * FROM minds WHERE embedding IS NULL")
-        return [_row_to_mind(r) for r in rows]
+        try:
+            rows = _fetchall(conn, _q("SELECT * FROM minds WHERE embedding IS NULL"))
+            return [_row_to_mind(r) for r in rows]
+        except Exception:
+            return []
 
 
 def increment_mind_chat_count(mind_id: str) -> None:

@@ -1207,6 +1207,12 @@ def api_list_minds(background_tasks: BackgroundTasks) -> list[dict[str, Any]]:
     return minds
 
 
+@app.get("/api/minds/similarities")
+def api_mind_similarities() -> dict[str, Any]:
+    from .core.minds import compute_mind_similarities
+    return {"links": compute_mind_similarities()}
+
+
 @app.get("/api/minds/{mind_id}")
 def api_get_mind(mind_id: str) -> dict[str, Any]:
     mind = get_mind(mind_id)
@@ -1291,12 +1297,6 @@ def api_suggest_minds(payload: MindSuggestRequest, request: Request) -> dict[str
         suggestions = [s for s in suggestions if s.get("name", "").lower() not in excluded]
 
     return {"minds": suggestions, "usage": usage}
-
-
-@app.get("/api/minds/similarities")
-def api_mind_similarities() -> dict[str, Any]:
-    from .core.minds import compute_mind_similarities
-    return {"links": compute_mind_similarities()}
 
 
 @app.post("/api/minds/{mind_id}/chat")
