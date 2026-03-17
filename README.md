@@ -173,6 +173,10 @@ All concept SVGs are included in `app/static/` — run the app and visit `/stati
 
 ## Product Updates
 
+### Mar 18, 2026 — Minds Network: Vector-Driven Graph
+
+Rebuilt the Minds Network graph with vector embeddings. Connections and spatial layout are now driven by semantic similarity instead of keyword/domain matching — thinkers are linked by shared ideas, not surface-level tags. The graph uses PCA-projected embedding coordinates for layout, so intellectual proximity is visible at a glance. Cleaner connections, more meaningful clusters, and a foundation for future discovery features.
+
 ### Mar 10, 2026 — Chat with Great Minds
 
 AI agents that simulate great thinkers now join your conversations. 50+ pre-generated minds across philosophy, physics, economics, psychology, literature, tech, and more. Interactive knowledge graph, inline chat messages, session continuity, and the ability to create your own mind agents. See the [Chat with Great Minds](#chat-with-great-minds) section above for details.
