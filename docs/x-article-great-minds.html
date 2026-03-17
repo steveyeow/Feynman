@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beyond Disciplines: Rethinking the Knowledge Network with Vector Space</title>
+  <style>
+    :root {
+      --bg: #f6f2ea;
+      --paper: #fbfaf7;
+      --text: #171717;
+      --muted: #5c5c5c;
+      --line: #e6ded2;
+      --accent: #222222;
+      --shadow: 0 18px 40px rgba(36, 28, 20, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Baskerville, Georgia, "Times New Roman", serif;
+      line-height: 1.72;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 36px 24px 96px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 16px;
+      z-index: 20;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin: 0 auto 32px;
+      width: fit-content;
+      padding: 10px;
+      background: rgba(251, 250, 247, 0.88);
+      border: 1px solid rgba(230, 222, 210, 0.95);
+      border-radius: 999px;
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar button {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font: inherit;
+      font-size: 15px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .toolbar button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(36, 28, 20, 0.08);
+      background: #fffdfa;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-width: 96px;
+      color: var(--muted);
+      font-size: 14px;
+      padding: 0 6px;
+    }
+
+    .article-shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 36px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 72px 72px 36px;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at top right, rgba(232, 223, 210, 0.35), transparent 36%),
+        radial-gradient(circle at left top, rgba(221, 231, 243, 0.28), transparent 28%),
+        var(--paper);
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #7a7369;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(42px, 6vw, 68px);
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      max-width: 780px;
+    }
+
+    .dek {
+      max-width: 760px;
+      margin: 22px 0 0;
+      font-size: 24px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .byline {
+      margin: 20px 0 0;
+      font-size: 18px;
+      line-height: 1.5;
+      color: #6b645a;
+      font-style: italic;
+      max-width: 760px;
+    }
+
+    .article {
+      padding: 52px 56px 88px;
+      font-size: 24px;
+    }
+
+    .article p {
+      margin: 0 0 1.15em;
+    }
+
+    .article strong {
+      font-weight: 700;
+    }
+
+    .article h2 {
+      margin: 2.3em 0 0.8em;
+      font-size: 33px;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+    }
+
+    .article code {
+      padding: 0.08em 0.26em;
+      border-radius: 0.3em;
+      background: rgba(0, 0, 0, 0.045);
+      font-size: 0.88em;
+    }
+
+    .article ul {
+      margin: 0.4em 0 1.2em 1.2em;
+      padding: 0;
+    }
+
+    .article li {
+      margin: 0.34em 0;
+    }
+
+    figure {
+      margin: 42px auto 54px;
+    }
+
+    .figure-wide {
+      width: 100%;
+      margin-left: 0;
+      transform: none;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: #f6f2ea;
+      box-shadow: 0 14px 30px rgba(36, 28, 20, 0.05);
+    }
+
+    figcaption {
+      margin-top: 14px;
+      font-size: 18px;
+      color: var(--muted);
+      text-align: center;
+      font-style: italic;
+    }
+
+    .footer-note {
+      margin-top: 64px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+      font-size: 18px;
+      color: #72695d;
+    }
+
+    @media (max-width: 980px) {
+      .hero {
+        padding: 48px 28px 28px;
+      }
+
+      .article {
+        padding: 36px 28px 64px;
+        font-size: 21px;
+      }
+
+      .dek {
+        font-size: 21px;
+      }
+
+      h1 {
+        font-size: 42px;
+      }
+
+      .toolbar {
+        flex-wrap: wrap;
+        border-radius: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="toolbar">
+      <button id="copyTitleBtn" type="button">Copy title</button>
+      <button id="copyArticleBtn" type="button">Copy article text</button>
+      <span class="status" id="copyStatus">Ready</span>
+    </div>
+
+    <main class="article-shell">
+      <header class="hero">
+        <p class="eyebrow">Feynman / Great Minds</p>
+        <h1 id="articleTitle">Beyond Disciplines: Rethinking the Knowledge Network with Vector Space</h1>
+        <p class="dek">
+          Traditional academic categories are useful, but they are no longer enough. A vector-based model of knowledge offers a different possibility: instead of forcing ideas into inherited boxes, we can begin to see how they actually relate.
+        </p>
+        <p class="byline">Written in collaboration with Claude Opus and GPT-5.4.</p>
+      </header>
+
+      <article class="article" id="articleBody">
+        <p>Our work on Feynman starts from three commitments.</p>
+
+        <p>First, we want to <strong>show our appreciation for humanity's great wisdom tradition</strong> by re-understanding and re-presenting the thinkers, books, and ideas that shaped civilization.</p>
+
+        <p>Second, we want to <strong>expand the scope of that tradition</strong> by making it easier to connect disciplines, surface overlooked relationships, and bring new minds into the conversation.</p>
+
+        <p>Third, we want to <strong>help more people benefit from it directly</strong> by turning great ideas into something navigable, conversational, and alive.</p>
+
+        <p>These commitments are the reason we built <code>Great Minds</code>. They also shape a broader intuition behind the project: the old discipline-based map of knowledge is no longer enough, and vector space may give us a better way to describe how ideas actually relate.</p>
+
+        <h2>Core argument</h2>
+
+        <p>The internet gave us an extraordinary network of documents. What it did not really give us was a satisfying map of meaning.</p>
+
+        <p>That matters because the way we organize knowledge shapes the way we learn from it.</p>
+
+        <p>For centuries, most knowledge systems were built as classifications. Libraries, schools, and academic departments all depend on some version of the same idea: define categories first, then place knowledge inside them. Physics goes here. Philosophy goes there. Biology belongs somewhere else.</p>
+
+        <p>That system is useful, but it is also somewhat artificial.</p>
+
+        <p>Real ideas do not live neatly inside a tree.</p>
+
+        <p><code>Information theory</code> belongs to mathematics, engineering, computer science, neuroscience, and physics at the same time. <code>Consciousness</code> touches philosophy, psychology, neuroscience, Buddhism, and cognitive science. Many of the most important ideas are not located inside a single discipline. They are bridges.</p>
+
+        <p>This is where embeddings become interesting, not just technically, but philosophically.</p>
+
+        <figure class="figure-wide">
+          <img src="./great-minds-diagram-1-tree-vs-space.svg" alt="Traditional classification versus embedding space" />
+          <figcaption>Traditional classification begins with categories. Embedding space begins with relationships and lets structure emerge from them.</figcaption>
+        </figure>
+
+        <h2>Embeddings turn meaning into geometry</h2>
+
+        <p>An embedding represents something like a book, passage, concept, or person as a vector in a high-dimensional space.</p>
+
+        <p>That sounds technical, but the consequence is straightforward: once meaning has coordinates, it can begin to take on a geometry. Nearness starts to matter. Some regions become dense. Some ideas sit between fields rather than inside any one of them. Some concepts act like bridges.</p>
+
+        <p>Instead of hand-labeling knowledge into rigid boxes, we can start by locating things in a shared space and seeing what patterns appear.</p>
+
+        <p>If <code>quantum mechanics</code>, <code>field theory</code>, and <code>particle physics</code> are close in the underlying corpus, they cluster together.</p>
+
+        <p>If <code>Spinoza</code> and <code>Einstein</code> unexpectedly occupy nearby regions because of shared conceptual patterns, the system can reveal that.</p>
+
+        <p>If <code>Buddhism</code> and <code>cognitive science</code> create a meaningful bridge, that bridge can become visible even if no one designed it in advance.</p>
+
+        <p>That is why embedding space is not just a better search tool. It suggests a different picture of knowledge itself.</p>
+
+        <h2>From hyperlink graph to semantic space</h2>
+
+        <p>The classical web is a hyperlink graph. Pages connect because someone created a link.</p>
+
+        <p>That is powerful, but links do not necessarily express understanding. They are discrete and editorial. They tell us that one page points to another. They do not tell us how close two ideas are, where two fields begin to overlap, or why one concept quietly connects distant areas of thought.</p>
+
+        <p>Embedding space offers a different kind of structure. It creates a semantic field in which books, thinkers, concepts, and even conversations can be located relative to one another. In that setting, knowledge starts to look less like a filing system and more like a landscape.</p>
+
+        <figure class="figure-wide">
+          <img src="./great-minds-diagram-2-web-vs-noosphere.svg" alt="Hyperlink graph versus semantic knowledge map" />
+          <figcaption>Hyperlink graphs show explicit connections. Semantic space makes it easier to see neighborhoods, distance, and bridge concepts.</figcaption>
+        </figure>
+
+        <h2>Why this is close to the noosphere</h2>
+
+        <p>The philosopher and theologian Pierre Teilhard de Chardin used the term <code>Noosphere</code> to describe a planetary layer of connected human thought. Later thinkers such as Vladimir Vernadsky developed related ideas. Much later, many people saw the web as an early technical precursor: a global surface across which information could connect.</p>
+
+        <p>But the web only fulfills part of that vision. It connects documents; it does not, on its own, map meaning.</p>
+
+        <p>If the noosphere is understood as a network of human thought, then embeddings and vector space start to look like a more concrete technical form of it:</p>
+
+        <ul>
+          <li>each mind can be a point in semantic space,</li>
+          <li>each book can be a region in that space,</li>
+          <li>each idea can be a local structure,</li>
+          <li>each conversation can add new connective tissue,</li>
+          <li>and the whole system can become explorable as a living map.</li>
+        </ul>
+
+        <p>In that sense, recent machine learning tools matter not only because they can generate text, but because they may help us build a more navigable map of thought.</p>
+
+        <h2>What this means for product design</h2>
+
+        <p>If you take this seriously, then the goal of a knowledge product changes. It is no longer only about returning the right result to a query. It becomes a matter of helping someone move through a knowledge space: from one mind to nearby minds, from one idea to neighboring ideas, from one field into another.</p>
+
+        <p>That is closer to navigation than search.</p>
+
+        <p>This is the idea behind <code>Great Minds</code> in Feynman.</p>
+
+        <p>We do not want it to be a static directory of famous people. We want it to become a living knowledge space where thinkers, books, ideas, and conversations can reveal their structure through both graph relationships and embeddings.</p>
+
+        <p>In practical terms, that means relevant minds can join a conversation, users can discover nearby minds from any thinker, books and concepts can begin to share a common semantic space, and movement across disciplines becomes easier and more natural.</p>
+
+        <p>In that sense, <code>Great Minds</code> is our attempt to give that intuition a practical form.</p>
+
+        <figure class="figure-wide">
+          <img src="./great-minds-diagram-3-feynman-great-minds.svg" alt="How Great Minds explores the idea inside Feynman" />
+          <figcaption>In Feynman, <code>Great Minds</code> is one attempt to turn this idea into a usable experience: a shared knowledge space people can interpret, navigate, and expand.</figcaption>
+        </figure>
+
+        <h2>Why this matters</h2>
+
+        <p>This matters for at least three reasons.</p>
+
+        <p>First, it offers a better way to honor human civilization. Too often, the history of ideas gets flattened into names, quotations, and prestige markers. But great thinkers are not museum labels. They are ways of seeing, reasoning, and asking questions. A system that helps people move through their relationships is a more serious form of appreciation.</p>
+
+        <p>Second, it can widen the scope of knowledge. When knowledge is treated as a semantic field rather than a rigid tree, unexpected bridges become easier to notice. Interdisciplinary exploration no longer has to be forced from the outside; it can arise from the structure of the space itself.</p>
+
+        <p>Third, it can make difficult traditions more directly usable. Most people will never spend years inside a philosophy department or a physics institute. But many people still want access to the strongest ideas human beings have produced. If those ideas become easier to navigate, they become easier to learn from without being reduced to slogans.</p>
+
+        <h2>A final thought</h2>
+
+        <p>One of the most appealing consequences of this view is that it changes how we think about originality.</p>
+
+        <p>If knowledge has a geometry, then a new idea may not be just another point inside an established cluster. It may be a new direction through the space, or a bridge between regions that previously seemed far apart.</p>
+
+        <p>That is one reason <code>Great Minds</code> matters to us. It is not only about preserving what humanity has already thought. It is about creating better conditions for people to encounter it, move through it, and perhaps extend it.</p>
+
+        <p>The web helped organize pages. What comes next may help us organize thought a little better. If that happens, the real gain will not be more impressive software. It will be a more active and more intimate relationship with the best of human civilization.</p>
+
+        <p class="footer-note">Prepared as a clean web version for sharing and copy-pasting into X Articles.</p>
+      </article>
+    </main>
+  </div>
+
+  <script>
+    const copyStatus = document.getElementById('copyStatus');
+    const articleTitle = document.getElementById('articleTitle').innerText.trim();
+    const articleBody = document.getElementById('articleBody').innerText.trim();
+
+    async function copyText(text, successMessage) {
+      try {
+        await navigator.clipboard.writeText(text);
+        copyStatus.textContent = successMessage;
+        setTimeout(() => {
+          copyStatus.textContent = 'Ready';
+        }, 2400);
+      } catch (error) {
+        copyStatus.textContent = 'Copy failed';
+      }
+    }
+
+    document.getElementById('copyTitleBtn').addEventListener('click', () => {
+      copyText(articleTitle, 'Title copied');
+    });
+
+    document.getElementById('copyArticleBtn').addEventListener('click', () => {
+      copyText(articleTitle + "\n\n" + articleBody, 'Article copied');
+    });
+  </script>
+</body>
+</html>

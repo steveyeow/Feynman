@@ -283,6 +283,15 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_mind_memories_uid")
 
+            # Migration: add embedding columns to minds table
+            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL")]:
+                try:
+                    _execute(conn, f"SAVEPOINT sp_minds_{col}")
+                    _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
+                    _execute(conn, f"RELEASE SAVEPOINT sp_minds_{col}")
+                except Exception:
+                    _execute(conn, f"ROLLBACK TO SAVEPOINT sp_minds_{col}")
+
             # Migration: add user_id to chat_sessions
             try:
                 _execute(conn, "SAVEPOINT sp_chat_sessions_uid")
@@ -499,6 +508,13 @@ def init_db() -> None:
                 _execute(conn, "ALTER TABLE agents ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
             except Exception:
                 pass
+
+            # Migration: add embedding columns to minds table
+            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION")]:
+                try:
+                    _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
+                except Exception:
+                    pass
 
             # Pro tables (SQLite)
             _execute(conn, """
@@ -871,6 +887,25 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
         "chat_count": row["chat_count"],
         "created_at": row["created_at"],
     }
+
+
+def update_mind_embedding(mind_id: str, vector_bytes: bytes, dim: int, norm: float) -> None:
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "UPDATE minds SET embedding = ?, embedding_dim = ?, embedding_norm = ? WHERE id = ?"
+        ), (vector_bytes, dim, norm, mind_id))
+
+
+def list_minds_with_embeddings() -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        rows = _fetchall(conn, "SELECT id, name, domain, embedding, embedding_dim, embedding_norm FROM minds WHERE embedding IS NOT NULL")
+        return [dict(r) for r in rows]
+
+
+def list_minds_missing_embeddings() -> list[dict[str, Any]]:
+    with get_conn() as conn:
+        rows = _fetchall(conn, "SELECT * FROM minds WHERE embedding IS NULL")
+        return [_row_to_mind(r) for r in rows]
 
 
 def increment_mind_chat_count(mind_id: str) -> None:

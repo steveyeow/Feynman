@@ -77,6 +77,24 @@ Chat with books is just the starting point. You can also chat and learn with a c
 
 AI agents simulate these thinkers, faithfully capturing how they reason and argue, grounded in their actual works. When you chat about a book or explore a topic, relevant minds automatically join the conversation — and you see exactly who joined with a "X joined the discussion" notification, just like a group chat.
 
+### Great Minds design principles
+
+Great Minds is guided by three primary commitments:
+
+- **Show our appreciation for humanity's great wisdom tradition** — by re-understanding and re-presenting the ideas, books, and thinkers that shaped civilization in a form people can actively engage with.
+- **Expand the scope of that tradition** — by connecting disciplines, surfacing overlooked relationships, and making it easier to add new minds, new works, and new intellectual bridges.
+- **Help more people benefit from it directly** — by turning distant or intimidating bodies of knowledge into something navigable, conversational, and practically useful.
+
+Under those commitments, the feature follows a few core principles:
+
+- **Build a noosphere, not just a directory** — the goal is not a static list of famous names, but an evolving network of human thought in which minds, books, ideas, and conversations can meaningfully connect.
+- **Let structure emerge instead of forcing categories** — traditional academic disciplines are useful, but Great Minds should not be limited by inherited taxonomies. With embeddings, related minds and ideas can organize themselves by semantic proximity, revealing clusters, bridges, and surprising neighbors.
+- **Treat knowledge as a space to navigate** — hyperlinks and tags are helpful, but they only go so far. Great Minds aims to become a map of thought where users can move from one mind to nearby minds, nearby ideas, and nearby books.
+- **Use embeddings to reveal the geometry of ideas** — books, thinkers, and conversations can all be embedded into a shared vector space. In that space, similarity becomes distance, interdisciplinary links become bridges, and the topology of knowledge becomes explorable.
+- **Favor discovery over rigid classification** — instead of reproducing a fixed school-like hierarchy, the product should help users discover how thought actually relates across domains, including continuous transitions between philosophy, science, art, technology, and beyond.
+- **Keep human meaning in the loop** — vector structure is powerful, but it is not truth itself. Great Minds should make relationships legible, grounded, and interpretable so users can evaluate them rather than passively accept them.
+- **Make the network alive and cumulative** — the noosphere is not a frozen archive. Minds should evolve through conversation, the network should grow as new material is added, and users should feel they are exploring a living knowledge world rather than a closed canon.
+
 - **Minds join your conversations** — when you chat about a book or topic, relevant minds are automatically invited. Reading "Wealth of Nations"? Adam Smith explains his reasoning while Marx challenges it and Keynes offers a different lens. Their replies appear as individual messages in the conversation timeline, not hidden in a sidebar.
 - **Continuity across turns** — once a mind joins, they stay in the conversation and see the full chat history. As the topic shifts, new minds join automatically with a notification, while existing ones continue to participate.
 - **A network that evolves** — these agents aren't static. They accumulate memory from conversations, becoming richer and more nuanced over time while staying faithful to who they are.

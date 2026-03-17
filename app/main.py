@@ -162,6 +162,17 @@ def _normalize_citations(text: str) -> str:
     return _VERBOSE_CITE_RE.sub(_replace, text)
 
 
+def _extract_cited_numbers(text: str) -> set[int]:
+    """Extract all citation numbers from bracket groups like [1] or [2, 3, 4]."""
+    cited: set[int] = set()
+    for group in re.findall(r"\[([\d,\s]+)\]", text):
+        for num in group.split(","):
+            num = num.strip()
+            if num.isdigit():
+                cited.add(int(num))
+    return cited
+
+
 _TOKEN_MARKUP = 2  # Display multiplier for profit margin
 
 
@@ -413,7 +424,11 @@ def on_startup() -> None:
 
     if not _IS_SERVERLESS:
         # Traditional server: use background threads as before
-        t_minds = threading.Thread(target=lambda: _seed_minds_batch(len(SEED_MINDS)), daemon=True)
+        def _seed_and_backfill():
+            _seed_minds_batch(len(SEED_MINDS))
+            from .core.minds import backfill_mind_embeddings
+            backfill_mind_embeddings()
+        t_minds = threading.Thread(target=_seed_and_backfill, daemon=True)
         t_minds.start()
         if DISCOVERY_INTERVAL > 0:
             t = threading.Thread(target=_discovery_loop, daemon=True)
@@ -559,6 +574,15 @@ def api_cron_seed_minds(request: Request) -> dict[str, Any]:
         return {"status": "complete", "total": existing_count}
     seeded = _seed_minds_batch(_SEED_BATCH_SIZE)
     return {"status": "ok", "seeded": seeded, "total": existing_count + seeded}
+
+
+@app.get("/api/cron/embed-minds")
+def api_cron_embed_minds(request: Request) -> dict[str, Any]:
+    """Cron-triggered embedding backfill for minds missing vectors."""
+    _verify_cron(request)
+    from .core.minds import backfill_mind_embeddings
+    count = backfill_mind_embeddings()
+    return {"status": "ok", "embedded": count}
 
 
 # ─── Pro config endpoint ───
@@ -725,7 +749,7 @@ def api_chat(agent_id: str, payload: ChatRequest, request: Request, background_t
 
     # Build references only for chunks actually cited in the response
     answer_text = _normalize_citations(result.content)
-    cited_nums = set(int(n) for n in re.findall(r"\[(\d+)\]", answer_text))
+    cited_nums = _extract_cited_numbers(answer_text)
     chunks = skill_result.metadata.get("chunks", [])
     references = []
     for idx, chunk in enumerate(chunks, start=1):
@@ -943,7 +967,7 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
 
     # Build references only for chunks actually cited in the response
     answer_text = _normalize_citations(result.content)
-    cited_nums = set(int(n) for n in re.findall(r"\[(\d+)\]", answer_text))
+    cited_nums = _extract_cited_numbers(answer_text)
     references = []
     for idx, chunk in enumerate(rag_chunks, start=1):
         if idx not in cited_nums:
@@ -1162,14 +1186,22 @@ class PanelChatRequest(BaseModel):
 _LAZY_SEED_SIZE = int(os.getenv("LAZY_SEED_SIZE", "1"))
 
 
+_embed_backfill_done = False
+
 @app.get("/api/minds")
-def api_list_minds() -> list[dict[str, Any]]:
+def api_list_minds(background_tasks: BackgroundTasks) -> list[dict[str, Any]]:
+    global _embed_backfill_done
     minds = list_minds()
     # Lazy seeding: seed 1 mind per request to stay within Vercel's 10s timeout
     if _IS_SERVERLESS and len(minds) < len(SEED_MINDS):
         seeded = _seed_minds_batch(_LAZY_SEED_SIZE)
         if seeded:
             minds = list_minds()
+    # Lazy embedding backfill: run once per process lifetime
+    if not _embed_backfill_done:
+        _embed_backfill_done = True
+        from .core.minds import backfill_mind_embeddings
+        background_tasks.add_task(backfill_mind_embeddings)
     for m in minds:
         m.pop("persona", None)
     return minds
@@ -1259,6 +1291,12 @@ def api_suggest_minds(payload: MindSuggestRequest, request: Request) -> dict[str
         suggestions = [s for s in suggestions if s.get("name", "").lower() not in excluded]
 
     return {"minds": suggestions, "usage": usage}
+
+
+@app.get("/api/minds/similarities")
+def api_mind_similarities() -> dict[str, Any]:
+    from .core.minds import compute_mind_similarities
+    return {"links": compute_mind_similarities()}
 
 
 @app.post("/api/minds/{mind_id}/chat")

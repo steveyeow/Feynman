@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860">
+  <rect width="1400" height="860" fill="#F6F2EA"/>
+  <text x="88" y="92" fill="#171717" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="42" font-weight="700">How Great Minds explores this idea inside Feynman</text>
+  <text x="88" y="132" fill="#5B5B5B" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="24">A product path from appreciation, to expansion, to direct benefit.</text>
+
+  <rect x="94" y="206" width="1212" height="164" rx="30" fill="#FBFAF7" stroke="#E6DED2"/>
+  <text x="136" y="254" fill="#191919" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">Three commitments</text>
+  <line x1="486" y1="278" x2="486" y2="342" stroke="#E2D8CA" stroke-width="1.5"/>
+  <line x1="890" y1="278" x2="890" y2="342" stroke="#E2D8CA" stroke-width="1.5"/>
+  <text x="136" y="302" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Appreciate great wisdom</text>
+  <text x="136" y="330" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">traditions.</text>
+  <text x="546" y="302" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Expand their scope through</text>
+  <text x="546" y="330" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">new connections.</text>
+  <text x="950" y="302" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Help more people benefit</text>
+  <text x="950" y="330" fill="#525252" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">from them directly.</text>
+
+  <line x1="700" y1="370" x2="700" y2="394" stroke="#8A8A8A" stroke-width="2.5"/>
+
+  <rect x="164" y="394" width="1072" height="164" rx="30" fill="#FBFAF7" stroke="#E6DED2"/>
+  <text x="206" y="446" fill="#191919" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">Shared knowledge space</text>
+  <text x="206" y="486" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Books, minds, ideas, passages, and conversations are represented together.</text>
+
+  <circle cx="378" cy="506" r="15" fill="#1F1F1F"/>
+  <text x="406" y="514" fill="#2E2E2E" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Books</text>
+  <circle cx="566" cy="506" r="15" fill="#1F1F1F"/>
+  <text x="594" y="514" fill="#2E2E2E" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Ideas</text>
+  <circle cx="740" cy="506" r="15" fill="#1F1F1F"/>
+  <text x="768" y="514" fill="#2E2E2E" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Minds</text>
+  <circle cx="924" cy="506" r="15" fill="#1F1F1F"/>
+  <text x="952" y="514" fill="#2E2E2E" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="22">Passages</text>
+
+  <line x1="700" y1="558" x2="700" y2="620" stroke="#8A8A8A" stroke-width="2.5"/>
+
+  <rect x="94" y="620" width="370" height="152" rx="28" fill="#FBFAF7" stroke="#E6DED2"/>
+  <rect x="516" y="620" width="370" height="152" rx="28" fill="#FBFAF7" stroke="#E6DED2"/>
+  <rect x="938" y="620" width="368" height="152" rx="28" fill="#FBFAF7" stroke="#E6DED2"/>
+
+  <text x="126" y="672" fill="#191919" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="27" font-weight="700">Interpret</text>
+  <text x="126" y="708" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">Grounded minds join the conversation.</text>
+  <text x="126" y="736" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">Users encounter living perspectives.</text>
+
+  <text x="548" y="672" fill="#191919" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="27" font-weight="700">Navigate</text>
+  <text x="548" y="708" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">Mind to nearby minds to nearby ideas.</text>
+  <text x="548" y="736" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">Search becomes exploration.</text>
+
+  <text x="970" y="672" fill="#191919" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="27" font-weight="700">Expand</text>
+  <text x="970" y="708" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">New books, minds, and bridges enrich</text>
+  <text x="970" y="736" fill="#595959" font-family="Baskerville, Georgia, 'Times New Roman', serif" font-size="21">the network over time.</text>
+</svg>

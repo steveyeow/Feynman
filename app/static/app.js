@@ -1872,6 +1872,7 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
   if (opts && Object.keys(opts).length) el.dataset.opts = JSON.stringify(opts);
   const webSrcs = opts?.webSources || [];
   const refs = opts?.references || [];
+  const refsByIndex = new Map(refs.map(r => [Number(r.index), r]));
   if (role === 'assistant') {
     const avatar = document.createElement('div');
     avatar.className = 'feynman-msg-avatar';
@@ -1888,8 +1889,9 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
         const indices = nums.split(/\s*,\s*/).map(n => parseInt(n, 10));
         const links = indices.map(num => {
           const idx = num - 1;
-          if (refs.length && idx >= 0 && idx < refs.length) {
-            return `<a class="cite-link" data-ref="${num}" href="javascript:void(0)" title="${esc(refs[idx].book + ': ' + refs[idx].snippet.slice(0, 60))}"><sup>${num}</sup></a>`;
+          const ref = refsByIndex.get(num);
+          if (ref) {
+            return `<a class="cite-link" data-ref="${num}" href="javascript:void(0)" title="${esc(ref.book + ': ' + ref.snippet.slice(0, 60))}"><sup>${num}</sup></a>`;
           } else if (webSrcs.length && idx >= 0 && idx < webSrcs.length) {
             return `<a class="cite-link" href="${esc(webSrcs[idx].url)}" target="_blank" rel="noopener" title="${esc(webSrcs[idx].title || '')}"><sup>${num}</sup></a>`;
           }
@@ -2285,7 +2287,7 @@ async function sendGlobalChat(message) {
   appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0);
   showLoading(chatBox);
 
-  await _saveMessageToDB(sentSessionId, 'user', message);
+  _queueSessionMessage(sentSessionId, 'user', message);
 
   _inflightSessionId = sentSessionId;
   const renderGenAtStart = _chatRenderGen;
@@ -2330,7 +2332,7 @@ async function sendGlobalChat(message) {
       const assistMeta = {};
       if (sources.length) assistMeta.sources = sources;
       if (Object.keys(msgOpts).length) assistMeta.opts = msgOpts;
-      await _saveMessageToDB(sentSessionId, 'assistant', data.answer, assistMeta);
+      _queueSessionMessage(sentSessionId, 'assistant', data.answer, assistMeta);
 
       _inflightSessionId = null;
 
@@ -2380,14 +2382,20 @@ async function _saveMessageToDB(sessionId, role, content, meta) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const session = chatSessions.find(s => s.id === sessionId);
-    if (session) {
-      if (!session.messages) session.messages = [];
-      session.messages.push({ role, content, ...meta });
-    }
   } catch (e) {
     console.warn('Failed to save message:', e);
   }
+}
+
+function _queueSessionMessage(sessionId, role, content, meta) {
+  if (!sessionId) return;
+  const session = chatSessions.find(s => s.id === sessionId);
+  if (session) {
+    if (!session.messages) session.messages = [];
+    session.messages.push({ role, content, ...(meta || {}) });
+    session.updatedAt = Date.now();
+  }
+  _saveMessageToDB(sessionId, role, content, meta);
 }
 
 let _mindsInvitedOnce = false;
@@ -2531,13 +2539,13 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
 
       const joinedRespondedNames = newJoinedNames.filter(name => respondedNames.has(name));
 
-      // Always save to DB first (even if user navigated away)
+      // Queue persistence even if user navigated away so the session stays recoverable.
       if (joinedRespondedNames.length) {
-        if (sessionId) _saveMessageToDB(sessionId, 'system-notice', '', { mindNames: joinedRespondedNames });
+        _queueSessionMessage(sessionId, 'system-notice', '', { mindNames: joinedRespondedNames });
       }
       for (const r of panelData.responses) {
         if (r.response && !r.response.startsWith('[')) {
-          if (sessionId) _saveMessageToDB(sessionId, 'mind', r.response, { mindName: r.mind_name });
+          _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name });
         }
       }
 
@@ -3577,7 +3585,7 @@ function _matchStrength(tokensA, tokensB) {
   return strength;
 }
 
-function _buildGraphData(minds) {
+function _buildGraphData(minds, vectorLinks) {
   const now = Date.now();
   const lastVisit = parseInt(localStorage.getItem('minds_last_visit') || '0', 10);
   const NEW_FALLBACK_MS = 24 * 60 * 60 * 1000;
@@ -3611,15 +3619,36 @@ function _buildGraphData(minds) {
     });
   }
 
+  const nodeIds = new Set(nodes.map(n => n.id));
   const links = [];
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const shared = nodes[i].tokens.filter(t => nodes[j].tokens.some(u => t === u || t.includes(u) || u.includes(t)));
-      if (shared.length > 0) {
-        links.push({ source: nodes[i].id, target: nodes[j].id, strength: shared.length });
+  let usedVectorLinks = false;
+
+  if (vectorLinks && vectorLinks.length > 0) {
+    const MAX_LINKS_PER_NODE = 5;
+    const linkCounts = {};
+    for (const vl of vectorLinks) {
+      if (!nodeIds.has(vl.source) || !nodeIds.has(vl.target)) continue;
+      const sc = linkCounts[vl.source] || 0;
+      const tc = linkCounts[vl.target] || 0;
+      if (sc >= MAX_LINKS_PER_NODE && tc >= MAX_LINKS_PER_NODE) continue;
+      links.push({ source: vl.source, target: vl.target, strength: vl.strength * 5 });
+      linkCounts[vl.source] = sc + 1;
+      linkCounts[vl.target] = tc + 1;
+    }
+    if (links.length > 0) usedVectorLinks = true;
+  }
+
+  if (!usedVectorLinks) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const shared = nodes[i].tokens.filter(t => nodes[j].tokens.some(u => t === u || t.includes(u) || u.includes(t)));
+        if (shared.length > 0) {
+          links.push({ source: nodes[i].id, target: nodes[j].id, strength: shared.length });
+        }
       }
     }
   }
+
   if (links.length === 0 && nodes.length > 1) {
     for (let i = 1; i < nodes.length; i++) {
       links.push({ source: nodes[0].id, target: nodes[i].id, strength: 0.3 });
@@ -3664,7 +3693,32 @@ function _buildGraphData(minds) {
 function renderMindsPage() {
   const search = document.getElementById('minds-search');
   if (search) search.value = '';
-  _renderMindsGraph();
+  _renderMindsGraphAsync();
+}
+
+let _cachedVectorLinks = null;
+let _vectorLinksFetchedAt = 0;
+const _VECTOR_CACHE_MS = 60000;
+
+async function _fetchVectorLinks() {
+  const now = Date.now();
+  if (_cachedVectorLinks && (now - _vectorLinksFetchedAt) < _VECTOR_CACHE_MS) {
+    return _cachedVectorLinks;
+  }
+  try {
+    const resp = await api('/api/minds/similarities');
+    _cachedVectorLinks = resp.links || [];
+    _vectorLinksFetchedAt = Date.now();
+    return _cachedVectorLinks;
+  } catch (err) {
+    console.warn('Failed to fetch vector similarities, falling back to tag matching', err);
+    return [];
+  }
+}
+
+async function _renderMindsGraphAsync() {
+  const vectorLinks = await _fetchVectorLinks();
+  _renderMindsGraph(vectorLinks);
 }
 
 function _hexToRgb(hex) {
@@ -3672,7 +3726,7 @@ function _hexToRgb(hex) {
   return [r, g, b];
 }
 
-function _renderMindsGraph() {
+function _renderMindsGraph(vectorLinks) {
   const container = document.getElementById('minds-graph');
   const tooltip = document.getElementById('minds-tooltip');
   if (!container) return;
@@ -3687,7 +3741,7 @@ function _renderMindsGraph() {
     return;
   }
 
-  const { nodes, links, pendingNew } = _buildGraphData(allMinds);
+  const { nodes, links, pendingNew } = _buildGraphData(allMinds, vectorLinks);
   const dpr = window.devicePixelRatio || 1;
   const W = container.clientWidth || 900;
   const H = container.clientHeight || 600;
@@ -4370,6 +4424,7 @@ function _renderMindsGraph() {
     node._expanding = false;
 
     if (addedCount > 0) {
+      _cachedVectorLinks = null;
       showToast(`${addedCount} new mind${addedCount > 1 ? 's' : ''} joined the network!`);
       setTimeout(() => {
         const newNodes = nodes.filter(d => d._newAt);
@@ -4811,7 +4866,7 @@ function showAddMindDialog(prefillName) {
         }, 6000);
       } else {
         await loadMinds();
-        if (getRoute().page === 'minds') _renderMindsGraph();
+        if (getRoute().page === 'minds') _renderMindsGraphAsync();
       }
     } catch (err) {
       btn.textContent = 'Invite';
@@ -4903,7 +4958,8 @@ function showCreateMindDialog() {
       });
       overlay.remove();
       await loadMinds();
-      if (getRoute().page === 'minds') _renderMindsGraph();
+      _cachedVectorLinks = null;
+      if (getRoute().page === 'minds') _renderMindsGraphAsync();
     } catch (err) {
       btn.textContent = 'Upload & Connect';
       btn.disabled = false;

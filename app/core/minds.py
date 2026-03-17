@@ -6,6 +6,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+import numpy as np
+
 from .db import (
     add_mind_memory,
     create_catalog_agent,
@@ -18,11 +20,112 @@ from .db import (
     link_mind_work,
     list_mind_memories,
     list_minds,
+    list_minds_missing_embeddings,
+    list_minds_with_embeddings,
+    update_mind_embedding,
 )
-from .providers import ProviderError, chat_with_fallback
+from .providers import ProviderError, chat_with_fallback, pick_provider
 from .rag import build_context, retrieve_cross_book
 
 log = logging.getLogger(__name__)
+
+
+# ─── Mind embedding helpers ───
+
+def _mind_embedding_text(mind_data: dict[str, Any]) -> str:
+    """Build a single text block from a mind's profile for embedding."""
+    parts = [
+        mind_data.get("name", ""),
+        mind_data.get("domain", ""),
+        mind_data.get("bio_summary", ""),
+        mind_data.get("thinking_style", ""),
+    ]
+    works = mind_data.get("works", [])
+    if isinstance(works, list):
+        parts.append(", ".join(works[:10]))
+    elif isinstance(works, str):
+        parts.append(works)
+    persona = mind_data.get("persona", "")
+    if persona:
+        parts.append(persona[:1000])
+    return "\n".join(p for p in parts if p)
+
+
+def embed_mind(mind_id: str, mind_data: dict[str, Any]) -> None:
+    """Generate and store an embedding vector for a mind."""
+    text = _mind_embedding_text(mind_data)
+    if not text.strip():
+        return
+    try:
+        embedder = pick_provider("embed")
+        vectors = embedder.embed_texts([text], task_type="RETRIEVAL_DOCUMENT")
+        arr = np.array(vectors[0], dtype=np.float32)
+        norm = float(np.linalg.norm(arr))
+        if norm == 0.0:
+            norm = 1.0
+        update_mind_embedding(mind_id, arr.tobytes(), arr.shape[0], norm)
+    except Exception as exc:
+        log.warning("Failed to embed mind %s: %s", mind_id, exc)
+
+
+def backfill_mind_embeddings() -> int:
+    """Embed all minds that are missing an embedding vector. Returns count."""
+    missing = list_minds_missing_embeddings()
+    if not missing:
+        return 0
+    count = 0
+    for mind in missing:
+        try:
+            embed_mind(mind["id"], mind)
+            count += 1
+        except Exception as exc:
+            log.warning("Backfill embed failed for %s: %s", mind["name"], exc)
+    log.info("Backfilled embeddings for %d minds", count)
+    return count
+
+
+def compute_mind_similarities() -> list[dict[str, Any]]:
+    """Compute pairwise cosine similarities between all minds with embeddings.
+
+    Returns a list of {source, target, strength} dicts sorted by strength descending.
+    Only returns pairs with positive similarity.
+    """
+    rows = list_minds_with_embeddings()
+    if len(rows) < 2:
+        return []
+
+    ids = []
+    names = []
+    domains = []
+    vecs = []
+    for r in rows:
+        if not r.get("embedding"):
+            continue
+        arr = np.frombuffer(r["embedding"], dtype=np.float32, count=r["embedding_dim"])
+        norm = r["embedding_norm"] or float(np.linalg.norm(arr)) or 1.0
+        vecs.append(arr / norm)
+        ids.append(r["id"])
+        names.append(r["name"])
+        domains.append(r.get("domain", ""))
+
+    if len(vecs) < 2:
+        return []
+
+    mat = np.stack(vecs)
+    sims = mat @ mat.T
+
+    results = []
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            s = float(sims[i, j])
+            if s > 0.05:
+                results.append({
+                    "source": ids[i],
+                    "target": ids[j],
+                    "strength": round(s, 4),
+                })
+    results.sort(key=lambda x: x["strength"], reverse=True)
+    return results
 
 # ─── Seed minds generated on first startup ───
 
@@ -201,6 +304,7 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "") -> dict[str, 
         except Exception as exc:
             log.warning("Failed to link work '%s' for mind '%s': %s", title, name, exc)
 
+    embed_mind(mind_id, mind_data)
     log.info("Generated mind: %s (%s)", name, era)
     return mind
 
@@ -304,6 +408,7 @@ def create_mind_from_content(
             agent_id = agent["id"]
         link_mind_work(mind_id, agent_id)
 
+    embed_mind(mind_id, mind_data)
     log.info("Generated mind from content: %s", name)
     return mind
 
@@ -490,7 +595,12 @@ def mind_chat(
 
     references = []
     if rag_chunks:
-        cited_nums = set(int(n) for n in re.findall(r"\[(\d+)\]", result.content))
+        cited_nums: set[int] = set()
+        for group in re.findall(r"\[([\d,\s]+)\]", result.content):
+            for num in group.split(","):
+                num = num.strip()
+                if num.isdigit():
+                    cited_nums.add(int(num))
         for idx, chunk in enumerate(rag_chunks, start=1):
             if idx not in cited_nums:
                 continue
