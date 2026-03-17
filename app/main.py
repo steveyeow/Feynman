@@ -581,8 +581,38 @@ def api_cron_embed_minds(request: Request) -> dict[str, Any]:
     """Cron-triggered embedding backfill for minds missing vectors."""
     _verify_cron(request)
     from .core.minds import backfill_mind_embeddings
-    count = backfill_mind_embeddings()
-    return {"status": "ok", "embedded": count}
+    try:
+        count = backfill_mind_embeddings()
+        return {"status": "ok", "embedded": count}
+    except Exception as exc:
+        log.error("Embed-minds cron failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/api/debug/embedding-status")
+def api_debug_embedding_status() -> dict[str, Any]:
+    """Diagnostic: check embedding column existence and mind counts."""
+    from .core.db import get_conn, _q, _USE_PG, _fetchone
+    result: dict[str, Any] = {"pg": _USE_PG}
+    try:
+        with get_conn() as conn:
+            row = _fetchone(conn, _q("SELECT COUNT(*) as total FROM minds"), ())
+            result["total_minds"] = row["total"] if row else 0
+    except Exception as exc:
+        result["total_minds_error"] = str(exc)
+    try:
+        with get_conn() as conn:
+            row = _fetchone(conn, _q("SELECT COUNT(*) as cnt FROM minds WHERE embedding IS NOT NULL"), ())
+            result["with_embedding"] = row["cnt"] if row else 0
+    except Exception as exc:
+        result["embedding_column_error"] = str(exc)
+    try:
+        with get_conn() as conn:
+            row = _fetchone(conn, _q("SELECT COUNT(*) as cnt FROM minds WHERE embedding IS NULL"), ())
+            result["without_embedding"] = row["cnt"] if row else 0
+    except Exception as exc:
+        result["null_query_error"] = str(exc)
+    return result
 
 
 # ─── Pro config endpoint ───
