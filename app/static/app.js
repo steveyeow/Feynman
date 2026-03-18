@@ -2406,14 +2406,26 @@ async function sendGlobalChat(message) {
 async function _saveMessageToDB(sessionId, role, content, meta) {
   const body = { role, content: content || '' };
   if (meta && Object.keys(meta).length) body.meta = meta;
-  try {
-    await api(`/api/sessions/${sessionId}/messages`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+  const prev = _sessionSaveChains.get(sessionId) || Promise.resolve();
+  const next = prev
+    .catch(() => {})
+    .then(async () => {
+      try {
+        await api(`/api/sessions/${sessionId}/messages`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        console.warn('Failed to save message:', e);
+      }
     });
-  } catch (e) {
-    console.warn('Failed to save message:', e);
-  }
+  _sessionSaveChains.set(sessionId, next);
+  next.finally(() => {
+    if (_sessionSaveChains.get(sessionId) === next) {
+      _sessionSaveChains.delete(sessionId);
+    }
+  });
+  return next;
 }
 
 function _queueSessionMessage(sessionId, role, content, meta) {
@@ -2429,6 +2441,7 @@ function _queueSessionMessage(sessionId, role, content, meta) {
 
 let _mindsInvitedOnce = false;
 let _mindsInviteGen = 0;
+const _sessionSaveChains = new Map();
 
 async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targetMindNames) {
   const sessionId = currentSessionId;
