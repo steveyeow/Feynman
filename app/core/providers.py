@@ -266,6 +266,16 @@ def _deepseek_provider() -> OpenAICompatibleProvider:
     )
 
 
+def _novita_provider() -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        name="novita",
+        api_key=config.NOVITA_API_KEY,
+        base_url=config.NOVITA_BASE_URL,
+        chat_model=config.NOVITA_CHAT_MODEL,
+        embed_model=config.NOVITA_EMBED_MODEL or None,
+    )
+
+
 class AnthropicProvider(BaseProvider):
     name = "anthropic"
 
@@ -338,6 +348,8 @@ def get_provider(name: str) -> BaseProvider:
         return _kimi_provider()
     if name == "deepseek":
         return _deepseek_provider()
+    if name == "novita":
+        return _novita_provider()
     if name == "anthropic":
         return _anthropic_provider()
     raise ProviderError(f"Unknown provider: {name}")
