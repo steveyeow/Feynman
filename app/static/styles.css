@@ -1055,12 +1055,17 @@ body {
 .ref-book { font-size: 12px; font-weight: 600; color: var(--text); }
 .ref-snippets { padding-left: 4px; }
 .ref-snippet-row { display: flex; gap: 6px; align-items: flex-start; padding: 3px 0; }
+.ref-snippet-row.expandable { cursor: pointer; border-radius: 6px; padding: 4px 6px; margin: 1px -6px; transition: background 0.15s; }
+.ref-snippet-row.expandable:hover { background: rgba(0,0,0,0.03); }
 .ref-snippet-num {
   flex-shrink: 0; width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent-light); color: var(--accent); font-size: 9px; font-weight: 600;
   display: inline-flex; align-items: center; justify-content: center; margin-top: 1px;
 }
-.ref-snippet { display: block; font-size: 11px; color: var(--text-muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ref-snippet { font-size: 11px; color: var(--text-muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; flex: 1; min-width: 0; }
+.ref-expand-icon { flex-shrink: 0; font-size: 8px; color: var(--text-muted); margin-top: 2px; transition: transform 0.2s; }
+.ref-snippet-row.expanded .ref-expand-icon { transform: rotate(90deg); }
+.ref-snippet-row.expanded .ref-snippet { -webkit-line-clamp: unset; display: block; white-space: pre-wrap; }
 
 /* ─── Page nav (book detail) ─── */
 .page-nav {

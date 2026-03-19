@@ -1051,6 +1051,7 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
             "index": idx,
             "book": chunk.get("agent_name", "Unknown"),
             "snippet": _clean_snippet(text),
+            "full_text": text.strip(),
         })
 
     resp: dict[str, Any] = {

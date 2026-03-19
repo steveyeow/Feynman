@@ -690,6 +690,7 @@ def mind_chat(
                 "index": idx,
                 "book": chunk.get("agent_name", "Unknown"),
                 "snippet": _clean_snippet(text),
+                "full_text": text.strip(),
             })
 
     return {

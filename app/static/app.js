@@ -1942,17 +1942,30 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
         grouped.push(entry);
       }
     }
+    const refTextMap = new Map();
     refsEl.innerHTML = '<div class="refs-header">References</div>' +
       grouped.map(g => {
         const nums = g.chunks.map(c => c.index);
         const numsHtml = nums.map(n => `<span class="ref-num">${n}</span>`).join('');
         const multi = g.chunks.length > 1;
         const snippetsHtml = g.chunks.map(c => {
+          const hasFullText = c.full_text && c.full_text.length > (c.snippet || '').replace(/\.\.\.$/,'').length;
+          if (hasFullText) refTextMap.set(String(c.index), { snippet: c.snippet, full: c.full_text });
           const numTag = multi ? `<span class="ref-snippet-num">${c.index}</span>` : '';
-          return `<div class="ref-snippet-row" id="ref-${c.index}">${numTag}<span class="ref-snippet">${esc(c.snippet)}</span></div>`;
+          const expandIcon = hasFullText ? '<span class="ref-expand-icon">&#x25B6;</span>' : '';
+          return `<div class="ref-snippet-row${hasFullText ? ' expandable' : ''}" id="ref-${c.index}" data-refidx="${c.index}">${numTag}<span class="ref-snippet">${esc(c.snippet)}</span>${expandIcon}</div>`;
         }).join('');
         return `<div class="ref-group"><div class="ref-group-header">${numsHtml}<span class="ref-book">${esc(g.book)}</span></div><div class="ref-snippets">${snippetsHtml}</div></div>`;
       }).join('');
+    refsEl.querySelectorAll('.ref-snippet-row.expandable').forEach(row => {
+      row.addEventListener('click', () => {
+        const entry = refTextMap.get(row.dataset.refidx);
+        if (!entry) return;
+        const snippetEl = row.querySelector('.ref-snippet');
+        const isExpanded = row.classList.toggle('expanded');
+        snippetEl.textContent = isExpanded ? entry.full : entry.snippet;
+      });
+    });
     appendTarget.appendChild(refsEl);
   }
   // Web sources (grounding citations)
@@ -2377,7 +2390,6 @@ async function sendGlobalChat(message) {
       removeLoading();
       appendMsg(chatBox, 'assistant', data.answer, sources, msgOpts);
       renderChatSidebar(sources, message);
-      showChatRightSidebar();
       if (sources.length) loadAgents();
       ensurePolling();
     } else {
@@ -2690,24 +2702,7 @@ async function onChatPageShow() {
 let _sidebarBooks = new Map();
 
 function renderChatSidebar(sources, query) {
-  // Snapshot current selectedBooks so sidebar is independent of future chip changes
   _sidebarBooks = new Map(selectedBooks);
-
-  const srcEl = document.getElementById('sidebar-sources');
-  if (!sources.length) {
-    if (_sidebarBooks.size) {
-      srcEl.innerHTML = [..._sidebarBooks.values()].map(b =>
-        sidebarBookItem(b.agentId || b.id, b.title, b.author, b.isbn)
-      ).join('');
-    } else {
-      srcEl.innerHTML = '<p style="font-size:12px;color:var(--text-muted)">No specific sources used</p>';
-    }
-  } else {
-    srcEl.innerHTML = sources.map(s => {
-      const book = allBooks.find(b => b.id === s.id);
-      return sidebarBookItem(s.id, s.name, book?.author || '', book?.isbn);
-    }).join('');
-  }
 
   const relEl = document.getElementById('sidebar-related');
   // Collect IDs to exclude (sources + sidebar books)
@@ -2729,7 +2724,13 @@ function renderChatSidebar(sources, query) {
         .filter(b => !excludeIds.has(b.id) && relCategories.has((b.category || '').toLowerCase()))
         .slice(0, 4)
     : [];
-  relEl.innerHTML = related.length ? related.map(b => sidebarBookItem(b.agentId || b.id, b.title, b.author, b.isbn)).join('') : '';
+  if (related.length) {
+    relEl.innerHTML = related.map(b => sidebarBookItem(b.agentId || b.id, b.title, b.author, b.isbn)).join('');
+    showChatRightSidebar();
+  } else {
+    relEl.innerHTML = '';
+    hideChatRightSidebar();
+  }
 }
 
 function restoreChatSidebar(messages) {
@@ -2743,7 +2744,6 @@ function restoreChatSidebar(messages) {
   }
   if (lastSources) {
     renderChatSidebar(lastSources, '');
-    showChatRightSidebar();
   } else {
     hideChatRightSidebar();
   }
