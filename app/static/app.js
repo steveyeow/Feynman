@@ -1877,6 +1877,7 @@ function showOnboarding() {
 function appendMsg(container, role, text, sources, opts, hasMentions) {
   const el = document.createElement('div');
   el.className = 'chat-message ' + role;
+  el.setAttribute('dir', 'auto');
   el.dataset.raw = text;
   if (sources?.length) el.dataset.sources = JSON.stringify(sources);
   if (opts && Object.keys(opts).length) el.dataset.opts = JSON.stringify(opts);
@@ -1893,6 +1894,7 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
     body.innerHTML = `<div class="feynman-msg-name">Feynman</div>`;
     const content = document.createElement('div');
     content.className = 'msg-content';
+    content.setAttribute('dir', 'auto');
     let html = renderMarkdown(text);
     if (refs.length || webSrcs.length) {
       html = html.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
@@ -2010,6 +2012,7 @@ function appendMindMsg(container, mindName, text) {
   text = text.replace(prefixRe, '');
   const el = document.createElement('div');
   el.className = 'chat-message mind-message';
+  el.setAttribute('dir', 'auto');
   el.dataset.raw = text;
   el.dataset.mindName = mindName;
   const color = mindColor(mindName);
@@ -2024,6 +2027,7 @@ function appendMindMsg(container, mindName, text) {
   body.innerHTML = `<div class="mind-msg-name">${esc(mindName)}</div>`;
   const content = document.createElement('div');
   content.className = 'msg-content mind-msg-content';
+  content.setAttribute('dir', 'auto');
   content.innerHTML = renderMarkdown(text);
   body.appendChild(content);
   el.appendChild(body);
