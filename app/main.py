@@ -1500,6 +1500,7 @@ def api_read_book(agent_id: str) -> dict[str, Any]:
         author_display = f"{creator} · AI" if creator else "AI"
         return {
             "type": "ai_book",
+            "content_tier": "full",
             "title": meta.get("title") or title,
             "subtitle": outline.get("subtitle", ""),
             "author": author_display,
@@ -1508,19 +1509,17 @@ def api_read_book(agent_id: str) -> dict[str, Any]:
         }
 
     # Regular book: reassemble chunks into readable text
-    if agent.get("status") != "ready":
-        raise HTTPException(status_code=409, detail="Book is not ready for reading")
-
     chunks = get_chunks(agent_id)
     if not chunks:
         raise HTTPException(status_code=404, detail="No content available")
 
-    # Reassemble chunks, removing overlap duplicates
     full_text = _reassemble_chunks([c["text"] for c in chunks])
     paragraphs = [p.strip() for p in full_text.split("\n") if p.strip()]
+    content_tier = "full" if len(chunks) >= 10 else "preview"
 
     return {
-        "type": "indexed",
+        "type": "book",
+        "content_tier": content_tier,
         "title": meta.get("title") or title,
         "subtitle": meta.get("description", ""),
         "author": meta.get("author") or author,
@@ -1553,6 +1552,7 @@ class MindGenerateRequest(BaseModel):
     name: str = Field(..., min_length=1)
     era: str = ""
     domain: str = ""
+    link_works: bool = True
 
 
 class MindFromContentRequest(BaseModel):
@@ -1629,17 +1629,17 @@ def api_get_mind(mind_id: str) -> dict[str, Any]:
 def api_generate_mind(payload: MindGenerateRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     _check_quota(request, "generate_mind")
     try:
-        mind = get_or_create_mind(payload.name.strip(), era=payload.era, domain=payload.domain)
+        mind = get_or_create_mind(payload.name.strip(), era=payload.era, domain=payload.domain, link_works=payload.link_works)
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Mind generation failed: {exc}")
-    # Trigger learning for linked works
-    from .core.db import get_mind_work_ids
-    for agent_id in get_mind_work_ids(mind["id"]):
-        agent = get_agent(agent_id)
-        if agent and agent["status"] == "catalog":
-            background_tasks.add_task(_learn_agent, agent_id)
+    if payload.link_works:
+        from .core.db import get_mind_work_ids
+        for agent_id in get_mind_work_ids(mind["id"]):
+            agent = get_agent(agent_id)
+            if agent and agent["status"] == "catalog":
+                background_tasks.add_task(_learn_agent, agent_id)
     safe = {k: v for k, v in mind.items() if k != "persona"}
     _track_usage(request, "generate_mind")
     return safe

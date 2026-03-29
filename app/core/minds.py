@@ -343,7 +343,7 @@ def _parse_json_response(text: str) -> dict[str, Any]:
 
 # ─── Core functions ───
 
-def get_or_create_mind(name: str, era: str = "", domain: str = "") -> dict[str, Any]:
+def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: bool = True) -> dict[str, Any]:
     """Look up a mind by name; generate via LLM if not cached. Returns mind dict."""
     existing = find_mind_by_name(name)
     if existing:
@@ -373,17 +373,17 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "") -> dict[str, 
     mind_id = create_mind(mind_data)
     mind = get_mind(mind_id)
 
-    # Link works to book agents (non-fatal — mind is still valid without linked works)
-    for title in mind_data["works"][:5]:
-        try:
-            agent = find_agent_by_name(title)
-            if not agent:
-                agent_id = create_catalog_agent(title=title, author=name)
-            else:
-                agent_id = agent["id"]
-            link_mind_work(mind_id, agent_id)
-        except Exception as exc:
-            log.warning("Failed to link work '%s' for mind '%s': %s", title, name, exc)
+    if link_works:
+        for title in mind_data["works"][:5]:
+            try:
+                agent = find_agent_by_name(title)
+                if not agent:
+                    agent_id = create_catalog_agent(title=title, author=name)
+                else:
+                    agent_id = agent["id"]
+                link_mind_work(mind_id, agent_id)
+            except Exception as exc:
+                log.warning("Failed to link work '%s' for mind '%s': %s", title, name, exc)
 
     embed_mind(mind_id, mind_data)
     log.info("Generated mind: %s (%s)", name, era)

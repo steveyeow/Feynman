@@ -711,7 +711,21 @@ function renderLandingPage() {
         </div>
       </nav>
 
-      <section class="lp-fullscreen lp-hero-section">
+      <section class="lp-fullscreen">
+        <div class="lp-bg-canvas" id="lp-minds-canvas-wrap"></div>
+
+        <div class="lp-minds-toolbar">
+          <input type="text" id="lp-minds-search" placeholder="Search minds..." autocomplete="off" readonly />
+          <button class="lp-minds-toolbar-btn" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><line x1="9.5" y1="10" x2="5.5" y2="7.5"/><line x1="14.5" y1="10" x2="18.5" y2="7.5"/><line x1="9.5" y1="14" x2="5.5" y2="16.5"/><line x1="14.5" y1="14" x2="18.5" y2="16.5"/></svg>
+            Expand Network
+          </button>
+          <button class="lp-minds-toolbar-btn" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload a Mind
+          </button>
+        </div>
+
         <div class="lp-fg-center">
           <div class="lp-hero-left">
             <h1 class="lp-hero-headline">Chat with books.<br>Great minds join in.</h1>
@@ -787,86 +801,6 @@ function renderLandingPage() {
             </div>
           </div>
         </div>
-        <div class="lp-scroll-hint"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
-      </section>
-
-      <section class="lp-section lp-minds-section">
-        <div class="lp-minds-section-header">
-          <h2 class="lp-section-title">The Minds Network</h2>
-          <p class="lp-section-desc">A continuously evolving network of great minds — from ancient philosophers to modern visionaries. Search for thinkers, discover new connections, and expand the network.</p>
-        </div>
-        <div class="lp-minds-canvas-area">
-          <div class="lp-minds-toolbar">
-            <input type="text" id="lp-minds-search" placeholder="Search minds..." autocomplete="off" readonly />
-            <button class="lp-minds-toolbar-btn" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><line x1="9.5" y1="10" x2="5.5" y2="7.5"/><line x1="14.5" y1="10" x2="18.5" y2="7.5"/><line x1="9.5" y1="14" x2="5.5" y2="16.5"/><line x1="14.5" y1="14" x2="18.5" y2="16.5"/></svg>
-              Expand Network
-            </button>
-            <button class="lp-minds-toolbar-btn" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Upload a Mind
-            </button>
-          </div>
-          <div class="lp-bg-canvas" id="lp-minds-canvas-wrap"></div>
-        </div>
-      </section>
-
-      <section class="lp-section lp-library-section">
-        <div class="lp-section-split">
-          <div class="lp-section-text">
-            <span class="lp-section-label">LIBRARY</span>
-            <h2 class="lp-section-title">Every book, one conversation away</h2>
-            <p class="lp-section-desc">Upload any book and turn it into an interactive conversation. Search for titles — if it's not in your library yet, we'll find and index it in real time. Great minds join the discussion as you explore.</p>
-            <button class="lp-section-cta" id="lp-library-cta">Explore Library<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
-          </div>
-          <div class="lp-section-preview">
-            <div class="lp-mock-library">
-              <div class="lp-mock-toolbar"><span class="lp-mock-page-title">Library</span><div class="lp-mock-search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Search by title or author...</div></div>
-              <div class="lp-mock-tags"><span class="lp-mock-tag active">All</span><span class="lp-mock-tag">Philosophy</span><span class="lp-mock-tag">Science</span><span class="lp-mock-tag">Business</span><span class="lp-mock-tag">History</span></div>
-              <div class="lp-mock-grid">
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#264653,#2a9d8f)"><span>TFS</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">Thinking, Fast and Slow</div><div class="lp-mock-author">Daniel Kahneman</div></div></div>
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#9f1239,#fb7185)"><span>AW</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">The Art of War</div><div class="lp-mock-author">Sun Tzu</div></div></div>
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#334155,#6366f1)"><span>S</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">Sapiens</div><div class="lp-mock-author">Yuval Noah Harari</div></div></div>
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#059669,#34d399)"><span>ZO</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">Zero to One</div><div class="lp-mock-author">Peter Thiel</div></div></div>
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#ea580c,#facc15)"><span>P</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">Principles</div><div class="lp-mock-author">Ray Dalio</div></div></div>
-                <div class="lp-mock-book"><div class="lp-mock-cover" style="background:linear-gradient(135deg,#6d28d9,#ec4899)"><span>✦</span></div><div class="lp-mock-meta"><div class="lp-mock-book-title">The Future of AI</div><div class="lp-mock-author">AI-Generated</div><span class="lp-mock-ai-badge">✨ AI Created</span></div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="lp-section lp-write-section">
-        <div class="lp-section-split">
-          <div class="lp-section-text">
-            <span class="lp-section-label">AI BOOK WRITER</span>
-            <h2 class="lp-section-title">Write your own book with AI</h2>
-            <p class="lp-section-desc">Describe any topic you want to explore deeply. AI generates a full book — chapters, outline, and research. Then read it, chat with it, and share it with the community.</p>
-            <button class="lp-section-cta" id="lp-write-cta">Start Writing<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
-          </div>
-          <div class="lp-section-preview">
-            <div class="lp-mock-writer">
-              <div class="lp-mock-toolbar"><span class="lp-mock-page-title lp-mock-gradient-title">✨ AI Book Writer</span></div>
-              <div class="lp-mock-writer-body">
-                <div class="lp-mock-topic"><div class="lp-mock-topic-label">TOPIC</div><div class="lp-mock-topic-text">A comprehensive guide to building mental models for better decision-making, drawing from multiple disciplines</div></div>
-                <div class="lp-mock-outline">
-                  <div class="lp-mock-chapter done"><span class="lp-mock-ch-num">1</span><span class="lp-mock-ch-title">The Architecture of Thought</span><span class="lp-mock-ch-status">✓</span></div>
-                  <div class="lp-mock-chapter done"><span class="lp-mock-ch-num">2</span><span class="lp-mock-ch-title">First Principles Reasoning</span><span class="lp-mock-ch-status">✓</span></div>
-                  <div class="lp-mock-chapter writing"><span class="lp-mock-ch-num">3</span><span class="lp-mock-ch-title">Probabilistic Thinking</span><span class="lp-mock-ch-status writing">Writing...</span></div>
-                  <div class="lp-mock-chapter"><span class="lp-mock-ch-num">4</span><span class="lp-mock-ch-title">Inversion and Contraposition</span></div>
-                  <div class="lp-mock-chapter"><span class="lp-mock-ch-num">5</span><span class="lp-mock-ch-title">Circle of Competence</span></div>
-                </div>
-                <div class="lp-mock-progress"><div class="lp-mock-progress-bar"><div class="lp-mock-progress-fill"></div></div><span class="lp-mock-progress-text">Writing Chapter 3 of 8...</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="lp-footer-section">
-        <p class="lp-footer-quote">"What I cannot create, I do not understand."</p>
-        <p class="lp-footer-attr">— Richard Feynman</p>
-        <button class="lp-hero-cta" id="lp-footer-cta">${window.FEYNMAN_PRO ? 'Get Started Free' : 'Start Exploring'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
       </section>
     </div>`;
 
@@ -880,9 +814,6 @@ function renderLandingPage() {
   };
   document.getElementById('lp-get-started').addEventListener('click', _lpCtaHandler);
   document.getElementById('lp-hero-cta').addEventListener('click', _lpCtaHandler);
-  document.getElementById('lp-library-cta').addEventListener('click', _lpCtaHandler);
-  document.getElementById('lp-write-cta').addEventListener('click', _lpCtaHandler);
-  document.getElementById('lp-footer-cta').addEventListener('click', _lpCtaHandler);
 
   document.getElementById('lp-theme-toggle').addEventListener('click', () => {
     const isCurrentlyDark = _isDarkMode();
@@ -1089,16 +1020,27 @@ function _renderLandingMindsGraph() {
     }
   });
 
-  addNode.x = W * 0.75;
-  addNode.y = H * 0.3;
+  addNode.x = W / 2 + 160;
+  addNode.y = H / 2 - 100;
 
   window._lpGraphNodes = nodes;
   window._lpGraphLinks = links;
   window._lpGraphParticles = particles;
 
-  window._lpClearZone = null;
+  const heroW = 300, heroH = 200;
+  const heroCx = W * 0.06 + heroW / 2, heroCy = H / 2;
+  const heroHalfW = heroW / 2 + 30, heroHalfH = heroH / 2 + 10;
 
-  const clearZones = [];
+  const cardW = Math.min(620, W * 0.55);
+  const cardH = Math.min(520, H - 120);
+  const cardCx = W - W * 0.04 - cardW / 2, cardCy = H / 2;
+  const cardHalfW = cardW / 2 + 50, cardHalfH = cardH / 2 + 40;
+
+  window._lpClearZone = { cx: cardCx, cy: cardCy, hw: cardHalfW, hh: cardHalfH };
+
+  const clearZones = [
+    { cx: heroCx, cy: heroCy, hw: heroHalfW, hh: heroHalfH },
+  ];
 
   function makeAvoidForce() {
     let ns;
@@ -1127,7 +1069,7 @@ function _renderLandingMindsGraph() {
     return force;
   }
 
-  const graphCx = W / 2;
+  const graphCx = W * 0.55;
   const sim = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id).distance(d => Math.max(80, 280 - d.strength * 70)).strength(d => 0.08 + d.strength * 0.15))
     .force('charge', d3.forceManyBody().strength(-600).distanceMax(800))
@@ -1745,6 +1687,9 @@ function buildBookList() {
       agentId: a.id,           // all books have agentId
       status: a.status,
       available: a.status === 'ready',
+      hasFullText: a.type === 'ai_book'
+        ? a.status === 'ready'
+        : (meta.chunk_count || 0) >= 10,
       skills: meta.skills || {},
       isUploaded: a.type === 'upload',
       isCatalog: a.type === 'catalog',
@@ -1840,9 +1785,8 @@ function generateStarters() {
     return questions;
   }
 
-  const ready = allBooks.filter(b => b.available);
-  const catalog = allBooks.filter(b => b.status === 'catalog');
-  const books = ready.length ? ready : catalog;
+  const ready = allBooks.filter(b => b.available || b.hasFullText);
+  const books = ready.length ? ready : allBooks.filter(b => b.status !== 'error');
 
   if (!books.length) {
     return [
@@ -2448,9 +2392,9 @@ async function sendGlobalChat(message) {
       bookContext.push({ title: book.title, author: book.author || '' });
     }
 
-    const mentionOnly = mentionedNames.length > 0 && activeMinds.size > 0;
+    const skipFeynman = (mentionedNames.length > 0 && activeMinds.size > 0) || selectedMinds.size > 0;
 
-    if (!mentionOnly) {
+    if (!skipFeynman) {
       const body = { message: cleanMessage };
       if (bookContext.length) {
         body.agent_ids = agentIds;
@@ -2649,7 +2593,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
             const mind = await api('/api/minds/generate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '' }),
+              body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '', link_works: false }),
             });
             if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
             if (!mindIds.includes(mind.id)) {
@@ -2945,7 +2889,7 @@ function renderLibraryGrid() {
   renderDiscoverBar();
   const c = document.getElementById('library-grid');
   let filtered = [...allBooks];
-  if (libraryFilter === 'available') filtered = filtered.filter(b => b.available);
+  if (libraryFilter === 'available') filtered = filtered.filter(b => b.hasFullText);
   else if (libraryFilter === 'recent') filtered.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
   else filtered.sort((a,b) => a.title.localeCompare(b.title));
   if (activeTopics.size) {
@@ -3047,22 +2991,19 @@ function renderBookGrid(container, books) {
       statusBadge = '<span class="card-badge indexing">Writing...</span>';
     } else if (b.status === 'indexing') {
       statusBadge = '<span class="card-badge indexing">Indexing...</span>';
-    } else if (b.status === 'catalog') {
-      statusBadge = '<span class="card-badge catalog">Catalog</span>';
-    } else if (b.status === 'ready') {
-      statusBadge = '<span class="card-badge ready">Indexed</span>';
     }
     const deleteBtn = (b.isUploaded || b.isCatalog || b.isAIGenerated) && b.agentId ? `<button class="card-delete-btn" onclick="event.stopPropagation();deleteBook('${esc(b.agentId)}')" title="Delete">&times;</button>` : '';
-    const isReady = b.status === 'ready' && b.agentId;
-    const readOverlay = isReady ? `<div class="card-cover-overlay" onclick="event.stopPropagation();window.location.hash='#/read/${esc(b.agentId)}'"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>Read</span></div>` : '';
+    const canRead = b.hasFullText && b.agentId;
+    const canPreview = !b.hasFullText && b.status === 'ready' && b.agentId;
+    const overlayLabel = canRead ? 'Read' : (canPreview ? 'Preview' : '');
+    const readOverlay = overlayLabel ? `<div class="card-cover-overlay" onclick="event.stopPropagation();window.location.hash='#/read/${esc(b.agentId)}'"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>${overlayLabel}</span></div>` : '';
     return `<div class="book-card" onclick="selectBookForChat('${esc(b.id)}')">
       ${deleteBtn}
       <div class="card-cover-wrap">${cover}${readOverlay}</div>
       <div class="card-body"><h3 class="card-title">${esc(b.title)}</h3><p class="card-author">${b.isAIGenerated ? (b.creatorName ? `by ${esc(b.creatorName)} · AI` : 'AI-generated') : esc(b.author)}</p></div>
       <div class="card-footer">
-        ${statusBadge}
         <button class="card-chat-btn" onclick="event.stopPropagation();selectBookForChat('${esc(b.id)}')">Chat</button>
-        ${isReady ? `<button class="card-share-btn" onclick="event.stopPropagation();shareBook('${esc(b.title)}','${esc(b.agentId)}')" title="Share"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>` : ''}
+        ${statusBadge}
         <button class="upvote-btn" onclick="event.stopPropagation();handleUpvote('${esc(b.title)}')">&#9650;${b.upvotes ? ' ' + b.upvotes : ''}</button>
       </div>
     </div>`;
@@ -3173,6 +3114,10 @@ async function startWriteBook() {
   } catch (e) { console.warn('Failed to update session type:', e); }
 
   const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
+  if (session) {
+    if (!session.messages) session.messages = [];
+    session.messages.push({ role: 'assistant', content: greeting });
+  }
   _queueSessionMessage(currentSessionId, 'assistant', greeting);
   window.location.hash = '#/chat';
 }
@@ -3713,9 +3658,9 @@ async function sendBookChat(bookId, message) {
   if (input) input.value = '';
   showLoading(chatBox);
   const cleanMessage = mentionedNames.length ? stripMentions(message) : message;
-  const mentionOnly = mentionedNames.length > 0 && activeMinds.size > 0;
+  const skipFeynman = (mentionedNames.length > 0 && activeMinds.size > 0) || selectedMinds.size > 0;
   try {
-    if (!mentionOnly) {
+    if (!skipFeynman) {
       const data = await api('/api/agents/' + bookId + '/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: cleanMessage }),
@@ -3902,12 +3847,10 @@ function _getPopoverSearchInput(list) {
   return pop ? pop.querySelector('.popover-search') : null;
 }
 
-async function _autoDiscoverComposerBook(listId, emptyId, query) {
+async function _discoverComposerBook(listId, emptyId, query) {
   const state = _getComposerSearchState(_composerBookSearchStates, listId);
   if (state.searchingQuery === query) return;
   state.searchingQuery = query;
-  state.lastAutoQuery = query;
-  renderPopoverBookList(listId, emptyId);
   try {
     const data = await api('/api/search-book', {
       method: 'POST',
@@ -3926,35 +3869,17 @@ async function _autoDiscoverComposerBook(listId, emptyId, query) {
   }
 }
 
-function _scheduleComposerBookDiscover(listId, emptyId, query) {
-  const state = _getComposerSearchState(_composerBookSearchStates, listId);
-  clearTimeout(state.timer);
-  state.timer = null;
-  if (!query || query.length < 2) return;
-  const q = query.toLowerCase();
-  const hasLocal = allBooks.some(b =>
-    b.title.toLowerCase().includes(q) ||
-    (b.author || '').toLowerCase().includes(q) ||
-    (b.category || '').toLowerCase().includes(q) ||
-    state.discoveredIds.has(b.id)
-  );
-  if (hasLocal || state.searchingQuery === query || state.lastAutoQuery === query) return;
-  state.timer = setTimeout(() => _autoDiscoverComposerBook(listId, emptyId, query), 600);
-}
-
-async function _autoAddComposerMind(listId, emptyId, query) {
+async function _inviteComposerMind(listId, emptyId, query) {
   const state = _getComposerSearchState(_composerMindSearchStates, listId);
   if (state.searchingQuery === query) return;
   state.searchingQuery = query;
-  state.lastAutoQuery = query;
-  renderPopoverMindList(listId, emptyId);
   try {
     let mind = allMinds.find(m => (m.name || '').toLowerCase() === query.toLowerCase());
     if (!mind) {
       mind = await api('/api/minds/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: query }),
+        body: JSON.stringify({ name: query, link_works: false }),
       });
       if (!allMinds.some(m => m.id === mind.id)) allMinds.push(mind);
     }
@@ -3963,26 +3888,11 @@ async function _autoAddComposerMind(listId, emptyId, query) {
       renderSelectedChips();
     }
   } catch (err) {
-    if (state.searchingQuery !== query) return;
+    console.warn('[minds] generate failed for', query, err);
   } finally {
     if (state.searchingQuery === query) state.searchingQuery = null;
     renderPopoverMindList(listId, emptyId);
   }
-}
-
-function _scheduleComposerMindAdd(listId, emptyId, query, pro) {
-  const state = _getComposerSearchState(_composerMindSearchStates, listId);
-  clearTimeout(state.timer);
-  state.timer = null;
-  if (!pro || !query || query.length < 2) return;
-  const q = query.toLowerCase();
-  const hasLocal = allMinds.some(m =>
-    (m.name || '').toLowerCase().includes(q) ||
-    (m.domain || '').toLowerCase().includes(q) ||
-    (m.era || '').toLowerCase().includes(q)
-  );
-  if (hasLocal || state.searchingQuery === query || state.lastAutoQuery === query) return;
-  state.timer = setTimeout(() => _autoAddComposerMind(listId, emptyId, query), 600);
 }
 
 function renderPopoverBookList(listId, emptyId) {
@@ -4016,24 +3926,36 @@ function renderPopoverBookList(listId, emptyId) {
       state.discoveredIds.has(b.id)
     );
   }
-  _scheduleComposerBookDiscover(listId, emptyId, query);
   if (!filtered.length) {
     empty.classList.remove('hidden');
-    if (query && (state.searchingQuery === query || state.timer)) {
-      empty.textContent = `Looking up "${query}" — will add it if found...`;
+    if (query && state.searchingQuery === query) {
+      empty.textContent = `Discovering books about "${query}"...`;
+      list.innerHTML = '';
     } else if (query) {
-      empty.textContent = `Couldn't find "${query}" — try a different title or author`;
+      empty.classList.add('hidden');
+      const q = esc(query);
+      list.innerHTML = `<button class="popover-action popover-discover-book-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Discover books about &ldquo;${q}&rdquo;
+      </button>`;
+      list.querySelector('.popover-discover-book-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="popover-invite-spinner"></span> Discovering books about &ldquo;${q}&rdquo;...`;
+        _discoverComposerBook(listId, emptyId, query);
+      });
+    } else {
+      list.innerHTML = '';
     }
-    list.innerHTML = '';
     return;
   }
   empty.classList.add('hidden');
   list.innerHTML = filtered.map(b => {
     const sel = selectedBooks.has(b.id);
-    const tag = b.available ? ' (indexed)' : b.status === 'catalog' ? ' (catalog)' : '';
     return `<div class="popover-book-item ${sel?'selected':''}" data-bid="${b.id}">
       <div class="popover-book-check">${sel?'&#10003;':''}</div>
-      <span>${esc(b.title)}${tag}</span>
+      <span>${esc(b.title)}</span>
     </div>`;
   }).join('');
   list.querySelectorAll('.popover-book-item').forEach(el => {
@@ -4101,17 +4023,31 @@ function renderPopoverMindList(listId, emptyId) {
         (m.era || '').toLowerCase().includes(q);
     })
     : sorted;
-  _scheduleComposerMindAdd(listId, emptyId, query, pro);
   if (!filtered.length) {
     empty.classList.remove('hidden');
     if (!pro) {
       empty.textContent = 'Upgrade to Pro to invite minds';
-    } else if (query && (state.searchingQuery === query || state.timer)) {
+      list.innerHTML = '';
+    } else if (query && state.searchingQuery === query) {
       empty.textContent = `Inviting "${query}" to the network...`;
+      list.innerHTML = '';
     } else if (query) {
-      empty.textContent = `Could not invite "${query}" — try another name`;
+      empty.classList.add('hidden');
+      const q = esc(query);
+      list.innerHTML = `<button class="popover-action popover-invite-mind-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><line x1="9.5" y1="10" x2="5.5" y2="7.5"/><line x1="14.5" y1="10" x2="18.5" y2="7.5"/><line x1="9.5" y1="14" x2="5.5" y2="16.5"/><line x1="14.5" y1="14" x2="18.5" y2="16.5"/></svg>
+        Invite &ldquo;${q}&rdquo; to the network
+      </button>`;
+      list.querySelector('.popover-invite-mind-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="popover-invite-spinner"></span> Inviting &ldquo;${q}&rdquo;...`;
+        _inviteComposerMind(listId, emptyId, query);
+      });
+    } else {
+      list.innerHTML = '';
     }
-    list.innerHTML = '';
     return;
   }
   empty.classList.add('hidden');
@@ -4242,7 +4178,6 @@ let _readerCleanup = null;
 
 async function renderReader(agentId) {
   if (_readerCleanup) { _readerCleanup(); _readerCleanup = null; }
-  _readerPage = 0;
   const page = document.getElementById('page-read');
   page.innerHTML = `<div class="reader-loading"><span class="loading-dot">Loading book...</span></div>`;
 
@@ -4255,16 +4190,27 @@ async function renderReader(agentId) {
 
   const d = _readerData;
   const isAI = d.type === 'ai_book';
+  const isFullText = d.content_tier === 'full';
+  const isPreview = d.content_tier === 'preview';
   const readTime = Math.max(1, Math.round(d.total_words / 230));
 
-  // TOC — minimal, no header
+  // Auto-detect chapters from non-AI full-text books
+  let detectedChapters = null;
+  if (!isAI && isFullText && d.paragraphs?.length) {
+    detectedChapters = _detectChapters(d.paragraphs);
+  }
+
+  const hasChapters = isAI ? d.chapters?.length > 0 : detectedChapters && detectedChapters.length > 1;
+
+  // TOC — shown for any book with chapters (AI or auto-detected)
   let tocHtml = '';
-  if (isAI && d.chapters?.length) {
+  if (hasChapters) {
+    const chapters = isAI ? d.chapters : detectedChapters;
     tocHtml = `<nav class="reader-toc">
       <a class="reader-toc-item reader-toc-cover" data-ch="0">
         <span class="reader-toc-num"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span><span class="reader-toc-label">Cover</span>
       </a>
-      ${d.chapters.map(c => `<a class="reader-toc-item" data-ch="${c.number}">
+      ${chapters.map(c => `<a class="reader-toc-item" data-ch="${c.number}">
         <span class="reader-toc-num">${c.number}</span><span class="reader-toc-label">${esc(c.title)}</span>
       </a>`).join('')}
     </nav>`;
@@ -4273,24 +4219,29 @@ async function renderReader(agentId) {
   // Title page as page 0 — clean cover
   const imprintHtml = isAI ? `
       <div class="reader-cover-imprint">
-        <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
+        <svg class="reader-cover-imprint-logo" width="22" height="22" viewBox="0 0 64 64" fill="none">
           <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
           <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="32" cy="30" r="3.5" fill="currentColor"/>
           <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span>Feynman</span>
+        <span class="reader-cover-imprint-name">Feynman</span>
       </div>` : '';
+  const previewLabel = isPreview ? `<span class="reader-cover-preview-label">Preview</span>` : '';
+  const chapterCount = isAI ? d.chapters?.length : (detectedChapters?.length || 0);
   const titlePageHtml = `
     <div class="reader-cover">
-      <h1 class="reader-cover-title">${esc(d.title)}</h1>
-      ${d.subtitle ? `<p class="reader-cover-subtitle">${esc(d.subtitle)}</p>` : ''}
-      <p class="reader-cover-author">${esc(d.author)}</p>
-      <div class="reader-cover-stats">
-        <span>${d.total_words.toLocaleString()} words</span>
-        <span class="reader-cover-dot"></span>
-        <span>~${readTime} min read</span>
-        ${isAI && d.chapters?.length ? `<span class="reader-cover-dot"></span><span>${d.chapters.length} chapters</span>` : ''}
+      <div class="reader-cover-body">
+        <h1 class="reader-cover-title">${esc(d.title)}</h1>
+        ${d.subtitle ? `<p class="reader-cover-subtitle">${esc(d.subtitle)}</p>` : ''}
+        <p class="reader-cover-author">${esc(d.author)}</p>
+        <div class="reader-cover-stats">
+          <span>${d.total_words.toLocaleString()} words</span>
+          <span class="reader-cover-dot"></span>
+          <span>~${readTime} min read</span>
+          ${chapterCount > 0 ? `<span class="reader-cover-dot"></span><span>${chapterCount} chapters</span>` : ''}
+        </div>
+        ${previewLabel}
       </div>
       ${imprintHtml}
     </div>`;
@@ -4301,6 +4252,12 @@ async function renderReader(agentId) {
     for (const c of d.chapters) {
       const header = `<div class="reader-chapter-header"><span class="reader-chapter-num">Chapter ${c.number}</span><h2 class="reader-chapter-title">${esc(c.title)}</h2></div>`;
       const body = _renderReaderMarkdown(c.content);
+      allBlocks.push({ chNum: c.number, html: header + body });
+    }
+  } else if (detectedChapters && detectedChapters.length > 1) {
+    for (const c of detectedChapters) {
+      const header = `<div class="reader-chapter-header"><h2 class="reader-chapter-title">${esc(c.title)}</h2></div>`;
+      const body = c.paragraphs.map(p => `<p>${esc(p)}</p>`).join('');
       allBlocks.push({ chNum: c.number, html: header + body });
     }
   } else if (d.paragraphs?.length) {
@@ -4315,7 +4272,7 @@ async function renderReader(agentId) {
       <div class="reader-topbar-title">${esc(d.title)}</div>
     </div>
     <div class="reader-layout">
-      <aside class="reader-sidebar">${tocHtml}</aside>
+      ${tocHtml ? `<aside class="reader-sidebar">${tocHtml}</aside>` : ''}
       <div class="reader-stage">
         <button class="reader-nav reader-nav-prev" id="reader-prev" title="Previous page">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -4379,7 +4336,17 @@ async function renderReader(agentId) {
     }
 
     // End page
-    _readerPages.push({ html: '<div class="reader-end-page"><p>End of book</p></div>', chNum: -1 });
+    const endHtml = isPreview
+      ? `<div class="reader-end-page reader-end-preview">
+          <p>End of preview</p>
+          <p class="reader-end-subtitle">Chat with this book to explore further</p>
+          <a class="reader-end-chat-btn" href="#/" onclick="chatWithBookByAgent('${esc(agentId)}');return false;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat
+          </a>
+        </div>`
+      : '<div class="reader-end-page"><p>End of book</p></div>';
+    _readerPages.push({ html: endHtml, chNum: -1 });
 
     document.getElementById('reader-page-total').textContent = _readerPages.length;
     if (_readerPage >= _readerPages.length) _readerPage = _readerPages.length - 1;
@@ -4445,6 +4412,47 @@ async function renderReader(agentId) {
   _readerCleanup = () => { origCleanup(); window.removeEventListener('resize', onResize); };
 
   paginate();
+}
+
+function _detectChapters(paragraphs) {
+  if (!paragraphs || paragraphs.length < 5) return null;
+  const chapterPatterns = [
+    /^chapter\s+(\d+)/i,
+    /^CHAPTER\s+(\d+)/,
+    /^Part\s+(\d+)/i,
+    /^Section\s+(\d+)/i,
+    /^(\d+)\.\s+[A-Z]/,
+  ];
+  const headingPattern = /^[A-Z][A-Z\s:,\-]{4,}$/;
+  const chapters = [];
+  let currentParagraphs = [];
+  let currentTitle = '';
+  let chNum = 0;
+
+  for (const p of paragraphs) {
+    let isHeading = false;
+    for (const pat of chapterPatterns) {
+      if (pat.test(p)) { isHeading = true; break; }
+    }
+    if (!isHeading && headingPattern.test(p.trim()) && p.trim().length < 80) {
+      isHeading = true;
+    }
+    if (isHeading) {
+      if (currentParagraphs.length > 0 || chNum > 0) {
+        chapters.push({ number: chNum, title: currentTitle || `Section ${chNum}`, paragraphs: currentParagraphs });
+      }
+      chNum++;
+      currentTitle = p.trim();
+      currentParagraphs = [];
+    } else {
+      currentParagraphs.push(p);
+    }
+  }
+  if (currentParagraphs.length > 0) {
+    chapters.push({ number: chNum || 1, title: currentTitle || 'Content', paragraphs: currentParagraphs });
+  }
+  if (chapters.length <= 1) return null;
+  return chapters;
 }
 
 function _renderReaderMarkdown(text) {
