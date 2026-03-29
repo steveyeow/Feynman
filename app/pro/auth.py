@@ -32,8 +32,12 @@ PUBLIC_PATHS = {
     "/favicon.ico",
     "/terms",
     "/privacy",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/llms.txt",
+    "/llms-full.txt",
 }
-PUBLIC_PREFIXES = ("/static/",)
+PUBLIC_PREFIXES = ("/static/", "/share/")
 
 
 def _get_jwks_keys() -> list:
