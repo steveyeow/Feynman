@@ -495,6 +495,242 @@ def privacy_page() -> HTMLResponse:
     return HTMLResponse((static_dir / "privacy.html").read_text(encoding="utf-8"))
 
 
+# ─── SEO & GEO endpoints ───
+
+_SITE_URL = os.getenv("APP_URL", "https://feynman.wiki").rstrip("/")
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    from fastapi.responses import PlainTextResponse
+    content = f"""User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /static/
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /api/
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /api/
+
+Sitemap: {_SITE_URL}/sitemap.xml
+"""
+    return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    from fastapi.responses import Response
+    from datetime import date
+    today = date.today().isoformat()
+    pages = [
+        {"loc": "/", "priority": "1.0", "changefreq": "daily"},
+        {"loc": "/terms", "priority": "0.3", "changefreq": "yearly"},
+        {"loc": "/privacy", "priority": "0.3", "changefreq": "yearly"},
+    ]
+    urls = ""
+    for p in pages:
+        urls += f"""  <url>
+    <loc>{_SITE_URL}{p["loc"]}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>{p["changefreq"]}</changefreq>
+    <priority>{p["priority"]}</priority>
+  </url>
+"""
+    # Include published AI book share pages
+    try:
+        for agent in list_agents():
+            if agent.get("status") == "ready" and agent.get("agent_type") == "ai_book":
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/share/{agent["id"]}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+"""
+    except Exception:
+        pass
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{urls}</urlset>"""
+    return Response(content=xml, media_type="application/xml; charset=utf-8")
+
+
+@app.get("/llms.txt")
+def llms_txt():
+    from fastapi.responses import PlainTextResponse
+    content = f"""# Feynman
+
+> An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.
+
+## About
+
+Feynman is an AI-powered study companion inspired by the Feynman learning method.
+Users can chat with books using a four-layer content system (RAG, Content Fetch, Web Search, LLM Knowledge),
+explore topics with AI-curated book discovery, and engage with 50+ simulated great minds — scholars,
+scientists, and practitioners — who automatically join conversations with relevant expertise.
+
+- [Homepage]({_SITE_URL}/): Main application — chat with books, explore topics, interact with great minds
+- [Library]({_SITE_URL}/#/library): Browse and discover books across all topics
+- [Great Minds]({_SITE_URL}/#/minds): Interactive knowledge graph of 50+ great thinkers
+- [GitHub](https://github.com/steveyeow/feynman): Open-source repository (MIT license)
+
+## What Feynman Does
+
+- **Chat with Books**: Ask questions about any book and get answers with passage-level citations [1], [2] from a four-layer RAG system
+- **Topic-Driven Discovery**: Enter a topic (Psychology, Philosophy, Economics, Physics, etc.) and Feynman discovers the most relevant books via AI curation
+- **Great Minds Network**: AI agents faithfully simulate great thinkers (Aristotle, Feynman, Adam Smith, Keynes, etc.) who join your conversations automatically
+- **Cross-Book Knowledge**: Select multiple books and search across your entire library for the most relevant passages
+- **AI Book Writing**: Collaboratively outline and generate full books on any topic
+- **Upload Custom Minds**: Create mind agents from Twitter profiles, blog URLs, or text
+
+## What Feynman Does NOT Do
+
+- Feynman is not a replacement for reading — it helps you scout, scaffold, and go beyond the text
+- Feynman does not provide medical, legal, or financial advice
+- Feynman does not guarantee factual accuracy of AI-generated content
+
+## Key Information
+
+- [Terms of Service]({_SITE_URL}/terms)
+- [Privacy Policy]({_SITE_URL}/privacy)
+
+## Contact
+
+- Twitter/X: [@steve_yeow](https://x.com/steve_yeow)
+- Discord: [discord.gg/BkYSkkwq](https://discord.gg/BkYSkkwq)
+- Email: support@academiai.app
+- GitHub: [steveyeow/feynman](https://github.com/steveyeow/feynman)
+
+## Optional
+
+- [Full LLM context]({_SITE_URL}/llms-full.txt): Comprehensive product documentation for AI systems
+"""
+    return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/llms-full.txt")
+def llms_full_txt():
+    from fastapi.responses import PlainTextResponse
+    content = f"""# Feynman — Full Documentation for AI Systems
+
+> An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.
+
+## Product Overview
+
+Feynman is an AI-powered interactive knowledge network that connects books, great minds, and ideas
+into a navigable map of human thought. It is built on the Feynman learning method: question-driven,
+multi-source, never passive.
+
+Website: {_SITE_URL}
+GitHub: https://github.com/steveyeow/feynman
+License: MIT
+
+## Three Entry Points
+
+### 1. Enter Through a Book
+Ask questions about any book and get answers grounded in the work's actual content.
+Every claim is traced back to a specific passage with clickable [1], [2] citations.
+A four-layer content system ensures comprehensive knowledge:
+
+| Priority | Layer | What It Does |
+|----------|-------|--------------|
+| 1st | RAG | Retrieves relevant passages from the book's indexed content |
+| 2nd | Content Fetch | Pulls information from Open Library, Google Books, Wikipedia |
+| 3rd | Web Search | Uses Gemini Search Grounding for real-time web answers |
+| 4th | LLM Knowledge | Falls back to the model's training knowledge |
+
+### 2. Enter Through a Topic
+No book needed — start with any topic (Psychology, Philosophy, Economics, Physics, etc.).
+Feynman discovers the most relevant books via AI curation, proposes study questions,
+answers questions grounded in discovered books, and grows your library organically.
+
+The library expands through topic exploration, search, chat mentions, PDF/TXT/EPUB uploads,
+and community voting (books with enough upvotes get auto-indexed).
+
+### 3. Enter Through a Mind
+50+ pre-generated AI agents simulate great thinkers across every field:
+philosophy, physics, economics, psychology, literature, tech, startups, and more.
+From Aristotle and Richard Feynman to Marc Andreessen and Naval Ravikant.
+
+Minds automatically join conversations when relevant, accumulate memory from interactions,
+and are connected to their works and to each other in an interactive knowledge graph.
+Users can upload their own minds from Twitter profiles, blog URLs, or pasted text.
+
+## Core Features
+
+- **Book Chat with Citations**: RAG-powered Q&A with passage-level source attribution
+- **AI Book Discovery**: LLM-curated book recommendations for any topic
+- **Great Minds Network**: 50+ simulated thinkers with persistent memory and auto-join
+- **Cross-Book Search**: Query across your entire library simultaneously
+- **AI Book Writing**: Collaborative outline + full book generation
+- **Knowledge Graph**: Interactive force-directed visualization of mind connections
+- **Custom Mind Upload**: Create minds from Twitter, blogs, or text
+- **Token Usage Transparency**: Every LLM call shows its token consumption
+
+## Technical Architecture
+
+- **Backend**: Python / FastAPI
+- **Frontend**: Vanilla JavaScript SPA with hash-based routing
+- **Database**: SQLite (local) or PostgreSQL via Supabase (production)
+- **LLM Providers**: 6-provider auto-fallback — DeepSeek, Gemini, OpenAI, Novita, Kimi, Anthropic
+- **Embeddings**: Vector embeddings stored as BLOBs for semantic similarity
+- **Deployment**: Vercel (Python serverless)
+- **Auth** (optional): Supabase Auth + Stripe for Pro features
+
+## Design Philosophy
+
+Feynman is NOT a replacement for reading. It helps users:
+- Scout books before committing to a deep read
+- Build knowledge scaffolds across unfamiliar fields
+- Go beyond the text by surfacing context and insights from broader knowledge
+
+The project draws inspiration from Richard Feynman's approach to learning:
+"You learn by asking questions, by thinking, and by experimenting."
+
+## Pages
+
+- [Home]({_SITE_URL}/): Main chat interface — ask about books, topics, or anything
+- [Library]({_SITE_URL}/#/library): Browse, search, and discover books
+- [Great Minds]({_SITE_URL}/#/minds): Interactive knowledge graph of great thinkers
+- [Chats]({_SITE_URL}/#/chats): Chat session history
+- [Terms of Service]({_SITE_URL}/terms)
+- [Privacy Policy]({_SITE_URL}/privacy)
+
+## Contact
+
+- Creator: Steve Yao
+- Twitter/X: https://x.com/steve_yeow
+- Discord: https://discord.gg/BkYSkkwq
+- Email: support@academiai.app
+- GitHub: https://github.com/steveyeow/feynman
+"""
+    return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
+
+
 @app.get("/share/{agent_id}", response_class=HTMLResponse)
 def share_page(agent_id: str, request: Request) -> HTMLResponse:
     """Serve a lightweight page with OG/Twitter meta tags for social sharing, then redirect to the reader."""

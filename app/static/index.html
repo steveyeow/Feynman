@@ -3,8 +3,88 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Feynman</title>
+    <title>Feynman — Chat with Books. Great Minds Join In.</title>
+    <meta name="description" content="An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with 50+ simulated great thinkers — from Aristotle to Feynman." />
+    <meta name="keywords" content="AI book chat, knowledge network, great minds, Feynman method, RAG, study assistant, book discovery, Socratic learning" />
+    <link rel="canonical" href="https://feynman.wiki/" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Feynman" />
+    <meta property="og:title" content="Feynman — Chat with Books. Great Minds Join In." />
+    <meta property="og:description" content="An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics, and discuss ideas with 50+ simulated great thinkers." />
+    <meta property="og:url" content="https://feynman.wiki/" />
+    <meta property="og:image" content="https://feynman.wiki/static/og-default.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Feynman — Chat with Books. Great Minds Join In." />
+    <meta name="twitter:description" content="An interactive knowledge network built on the world's most important books and great minds. Explore, learn, and discuss with AI-simulated great thinkers." />
+    <meta name="twitter:image" content="https://feynman.wiki/static/og-default.png" />
+    <meta name="twitter:creator" content="@steve_yeow" />
+
+    <!-- Structured Data: Organization + WebApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "name": "Feynman",
+          "url": "https://feynman.wiki",
+          "logo": "https://feynman.wiki/static/favicon.svg",
+          "description": "An interactive knowledge network built on the world's most important books and great minds.",
+          "sameAs": [
+            "https://x.com/steve_yeow",
+            "https://github.com/steveyeow/feynman",
+            "https://discord.gg/BkYSkkwq"
+          ]
+        },
+        {
+          "@type": "WebApplication",
+          "name": "Feynman",
+          "url": "https://feynman.wiki",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Web",
+          "description": "Chat with any book using a four-layer RAG system, explore topics with AI-curated book discovery, and discuss ideas with 50+ simulated great minds — scholars, scientists, and practitioners across every field.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "featureList": [
+            "Chat with books using RAG with passage-level citations",
+            "AI-curated book discovery by topic",
+            "50+ simulated great minds (Aristotle, Feynman, Adam Smith, etc.)",
+            "Cross-book knowledge search",
+            "AI book writing",
+            "Interactive knowledge graph visualization",
+            "Upload custom minds from Twitter, blogs, or text"
+          ],
+          "creator": {
+            "@type": "Person",
+            "name": "Steve Yao",
+            "url": "https://x.com/steve_yeow"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "name": "Feynman",
+          "url": "https://feynman.wiki",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://feynman.wiki/#/library?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
+    }
+    </script>
+
     <script>
       (function(){var t=localStorage.getItem('feynman-theme');if(t)document.documentElement.classList.add(t)})();
     </script>
