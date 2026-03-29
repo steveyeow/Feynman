@@ -3114,15 +3114,13 @@ async function startWriteBook() {
     });
   } catch (e) { console.warn('Failed to update session type:', e); }
 
+  const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
+  if (session) {
+    if (!session.messages) session.messages = [];
+    session.messages.push({ role: 'assistant', content: greeting });
+  }
+  _queueSessionMessage(currentSessionId, 'assistant', greeting);
   window.location.hash = '#/chat';
-  // Wait for chat page to render, then show the AI greeting
-  setTimeout(() => {
-    const chatBox = document.getElementById('chat-messages');
-    if (!chatBox) return;
-    const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
-    appendMsg(chatBox, 'assistant', greeting);
-    _queueSessionMessage(currentSessionId, 'assistant', greeting);
-  }, 100);
 }
 window.startWriteBook = startWriteBook;
 
