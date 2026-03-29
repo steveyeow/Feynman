@@ -2014,10 +2014,11 @@ function appendMindMsg(container, mindName, text) {
   const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   // Strip leading "[Name]: " prefix if LLM echoed it
   const prefixRe = new RegExp(`^\\[${mindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*`, 'i');
+  const strippedRaw = raw.replace(prefixRe, '');
   const el = document.createElement('div');
   el.className = 'chat-message mind-message';
   el.setAttribute('dir', 'auto');
-  el.dataset.raw = raw;
+  el.dataset.raw = strippedRaw;
   el.dataset.mindName = mindName;
   const color = mindColor(mindName);
   const initials = mindInitials(mindName);
