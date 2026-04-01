@@ -1694,7 +1694,7 @@ function buildBookList() {
       status: a.status,
       available: a.status === 'ready',
       hasFullText: a.type === 'ai_book'
-        ? a.status === 'ready'
+        ? (a.status === 'ready' || a.status === 'writing')
         : (meta.chunk_count || 0) >= 10,
       skills: meta.skills || {},
       isUploaded: a.type === 'upload',

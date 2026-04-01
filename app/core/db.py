@@ -1367,10 +1367,8 @@ def update_ai_book_status(book_id: str, status: str) -> None:
             if row:
                 if status == "completed":
                     agent_status = "ready"
-                elif status == "cancelled":
+                elif status in ("cancelled", "failed"):
                     agent_status = "ready" if row["chapters_written"] > 0 else "error"
-                else:
-                    agent_status = "error"
                 _execute(conn, _q("UPDATE agents SET status = ? WHERE id = ?"),
                          (agent_status, row["agent_id"]))
 
