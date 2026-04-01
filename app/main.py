@@ -162,6 +162,20 @@ def _check_ai_book_quota(request: Request) -> None:
         from .pro.quota import check_ai_book_quota
         check_ai_book_quota(request)
 
+def _resolve_creator_name(user_id: str) -> str:
+    """Resolve a human-readable creator name from a user_id (which may be a UUID)."""
+    if not user_id or user_id == "anon":
+        return ""
+    if "@" in user_id:
+        return user_id.split("@")[0]
+    if os.getenv("ENABLE_AUTH"):
+        from .core.db import get_user as _get_user_fn
+        u = _get_user_fn(user_id)
+        if u:
+            email = u.get("email", "")
+            return email.split("@")[0] if email else ""
+    return ""
+
 def _track_usage(request: Request, action: str, tokens: int = 0) -> None:
     if os.getenv("ENABLE_AUTH"):
         from .pro.quota import track_usage
@@ -1576,14 +1590,7 @@ def api_ai_book_start(payload: AIBookStartRequest, request: Request) -> dict[str
     title = outline.get("title", "Untitled Book")
     prefs = {**payload.preferences, "language": payload.language}
 
-    # Resolve creator display name
-    creator_name = ""
-    if os.getenv("ENABLE_AUTH"):
-        from .core.db import get_user as _get_user_fn
-        u = _get_user_fn(user_id)
-        if u:
-            email = u.get("email", "")
-            creator_name = email.split("@")[0] if email else ""
+    creator_name = _resolve_creator_name(user_id)
 
     meta = {
         "title": title,
@@ -1673,10 +1680,13 @@ def api_ai_book_confirm(book_id: str, request: Request, background_tasks: Backgr
         raise HTTPException(status_code=409, detail=f"Book is in '{book['status']}' state")
 
     update_ai_book_status(book_id, "confirmed")
+    creator_name = book.get("preferences", {}).get("creator_name", "")
+    if not creator_name or creator_name == "User":
+        creator_name = _resolve_creator_name(user_id)
     update_agent_status(book["agent_id"], "writing", {
         "title": book["title"],
         "is_ai_generated": True,
-        "creator_name": book.get("preferences", {}).get("creator_name", "User"),
+        "creator_name": creator_name or "User",
         "creator_user_id": user_id,
     })
 
@@ -1720,6 +1730,8 @@ def api_ai_book_retry(book_id: str, request: Request, background_tasks: Backgrou
     return {"status": "writing", "chapters_total": book["chapters_total"], "chapters_written": book.get("chapters_written", 0)}
 
 
+_STALE_WRITING_SECONDS = 5 * 60
+
 @app.get("/api/ai-books/{book_id}")
 def api_ai_book_get(book_id: str, request: Request) -> dict[str, Any]:
     """Get AI book details including writing progress."""
@@ -1729,6 +1741,21 @@ def api_ai_book_get(book_id: str, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="AI book not found")
     if book["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    if book["status"] == "writing" and book.get("updated_at"):
+        from datetime import datetime, timezone
+        try:
+            updated = datetime.fromisoformat(book["updated_at"].replace("Z", "+00:00"))
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - updated).total_seconds()
+            if age > _STALE_WRITING_SECONDS:
+                log.warning("Book %s stuck in writing for %ds — marking failed", book_id, int(age))
+                update_ai_book_status(book_id, "failed")
+                book["status"] = "failed"
+        except Exception:
+            pass
+
     return book
 
 
@@ -1769,8 +1796,8 @@ def api_read_book(agent_id: str) -> dict[str, Any]:
                     "word_count": ch_data.get("word_count", len(ch_data["content"].split())),
                 })
         creator = meta.get("creator_name", "") or ai_book.get("preferences", {}).get("creator_name", "")
-        if not creator and ai_book.get("user_id"):
-            creator = ai_book["user_id"].split("@")[0] if "@" in ai_book["user_id"] else ai_book["user_id"]
+        if not creator or creator == "User":
+            creator = _resolve_creator_name(ai_book.get("user_id", ""))
         if creator in ("anon", ""):
             creator = ""
         author_display = f"{creator} · AI" if creator else "AI"
