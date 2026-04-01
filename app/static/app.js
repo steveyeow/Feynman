@@ -1681,7 +1681,7 @@ function handleTopicClick(topic) {
 
 // ─── Build book list from agents (DB is the single source of truth) ───
 function buildBookList() {
-  allBooks = agents.filter(a => a.status !== 'error').map(a => {
+  allBooks = agents.filter(a => a.status !== 'error' || a.type === 'ai_book').map(a => {
     const meta = a.meta || {};
     return {
       id: a.id,                // agent ID is the book ID
@@ -2993,12 +2993,17 @@ function renderBookGrid(container, books) {
     const coverBg = b.isAIGenerated ? 'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)' : `background:${coverColor(b.title)}`;
     const cover = `<div class="card-cover-gen" style="${coverBg}"><span>${coverInitials(b.title)}</span></div>`;
     let statusBadge = '';
-    if (b.isAIGenerated && (b.status === 'writing' || b.status === 'outlining' || b.status === 'confirmed')) {
+    if (b.isAIGenerated && b.status === 'failed') {
+      statusBadge = '<span class="card-badge" style="background:var(--error-color,#e55);color:#fff">Failed</span>';
+    } else if (b.isAIGenerated && b.status === 'error') {
+      statusBadge = '<span class="card-badge" style="background:var(--error-color,#e55);color:#fff">Failed</span>';
+    } else if (b.isAIGenerated && (b.status === 'writing' || b.status === 'outlining' || b.status === 'confirmed')) {
       statusBadge = '<span class="card-badge indexing">Writing...</span>';
     } else if (b.status === 'indexing') {
       statusBadge = '<span class="card-badge indexing">Indexing...</span>';
     }
-    const deleteBtn = (b.isUploaded || b.isCatalog || b.isAIGenerated) && b.agentId ? `<button class="card-delete-btn" onclick="event.stopPropagation();deleteBook('${esc(b.agentId)}')" title="Delete">&times;</button>` : '';
+    const _alwaysShowDelete = b.isAIGenerated && (b.status === 'failed' || b.status === 'error');
+    const deleteBtn = (b.isUploaded || b.isCatalog || b.isAIGenerated) && b.agentId ? `<button class="card-delete-btn" onclick="event.stopPropagation();deleteBook('${esc(b.agentId)}')" title="Delete"${_alwaysShowDelete ? ' style="opacity:1"' : ''}>&times;</button>` : '';
     const canRead = b.hasFullText && b.agentId;
     const canPreview = !b.hasFullText && b.status === 'ready' && b.agentId;
     const overlayLabel = canRead ? 'Read' : (canPreview ? 'Preview' : '');

@@ -1034,7 +1034,38 @@ def pro_config() -> dict[str, Any]:
 
 @app.get("/api/agents")
 def api_list_agents() -> list[dict[str, Any]]:
-    return list_agents()
+    result = list_agents()
+    for agent in result:
+        if agent.get("type") != "ai_book":
+            continue
+        meta = agent.get("meta") or {}
+        # Backfill missing creator_name for old AI books
+        if not meta.get("creator_name") or meta.get("creator_name") == "User":
+            uid = meta.get("creator_user_id") or agent.get("user_id") or ""
+            resolved = _resolve_creator_name(uid)
+            if resolved:
+                meta["creator_name"] = resolved
+                agent["meta"] = meta
+        # Detect stale "writing" agents and mark them failed
+        if agent.get("status") == "writing":
+            try:
+                ai_book = get_ai_book_by_agent(agent["id"])
+                if ai_book and ai_book.get("updated_at"):
+                    from datetime import datetime, timezone
+                    updated = datetime.fromisoformat(ai_book["updated_at"].replace("Z", "+00:00"))
+                    if updated.tzinfo is None:
+                        updated = updated.replace(tzinfo=timezone.utc)
+                    age = (datetime.now(timezone.utc) - updated).total_seconds()
+                    if age > _STALE_WRITING_SECONDS:
+                        log.warning("Agent %s / book %s stuck in writing for %ds — marking failed",
+                                    agent["id"], ai_book["id"], int(age))
+                        update_ai_book_status(ai_book["id"], "failed")
+                        new_status = "error" if ai_book["chapters_written"] == 0 else "ready"
+                        update_agent_status(agent["id"], new_status)
+                        agent["status"] = new_status
+            except Exception:
+                pass
+    return result
 
 
 @app.get("/api/agents/{agent_id}")
