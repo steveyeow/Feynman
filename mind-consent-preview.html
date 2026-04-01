@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mind join consent — UI preview</title>
+  <style>
+    :root {
+      --bg-chat: #ffffff;
+      --bg-sidebar: #fafafa;
+      --text: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --text-muted: #86868b;
+      --border: rgba(0,0,0,0.08);
+      --accent: #0071e3;
+      --user-bubble: #fdf3e7;
+      --btn-solid-bg: #1d1d1f;
+      --btn-solid-color: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-chat: #2c2c2e;
+        --bg-sidebar: #1c1c1e;
+        --text: #f5f5f7;
+        --text-secondary: #a1a1a6;
+        --text-muted: #8e8e93;
+        --border: rgba(255,255,255,0.08);
+        --accent: #0a84ff;
+        --user-bubble: #3a3a3c;
+        --btn-solid-bg: #f5f5f7;
+        --btn-solid-color: #1c1c1e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Noto Sans SC", system-ui, sans-serif;
+      background: var(--bg-sidebar);
+      color: var(--text);
+      padding: 24px 16px 48px;
+    }
+    h1 { font-size: 15px; font-weight: 600; margin: 0 0 8px; color: var(--text-secondary); }
+    p.note { font-size: 13px; color: var(--text-secondary); max-width: 520px; line-height: 1.5; margin: 0 0 24px; }
+    .demo-block { max-width: 560px; margin: 0 auto 36px; }
+    .demo-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; }
+    .chat-column {
+      background: var(--bg-chat);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px 14px 20px;
+    }
+    .chat-message {
+      margin-bottom: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .chat-message.user { background: var(--user-bubble); margin-left: 24px; }
+    .chat-message.assistant { background: var(--bg-sidebar); border: 1px solid var(--border); margin-right: 24px; }
+
+    /* Same as styles.css — join notice baseline */
+    .chat-system-notice { display: flex; justify-content: center; padding: 8px 0; }
+    .join-notice-inner {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--text-muted);
+      background: var(--bg-sidebar); padding: 6px 14px;
+      border-radius: 20px; border: 1px solid var(--border);
+    }
+    .join-avatar {
+      width: 20px; height: 20px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 8px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+
+    /* Same as styles.css — consent (pill style) */
+    .mind-consent-inner {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-muted);
+      background: var(--bg-sidebar); padding: 6px 10px 6px 14px;
+      border-radius: 20px; border: 1px solid var(--border);
+      flex-wrap: wrap; justify-content: center;
+    }
+    .mind-consent-text { margin: 0; line-height: 1.4; }
+    .mind-consent-actions { display: inline-flex; gap: 6px; }
+    .mind-consent-btn {
+      font-size: 11px; font-weight: 600; padding: 3px 10px;
+      border-radius: 12px; cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-muted); line-height: 1.4;
+    }
+    .mind-consent-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .mind-consent-allow { background: var(--btn-solid-bg); color: var(--btn-solid-color); border-color: transparent; }
+    .mind-consent-allow:hover { opacity: 0.85; color: var(--btn-solid-color); }
+
+    /* Mind message (for "after allow" demo) */
+    .mind-message {
+      display: flex; gap: 10px; align-items: flex-start;
+      margin-bottom: 10px; padding: 10px 14px;
+    }
+    .mind-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+    .mind-body { flex: 1; min-width: 0; }
+    .mind-name { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+    .mind-content { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+
+    .sep { border: none; border-top: 1px dashed var(--border); margin: 20px 0 16px; }
+    .arrow-label { text-align: center; font-size: 11px; color: var(--text-muted); margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>Mind join consent — preview</h1>
+  <p class="note">Pill-style prompt, same visual weight as the existing "X joined the discussion" notice.</p>
+
+  <!-- Comparison: existing join notice -->
+  <div class="demo-block">
+    <div class="demo-label">Existing join notice (for reference)</div>
+    <div class="chat-column">
+      <div class="chat-system-notice">
+        <div class="join-notice-inner">
+          <span class="join-avatar" style="background:#6d597a">IK</span>
+          <span>Immanuel Kant joined the discussion</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Single mind consent -->
+  <div class="demo-block">
+    <div class="demo-label">Consent — single mind</div>
+    <div class="chat-column">
+      <div class="chat-message user">What would Kant say about universal basic income?</div>
+      <div class="chat-message assistant">[Feynman assistant reply…]</div>
+      <div class="chat-system-notice">
+        <div class="mind-consent-inner">
+          <span class="mind-consent-text">Immanuel Kant wants to join</span>
+          <span class="mind-consent-actions">
+            <button type="button" class="mind-consent-btn mind-consent-allow">Allow</button>
+            <button type="button" class="mind-consent-btn">Not now</button>
+          </span>
+        </div>
+      </div>
+      <div class="arrow-label">↓ after Allow</div>
+      <div class="chat-system-notice">
+        <div class="join-notice-inner">
+          <span class="join-avatar" style="background:#6d597a">IK</span>
+          <span>Immanuel Kant joined the discussion</span>
+        </div>
+      </div>
+      <div class="mind-message">
+        <div class="mind-avatar" style="background:#6d597a">IK</div>
+        <div class="mind-body">
+          <div class="mind-name">Immanuel Kant</div>
+          <div class="mind-content">The question of universal basic income must be examined through the categorical imperative…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multiple minds consent -->
+  <div class="demo-block">
+    <div class="demo-label">Consent — multiple minds</div>
+    <div class="chat-column">
+      <div class="chat-message user">Compare stoicism and Buddhism on suffering.</div>
+      <div class="chat-message assistant">[Feynman assistant reply…]</div>
+      <div class="chat-system-notice">
+        <div class="mind-consent-inner">
+          <span class="mind-consent-text">Marcus Aurelius and Seneca want to join</span>
+          <span class="mind-consent-actions">
+            <button type="button" class="mind-consent-btn mind-consent-allow">Allow</button>
+            <button type="button" class="mind-consent-btn">Not now</button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

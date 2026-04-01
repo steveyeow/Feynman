@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Feynman — AI Book Writer Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #f5f5f7; --bg-card: #ffffff; --bg-sidebar: #fafafa;
+  --text: #1d1d1f; --text-sec: #6e6e73; --text-muted: #86868b;
+  --border: rgba(0,0,0,0.08); --border-strong: rgba(0,0,0,0.12);
+  --accent: #0071e3; --accent-light: #e8f2fe;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.1);
+  --user-bubble: #fdf3e7;
+  --ai-badge-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --ai-badge-text: #fff;
+  --writing-pulse: #667eea;
+  --success-bg: #e3f8f0; --success-color: #15803d;
+  --cover-1: #264653; --cover-2: #2a9d8f; --cover-3: #e76f51;
+  --cover-4: #457b9d; --cover-5: #6d597a; --cover-6: #355070;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1e; --bg-card: #2c2c2e; --bg-sidebar: #1c1c1e;
+    --text: #f5f5f7; --text-sec: #a1a1a6; --text-muted: #8e8e93;
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.12);
+    --accent: #0a84ff; --accent-light: rgba(10,132,255,0.15);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+    --user-bubble: #3a3a3c;
+    --success-bg: rgba(34,197,94,0.15); --success-color: #34d399;
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', -apple-system, sans-serif; color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+
+/* ─── Navigation ─── */
+.preview-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding: 12px 32px; display: flex; align-items: center; gap: 24px;
+  backdrop-filter: blur(20px);
+}
+.preview-nav .logo { font-family: 'DM Serif Display', serif; font-size: 20px; letter-spacing: -0.02em; }
+.preview-nav .tabs { display: flex; gap: 4px; }
+.preview-nav .tab {
+  padding: 6px 16px; border-radius: 999px; border: none; background: transparent;
+  font: 500 13px 'DM Sans', sans-serif; color: var(--text-sec); cursor: pointer; transition: all 0.2s;
+}
+.preview-nav .tab:hover { background: var(--accent-light); color: var(--accent); }
+.preview-nav .tab.active { background: var(--accent); color: #fff; }
+.preview-label {
+  margin-left: auto; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted); padding: 4px 10px;
+  border: 1px dashed var(--border-strong); border-radius: 6px;
+}
+
+/* ─── Sections ─── */
+.section { display: none; animation: fadeIn 0.3s ease; }
+.section.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ═══ SECTION 1: Library with AI badge ═══ */
+.library-section { padding: 32px; max-width: 1200px; margin: 0 auto; }
+.library-section h1 { font-family: 'DM Serif Display', serif; font-size: 28px; margin-bottom: 20px; }
+.library-toolbar {
+  display: flex; gap: 12px; align-items: center; margin-bottom: 24px; flex-wrap: wrap;
+}
+.library-toolbar input {
+  flex: 1; min-width: 200px; padding: 10px 16px; border-radius: 12px;
+  border: 1px solid var(--border-strong); background: var(--bg-card);
+  font: 400 14px 'DM Sans', sans-serif; color: var(--text); outline: none;
+}
+.library-toolbar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.write-book-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: 12px; border: none;
+  background: var(--ai-badge-bg); color: #fff;
+  font: 600 14px 'DM Sans', sans-serif; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+.write-book-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(102,126,234,0.4); }
+.write-book-btn svg { flex-shrink: 0; }
+
+.book-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px;
+}
+.book-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+  cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; position: relative;
+}
+.book-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.card-cover {
+  width: 100%; height: 200px; display: flex; align-items: center; justify-content: center;
+}
+.card-cover span { font-size: 48px; font-weight: 700; letter-spacing: 0.05em; color: rgba(255,255,255,0.3); }
+.card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.card-title { font-size: 14px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-author { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-footer { padding: 6px 14px 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.card-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.card-badge.ready { background: var(--success-bg); color: var(--success-color); }
+.card-badge.ai-created {
+  background: var(--ai-badge-bg); color: var(--ai-badge-text);
+  padding: 3px 10px; font-size: 10px;
+}
+.card-badge.ai-created svg { flex-shrink: 0; }
+.card-badge.writing {
+  background: rgba(102,126,234,0.12); color: #667eea;
+}
+.card-chat-btn {
+  margin-left: auto; padding: 4px 12px; border-radius: 999px; border: none;
+  background: var(--accent); color: #fff; font: 600 11px 'DM Sans', sans-serif;
+  cursor: pointer; transition: background 0.2s;
+}
+
+/* ═══ SECTION 2: Describe Your Book ═══ */
+.describe-section { padding: 32px; max-width: 720px; margin: 0 auto; }
+.describe-section h1 { font-family: 'DM Serif Display', serif; font-size: 32px; margin-bottom: 8px; }
+.describe-section .subtitle { color: var(--text-sec); font-size: 15px; margin-bottom: 32px; line-height: 1.5; }
+.form-group { margin-bottom: 24px; }
+.form-group label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.04em; }
+.form-group textarea {
+  width: 100%; min-height: 120px; padding: 14px 16px; border-radius: 14px;
+  border: 1px solid var(--border-strong); background: var(--bg-card);
+  font: 400 15px/1.6 'DM Sans', sans-serif; color: var(--text); resize: vertical; outline: none;
+}
+.form-group textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.form-group textarea::placeholder { color: var(--text-muted); }
+.pref-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.pref-chip {
+  padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border-strong);
+  background: var(--bg-card); font: 500 13px 'DM Sans', sans-serif; color: var(--text-sec);
+  cursor: pointer; transition: all 0.2s;
+}
+.pref-chip:hover { border-color: var(--accent); color: var(--accent); }
+.pref-chip.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+.generate-btn {
+  width: 100%; padding: 14px; border-radius: 14px; border: none;
+  background: var(--ai-badge-bg); color: #fff;
+  font: 600 15px 'DM Sans', sans-serif; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.generate-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 24px rgba(102,126,234,0.4); }
+
+/* ═══ SECTION 3: Outline + Chat ═══ */
+.outline-section { padding: 0; height: calc(100vh - 52px); display: flex; }
+.outline-panel {
+  flex: 1; overflow-y: auto; padding: 32px; border-right: 1px solid var(--border);
+}
+.outline-panel h2 { font-family: 'DM Serif Display', serif; font-size: 24px; margin-bottom: 4px; }
+.outline-panel .book-subtitle { color: var(--text-sec); font-size: 14px; margin-bottom: 24px; }
+.chapter-list { display: flex; flex-direction: column; gap: 10px; }
+.chapter-card {
+  padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--bg-card); transition: all 0.2s; cursor: grab;
+}
+.chapter-card:hover { border-color: var(--accent); box-shadow: var(--shadow-sm); }
+.chapter-num { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.chapter-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.chapter-summary { font-size: 13px; color: var(--text-sec); line-height: 1.5; }
+.chapter-points { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chapter-point {
+  font-size: 11px; padding: 2px 8px; border-radius: 6px;
+  background: var(--accent-light); color: var(--accent); font-weight: 500;
+}
+
+.chat-panel { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg-card); }
+.chat-header { padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.chat-header .dot { width: 8px; height: 8px; border-radius: 50%; background: #34d399; }
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.chat-msg { max-width: 90%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; animation: msgIn 0.3s ease; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(6px); } }
+.chat-msg.user { align-self: flex-end; background: var(--user-bubble); border-bottom-right-radius: 4px; }
+.chat-msg.ai { align-self: flex-start; background: var(--bg); border-bottom-left-radius: 4px; }
+.chat-input-row { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+.chat-input-row input {
+  flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-strong);
+  background: var(--bg); font: 400 14px 'DM Sans', sans-serif; color: var(--text); outline: none;
+}
+.chat-input-row input:focus { border-color: var(--accent); }
+.chat-send-btn {
+  padding: 10px 16px; border-radius: 10px; border: none;
+  background: var(--accent); color: #fff; font: 600 13px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+.confirm-bar {
+  padding: 12px 20px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px;
+}
+.confirm-btn {
+  flex: 1; padding: 12px; border-radius: 12px; border: none;
+  background: var(--ai-badge-bg); color: #fff;
+  font: 600 14px 'DM Sans', sans-serif; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.confirm-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(102,126,234,0.4); }
+.confirm-btn.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border-strong); }
+.confirm-btn.secondary:hover { box-shadow: var(--shadow-sm); }
+
+/* ═══ SECTION 4: Writing Progress ═══ */
+.progress-section { padding: 32px; max-width: 800px; margin: 0 auto; }
+.progress-section h1 { font-family: 'DM Serif Display', serif; font-size: 28px; margin-bottom: 4px; }
+.progress-section .subtitle { color: var(--text-sec); font-size: 14px; margin-bottom: 32px; }
+.progress-bar-wrap { margin-bottom: 32px; }
+.progress-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-sec); margin-bottom: 8px; }
+.progress-bar { height: 8px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 999px; background: var(--ai-badge-bg); transition: width 0.6s ease; }
+.progress-chapters { display: flex; flex-direction: column; gap: 10px; }
+.progress-ch {
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+  border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card);
+  transition: all 0.3s;
+}
+.progress-ch.done { border-color: rgba(34,197,94,0.3); }
+.progress-ch.active { border-color: var(--writing-pulse); box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+.ch-status-icon {
+  width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.ch-status-icon.pending { background: var(--border); color: var(--text-muted); }
+.ch-status-icon.active { background: rgba(102,126,234,0.15); color: #667eea; animation: pulse 1.5s infinite; }
+.ch-status-icon.done { background: var(--success-bg); color: var(--success-color); }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+.ch-info { flex: 1; }
+.ch-info .ch-title { font-size: 14px; font-weight: 600; }
+.ch-info .ch-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.ch-word-count { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+
+.view-library-btn {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 28px;
+  padding: 14px 28px; border-radius: 14px; border: none;
+  background: var(--ai-badge-bg); color: #fff;
+  font: 600 15px 'DM Sans', sans-serif; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.view-library-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 24px rgba(102,126,234,0.4); }
+
+/* ═══ Responsive ═══ */
+@media (max-width: 768px) {
+  .outline-section { flex-direction: column; height: auto; }
+  .outline-panel { border-right: none; border-bottom: 1px solid var(--border); }
+  .chat-panel { width: 100%; height: 400px; }
+  .book-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="preview-nav">
+  <div class="logo">Feynman</div>
+  <div class="tabs">
+    <button class="tab active" onclick="showSection('library')">Library</button>
+    <button class="tab" onclick="showSection('describe')">1. Describe</button>
+    <button class="tab" onclick="showSection('outline')">2. Outline & Chat</button>
+    <button class="tab" onclick="showSection('progress')">3. Writing</button>
+  </div>
+  <span class="preview-label">Interactive Preview</span>
+</nav>
+
+<!-- SECTION 1: Library with AI-generated book cards -->
+<div id="sec-library" class="section active">
+  <div class="library-section">
+    <h1>Library</h1>
+    <div class="library-toolbar">
+      <input type="text" placeholder="Search by title or author — not here yet? We'll find and add it in real time" />
+      <button class="write-book-btn" onclick="showSection('describe')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Write a Book
+      </button>
+    </div>
+    <div class="book-grid" id="library-grid"></div>
+  </div>
+</div>
+
+<!-- SECTION 2: Describe Your Book -->
+<div id="sec-describe" class="section">
+  <div class="describe-section">
+    <h1>Write a Book with AI</h1>
+    <p class="subtitle">Describe the book you want to create. AI will research the topic, propose an outline, and write it chapter by chapter based on your preferences.</p>
+
+    <div class="form-group">
+      <label>What book do you want?</label>
+      <textarea id="book-desc" placeholder="e.g. A biography of Elon Musk focused on his engineering decisions and technical vision, written in a conversational style. I want to understand how he thinks about first-principles problem solving across Tesla, SpaceX, and Neuralink.">A biography of Elon Musk focused on his engineering decisions and technical vision, written in a conversational style. I want to understand how he thinks about first-principles problem solving across Tesla, SpaceX, and Neuralink.</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Writing Style</label>
+      <div class="pref-row" data-group="style">
+        <div class="pref-chip" data-val="narrative">Narrative</div>
+        <div class="pref-chip selected" data-val="conversational">Conversational</div>
+        <div class="pref-chip" data-val="academic">Academic</div>
+        <div class="pref-chip" data-val="journalistic">Journalistic</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Target Length</label>
+      <div class="pref-row" data-group="length">
+        <div class="pref-chip" data-val="short">Short (~20 pages)</div>
+        <div class="pref-chip selected" data-val="medium">Medium (~60 pages)</div>
+        <div class="pref-chip" data-val="long">Long (~120 pages)</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Language</label>
+      <div class="pref-row" data-group="lang">
+        <div class="pref-chip selected" data-val="zh">Chinese</div>
+        <div class="pref-chip" data-val="en">English</div>
+        <div class="pref-chip" data-val="ja">Japanese</div>
+      </div>
+    </div>
+
+    <button class="generate-btn" onclick="showSection('outline')">
+      <span id="gen-btn-text">Generate Outline</span>
+    </button>
+  </div>
+</div>
+
+<!-- SECTION 3: Outline + Chat -->
+<div id="sec-outline" class="section">
+  <div class="outline-section">
+    <div class="outline-panel">
+      <h2>The Engineer's Mind: Elon Musk</h2>
+      <p class="book-subtitle">A First-Principles Biography of Technical Vision</p>
+      <div class="chapter-list" id="chapter-list"></div>
+    </div>
+    <div class="chat-panel">
+      <div class="chat-header"><span class="dot"></span> Refine your outline</div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="e.g. Add a chapter about Neuralink..." onkeydown="if(event.key==='Enter')sendChat()" />
+        <button class="chat-send-btn" onclick="sendChat()">Send</button>
+      </div>
+      <div class="confirm-bar">
+        <button class="confirm-btn secondary" onclick="showSection('describe')">Back</button>
+        <button class="confirm-btn" onclick="showSection('progress')">Confirm & Start Writing</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: Writing Progress -->
+<div id="sec-progress" class="section">
+  <div class="progress-section">
+    <h1>Writing Your Book...</h1>
+    <p class="subtitle">AI is researching and writing each chapter. This typically takes a few minutes.</p>
+    <div class="progress-bar-wrap">
+      <div class="progress-label">
+        <span id="progress-text">Chapter 5 of 10</span>
+        <span id="progress-pct">50%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:50%"></div></div>
+    </div>
+    <div class="progress-chapters" id="progress-chapters"></div>
+    <button class="view-library-btn" id="view-library-btn" style="display:none" onclick="showSection('library')">
+      View in Library
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+const CHAPTERS = [
+  { num: 1, title: "The Pretoria Years", summary: "From South Africa to Silicon Valley — the formative experiences that shaped a first-principles thinker.", points: ["Early coding", "Physics obsession", "Immigration"] },
+  { num: 2, title: "Zip2 & PayPal: Learning to Ship", summary: "How building internet startups taught Musk the art of rapid iteration and technical debt management.", points: ["Startup culture", "Technical decisions", "Exit strategy"] },
+  { num: 3, title: "SpaceX: Rewriting Rocket Science", summary: "Vertical integration, reusable rockets, and the engineering philosophy that made space affordable.", points: ["Merlin engine", "Falcon 9", "Starship"] },
+  { num: 4, title: "Tesla: The Electric Bet", summary: "Battery physics, manufacturing hell, and the systems thinking behind building an electric car company.", points: ["Battery chemistry", "Gigafactory", "Autopilot"] },
+  { num: 5, title: "First Principles Thinking", summary: "A deep dive into Musk's reasoning framework — breaking problems down to fundamental truths.", points: ["Physics analogies", "Cost analysis", "Reasoning from scratch"] },
+  { num: 6, title: "The Boring Company & Hyperloop", summary: "Infrastructure moonshots and the engineering approach to urban transportation.", points: ["Tunnel boring", "Loop system", "Feasibility"] },
+  { num: 7, title: "Neuralink: Merging Mind and Machine", summary: "Brain-computer interfaces, surgical robots, and the quest to keep pace with AI.", points: ["Neural threads", "Surgical robot", "BCI applications"] },
+  { num: 8, title: "xAI & The Intelligence Race", summary: "Why Musk entered the AI race and his technical philosophy on artificial general intelligence.", points: ["Grok", "Open vs closed AI", "Safety concerns"] },
+  { num: 9, title: "Management as Engineering", summary: "How Musk applies engineering principles to organizational design, hiring, and decision-making.", points: ["5-step process", "Flat hierarchy", "Urgency culture"] },
+  { num: 10, title: "The Mars Equation", summary: "The ultimate engineering challenge — making humanity multi-planetary through technical innovation.", points: ["Starship architecture", "Life support", "Mars colony"] },
+];
+
+const BOOKS = [
+  { title: "Thinking, Fast and Slow", author: "Daniel Kahneman", color: "#264653", status: "ready" },
+  { title: "Sapiens", author: "Yuval Noah Harari", color: "#2a9d8f", status: "ready" },
+  { title: "The Engineer's Mind: Elon Musk", author: "AI", color: "#667eea", status: "ready", aiCreated: true, creator: "Steve" },
+  { title: "Zero to One", author: "Peter Thiel", color: "#457b9d", status: "ready" },
+  { title: "Steve Jobs", author: "Walter Isaacson", color: "#6d597a", status: "ready" },
+  { title: "My First-Principles Guide to Physics", author: "AI", color: "#764ba2", status: "writing", aiCreated: true, creator: "Alice" },
+  { title: "The Lean Startup", author: "Eric Ries", color: "#355070", status: "ready" },
+  { title: "Atomic Habits", author: "James Clear", color: "#b56576", status: "ready" },
+  { title: "Deep Work", author: "Cal Newport", color: "#588157", status: "ready" },
+  { title: "The Art of War", author: "Sun Tzu", color: "#9b2226", status: "ready" },
+];
+
+function initials(t) { return t.split(/[\s:—]+/).filter(w=>w.length>2).slice(0,2).map(w=>w[0].toUpperCase()).join(''); }
+
+function renderLibrary() {
+  const g = document.getElementById('library-grid');
+  g.innerHTML = BOOKS.map(b => {
+    let badge = '';
+    if (b.aiCreated && b.status === 'ready') {
+      badge = `<span class="card-badge ai-created"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> by ${b.creator}</span>`;
+    } else if (b.aiCreated && b.status === 'writing') {
+      badge = `<span class="card-badge writing">Writing...</span>`;
+    } else if (b.status === 'ready') {
+      badge = `<span class="card-badge ready">Ready</span>`;
+    }
+    const coverStyle = b.aiCreated ? `background:${b.color}; position:relative;` : `background:${b.color};`;
+    const aiOverlay = b.aiCreated ? `<svg style="position:absolute;bottom:10px;right:10px;opacity:0.25" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>` : '';
+    return `<div class="book-card">
+      <div class="card-cover" style="${coverStyle}"><span>${initials(b.title)}</span>${aiOverlay}</div>
+      <div class="card-body"><h3 class="card-title">${b.title}</h3><p class="card-author">${b.aiCreated ? 'AI-generated' : b.author}</p></div>
+      <div class="card-footer">${badge}<button class="card-chat-btn">Chat &rarr;</button></div>
+    </div>`;
+  }).join('');
+}
+
+function renderChapters() {
+  const list = document.getElementById('chapter-list');
+  list.innerHTML = CHAPTERS.map(ch => `
+    <div class="chapter-card">
+      <div class="chapter-num">Chapter ${ch.num}</div>
+      <div class="chapter-title">${ch.title}</div>
+      <div class="chapter-summary">${ch.summary}</div>
+      <div class="chapter-points">${ch.points.map(p => `<span class="chapter-point">${p}</span>`).join('')}</div>
+    </div>
+  `).join('');
+}
+
+const CHAT_HISTORY = [
+  { role: 'ai', text: "I've created a 10-chapter outline for your Elon Musk biography. It focuses on his engineering philosophy across all major ventures. Would you like to adjust anything?" },
+  { role: 'user', text: "Can you add more about Neuralink? I'm really interested in the brain-computer interface technology." },
+  { role: 'ai', text: "Done! I've expanded Chapter 7 to cover Neuralink in more depth — including the N1 chip architecture, the surgical robot design, and the latest human trial results. I also added BCI applications as a key point." },
+  { role: 'user', text: "The chapter about first principles thinking should come earlier, maybe chapter 3? It sets the foundation for everything else." },
+  { role: 'ai', text: "Great call. I've moved 'First Principles Thinking' to Chapter 3 and shifted SpaceX and Tesla after it. This way readers understand his reasoning framework before seeing it applied. Want me to adjust the summaries to reflect this new flow?" },
+];
+
+function renderChat() {
+  const el = document.getElementById('chat-messages');
+  el.innerHTML = CHAT_HISTORY.map(m => `<div class="chat-msg ${m.role === 'user' ? 'user' : 'ai'}">${m.text}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  CHAT_HISTORY.push({ role: 'user', text });
+  input.value = '';
+  renderChat();
+  setTimeout(() => {
+    CHAT_HISTORY.push({ role: 'ai', text: "Got it! I've updated the outline to reflect your feedback. The changes are shown on the left. Anything else you'd like to adjust?" });
+    renderChat();
+  }, 800);
+}
+
+function renderProgress() {
+  const el = document.getElementById('progress-chapters');
+  el.innerHTML = CHAPTERS.map((ch, i) => {
+    let state = 'pending', icon = '&mdash;', detail = 'Waiting...', words = '';
+    if (i < 4) { state = 'done'; icon = '&#10003;'; detail = 'Completed'; words = `${(2000 + Math.floor(Math.random()*1500)).toLocaleString()} words`; }
+    else if (i === 4) { state = 'active'; icon = '&#9998;'; detail = 'Writing now...'; words = '1,200 words'; }
+    return `<div class="progress-ch ${state}">
+      <div class="ch-status-icon ${state}">${icon}</div>
+      <div class="ch-info"><div class="ch-title">Ch. ${ch.num}: ${ch.title}</div><div class="ch-detail">${detail}</div></div>
+      <div class="ch-word-count">${words}</div>
+    </div>`;
+  }).join('');
+}
+
+let progressInterval = null;
+let currentWriting = 5;
+
+function startProgressAnimation() {
+  clearInterval(progressInterval);
+  currentWriting = 5;
+  updateProgressUI();
+  progressInterval = setInterval(() => {
+    currentWriting++;
+    if (currentWriting > 10) {
+      clearInterval(progressInterval);
+      document.getElementById('progress-text').textContent = 'Complete!';
+      document.getElementById('progress-pct').textContent = '100%';
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('view-library-btn').style.display = 'inline-flex';
+      renderProgressFinal();
+      return;
+    }
+    updateProgressUI();
+  }, 2000);
+}
+
+function updateProgressUI() {
+  const pct = Math.round((currentWriting / 10) * 100);
+  document.getElementById('progress-text').textContent = `Chapter ${currentWriting} of 10`;
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-fill').style.width = pct + '%';
+  const el = document.getElementById('progress-chapters');
+  el.innerHTML = CHAPTERS.map((ch, i) => {
+    let state = 'pending', icon = '&mdash;', detail = 'Waiting...', words = '';
+    if (i < currentWriting - 1) { state = 'done'; icon = '&#10003;'; detail = 'Completed'; words = `${(2000 + Math.floor(Math.random()*1500)).toLocaleString()} words`; }
+    else if (i === currentWriting - 1) { state = 'active'; icon = '&#9998;'; detail = 'Writing now...'; words = `${Math.floor(Math.random()*1500)} words`; }
+    return `<div class="progress-ch ${state}">
+      <div class="ch-status-icon ${state}">${icon}</div>
+      <div class="ch-info"><div class="ch-title">Ch. ${ch.num}: ${ch.title}</div><div class="ch-detail">${detail}</div></div>
+      <div class="ch-word-count">${words}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderProgressFinal() {
+  const el = document.getElementById('progress-chapters');
+  el.innerHTML = CHAPTERS.map(ch => `
+    <div class="progress-ch done">
+      <div class="ch-status-icon done">&#10003;</div>
+      <div class="ch-info"><div class="ch-title">Ch. ${ch.num}: ${ch.title}</div><div class="ch-detail">Completed</div></div>
+      <div class="ch-word-count">${(2000 + Math.floor(Math.random()*1500)).toLocaleString()} words</div>
+    </div>
+  `).join('');
+}
+
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.add('active');
+  const tabs = document.querySelectorAll('.tab');
+  const idx = { library: 0, describe: 1, outline: 2, progress: 3 }[name];
+  tabs[idx].classList.add('active');
+  if (name === 'progress') startProgressAnimation();
+  if (name !== 'progress') clearInterval(progressInterval);
+}
+
+// Pref chip selection
+document.querySelectorAll('.pref-row').forEach(row => {
+  row.querySelectorAll('.pref-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      row.querySelectorAll('.pref-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+    });
+  });
+});
+
+// Init
+renderLibrary();
+renderChapters();
+renderChat();
+renderProgress();
+</script>
+</body>
+</html>
