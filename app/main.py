@@ -83,6 +83,18 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title=config.APP_TITLE)
 
+
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    tb = traceback.format_exc()
+    log.error("Unhandled exception on %s %s: %s\n%s", request.method, request.url.path, exc, tb)
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal error: {type(exc).__name__}: {exc}"},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -988,6 +1000,55 @@ def api_debug_embedding_status() -> dict[str, Any]:
             result["without_embedding"] = row["cnt"] if row else 0
     except Exception as exc:
         result["null_query_error"] = str(exc)
+    return result
+
+
+@app.get("/api/debug/ai-book-test")
+def debug_ai_book_test() -> dict[str, Any]:
+    """Diagnostic: test each step of the AI book flow."""
+    import traceback
+    result: dict[str, Any] = {"steps": {}}
+
+    # Step 1: DB connection
+    try:
+        from .core.db import get_conn, _fetchone, _q
+        with get_conn() as conn:
+            _fetchone(conn, _q("SELECT 1 as ok"), ())
+        result["steps"]["db_connection"] = "ok"
+    except Exception as e:
+        result["steps"]["db_connection"] = f"FAIL: {e}"
+        return result
+
+    # Step 2: Check providers
+    try:
+        available = []
+        for name in config.PROVIDER_ORDER:
+            p = pick_provider.__wrapped__(name) if hasattr(pick_provider, '__wrapped__') else None
+            from .core.providers import get_provider
+            p = get_provider(name)
+            available.append(f"{name}: {'has_key' if p.has_key() else 'NO_KEY'}")
+        result["steps"]["providers"] = available
+    except Exception as e:
+        result["steps"]["providers"] = f"FAIL: {e}"
+
+    # Step 3: Quick LLM call (short prompt)
+    try:
+        r, p = chat_with_fallback(
+            system="Reply with exactly: OK", user="Say OK", max_total_seconds=20,
+        )
+        result["steps"]["llm_call"] = f"ok via {p.name}: {r.content[:100]}"
+    except Exception as e:
+        result["steps"]["llm_call"] = f"FAIL: {type(e).__name__}: {e}"
+
+    # Step 4: Check ai_books table exists
+    try:
+        from .core.db import get_conn, _fetchone, _q
+        with get_conn() as conn:
+            row = _fetchone(conn, _q("SELECT COUNT(*) as cnt FROM ai_books"), ())
+            result["steps"]["ai_books_table"] = f"ok ({row['cnt']} books)"
+    except Exception as e:
+        result["steps"]["ai_books_table"] = f"FAIL: {e}"
+
     return result
 
 

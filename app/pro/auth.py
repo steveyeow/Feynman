@@ -29,6 +29,7 @@ PUBLIC_PATHS = {
     "/api/agents",
     "/api/votes",
     "/api/minds",
+    "/api/debug/ai-book-test",
     "/favicon.ico",
     "/terms",
     "/privacy",
