@@ -1038,44 +1038,49 @@ def pro_config() -> dict[str, Any]:
 @app.get("/api/agents")
 def api_list_agents() -> list[dict[str, Any]]:
     result = list_agents()
-    for agent in result:
+    try:
+        _enrich_ai_book_agents(result)
+    except Exception as exc:
+        log.error("Failed to enrich AI book agents: %s", exc)
+    return result
+
+
+def _enrich_ai_book_agents(agents: list[dict[str, Any]]) -> None:
+    """Best-effort enrichment: backfill creator names, detect stale writing."""
+    from datetime import datetime as _dt, timezone as _tz
+    for agent in agents:
         if agent.get("type") != "ai_book":
             continue
         meta = agent.get("meta") or {}
-        # Backfill missing creator_name for old AI books
-        if not meta.get("creator_name") or meta.get("creator_name") == "User":
-            uid = meta.get("creator_user_id") or agent.get("user_id") or ""
-            resolved = _resolve_creator_name(uid)
-            if resolved:
-                meta["creator_name"] = resolved
-                agent["meta"] = meta
-        # Detect stale "writing" agents and mark them failed
-        if agent.get("status") == "writing":
-            try:
-                ai_book = get_ai_book_by_agent(agent["id"])
-                if ai_book and ai_book.get("updated_at"):
-                    from datetime import datetime as _dt, timezone as _tz
-                    raw = ai_book["updated_at"]
-                    if isinstance(raw, str):
-                        updated = _dt.fromisoformat(raw.replace("Z", "+00:00"))
-                    else:
-                        updated = raw if hasattr(raw, 'timestamp') else _dt.now(_tz.utc)
-                    if updated.tzinfo is None:
-                        updated = updated.replace(tzinfo=_tz.utc)
-                    age = (_dt.now(_tz.utc) - updated).total_seconds()
-                    if age > _STALE_WRITING_SECONDS:
-                        log.warning("Agent %s / book %s stuck in writing for %ds — marking failed",
-                                    agent["id"], ai_book["id"], int(age))
-                        update_ai_book_status(ai_book["id"], "failed")
-                        new_status = "error" if ai_book["chapters_written"] == 0 else "ready"
-                        update_agent_status(agent["id"], new_status)
-                        agent["status"] = new_status
-                    else:
-                        log.debug("Agent %s book %s writing age=%ds (threshold=%ds)",
-                                  agent["id"], ai_book["id"], int(age), _STALE_WRITING_SECONDS)
-            except Exception as exc:
-                log.error("Stale writing check failed for agent %s: %s", agent["id"], exc)
-    return result
+        try:
+            if not meta.get("creator_name") or meta.get("creator_name") == "User":
+                uid = meta.get("creator_user_id") or agent.get("user_id") or ""
+                resolved = _resolve_creator_name(uid)
+                if resolved:
+                    meta["creator_name"] = resolved
+                    agent["meta"] = meta
+        except Exception:
+            pass
+        if agent.get("status") != "writing":
+            continue
+        try:
+            ai_book = get_ai_book_by_agent(agent["id"])
+            if not ai_book or not ai_book.get("updated_at"):
+                continue
+            raw = ai_book["updated_at"]
+            updated = _dt.fromisoformat(raw.replace("Z", "+00:00")) if isinstance(raw, str) else raw
+            if hasattr(updated, 'tzinfo') and updated.tzinfo is None:
+                updated = updated.replace(tzinfo=_tz.utc)
+            age = (_dt.now(_tz.utc) - updated).total_seconds()
+            if age > _STALE_WRITING_SECONDS:
+                log.warning("Agent %s / book %s stuck writing %ds — marking failed",
+                            agent["id"], ai_book["id"], int(age))
+                update_ai_book_status(ai_book["id"], "failed")
+                new_status = "error" if ai_book["chapters_written"] == 0 else "ready"
+                update_agent_status(agent["id"], new_status)
+                agent["status"] = new_status
+        except Exception as exc:
+            log.error("Stale check failed for agent %s: %s", agent["id"], exc)
 
 
 @app.get("/api/agents/{agent_id}")
