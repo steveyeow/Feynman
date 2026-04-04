@@ -1900,9 +1900,12 @@ function showOnboarding() {
 
 // ─── Chat messages ───
 function appendMsg(container, role, text, sources, opts, hasMentions) {
+  const raw = String(text ?? '');
+  const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   const el = document.createElement('div');
   el.className = 'chat-message ' + role;
-  el.dataset.raw = text;
+  el.setAttribute('dir', 'auto');
+  el.dataset.raw = raw;
   if (sources?.length) el.dataset.sources = JSON.stringify(sources);
   if (opts && Object.keys(opts).length) el.dataset.opts = JSON.stringify(opts);
   const webSrcs = opts?.webSources || [];
@@ -1918,7 +1921,9 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
     body.innerHTML = `<div class="feynman-msg-name">Feynman</div>`;
     const content = document.createElement('div');
     content.className = 'msg-content';
-    let html = renderMarkdown(text);
+    content.setAttribute('dir', 'auto');
+    let html = renderMarkdown(cleaned);
+    // Convert [1], [2], [1, 2] etc. to clickable citation superscripts
     if (refs.length || webSrcs.length) {
       html = html.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
         const indices = nums.split(/\s*,\s*/).map(n => parseInt(n, 10));
@@ -1946,9 +1951,9 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
       });
     });
   } else if (role === 'user' && hasMentions) {
-    el.innerHTML = renderUserMsgWithMentions(text);
+    el.innerHTML = renderUserMsgWithMentions(cleaned);
   } else {
-    el.textContent = text;
+    el.textContent = cleaned;
   }
   const appendTarget = (role === 'assistant') ? el.querySelector('.feynman-msg-body') || el : el;
   // References (RAG chunk sources), grouped by book to avoid duplicate titles
@@ -2030,12 +2035,15 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
 }
 
 function appendMindMsg(container, mindName, text) {
+  const raw = String(text ?? '');
+  const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   // Strip leading "[Name]: " prefix if LLM echoed it
   const prefixRe = new RegExp(`^\\[${mindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*`, 'i');
-  text = text.replace(prefixRe, '');
+  const strippedRaw = raw.replace(prefixRe, '');
   const el = document.createElement('div');
   el.className = 'chat-message mind-message';
-  el.dataset.raw = text;
+  el.setAttribute('dir', 'auto');
+  el.dataset.raw = strippedRaw;
   el.dataset.mindName = mindName;
   const color = mindColor(mindName);
   const initials = mindInitials(mindName);
@@ -2049,7 +2057,8 @@ function appendMindMsg(container, mindName, text) {
   body.innerHTML = `<div class="mind-msg-name">${esc(mindName)}</div>`;
   const content = document.createElement('div');
   content.className = 'msg-content mind-msg-content';
-  content.innerHTML = renderMarkdown(text);
+  content.setAttribute('dir', 'auto');
+  content.innerHTML = renderMarkdown(cleaned.replace(prefixRe, '').trim());
   body.appendChild(content);
   el.appendChild(body);
   container.appendChild(el);
@@ -4816,7 +4825,7 @@ function renderMarkdown(text) {
     t = esc(t);
     t = t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     t = t.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    t = t.replace(/\[([^\]]+)\]\(([^\s\u0600-\u06FF)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
     t = t.replace(/\x00IC(\d+)\x00/g, (_, i) => inlineCodes[+i]);
     return t;
   }
