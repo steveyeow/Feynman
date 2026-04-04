@@ -24,6 +24,10 @@ Richard Feynman rarely read a book cover to cover — he approached books with q
 
 In short: Feynman helps you read the way Feynman did — not replace reading itself.
 
+### Feynman Reading Method Overview (Video)
+
+This AI-generated overview summarizes the cognitive science behind the method (Russian Activity Theory and Chinese metacognitive scaffolding) and explains the Pre-Thinking Stage that frames the learning flow. Watch the video here: [Feynman Reading Method Overview](https://youtu.be/PYwjd7X_bfg).
+
 ### Beyond books
 
 In 1985, Steve Jobs said: *"Someday, some student will be able to not only read the words Aristotle wrote, but ask Aristotle a question and get an answer."* That idea stuck with me. Every book is a window into a great mind — but a great mind is far more than any single book.
