@@ -778,7 +778,8 @@ def share_page(agent_id: str, request: Request) -> HTMLResponse:
     desc = html_esc(subtitle or f"A {chapter_count}-chapter book created with Feynman AI")
     base = str(request.base_url).rstrip("/")
     reader_url = f"{base}/#/read/{html_esc(agent_id)}"
-    og_image_url = f"{base}/api/og-image/{html_esc(agent_id)}"
+    v = config.OG_IMAGE_CACHE_VERSION
+    og_image_url = f"{base}/api/og-image/{html_esc(agent_id)}?v={v}"
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>

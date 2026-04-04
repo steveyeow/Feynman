@@ -4284,23 +4284,21 @@ async function renderReader(agentId) {
   const _rShareUrl = `${window.location.origin}/share/${esc(agentId)}`;
   const _rTweetText = encodeURIComponent(`${d.title} — written by AI on Feynman`);
   const _rTweetUrl = encodeURIComponent(_rShareUrl);
-  const _rShareHtml = isAI ? `
-        <div class="reader-share-bar">
-          <button type="button" class="reader-share-btn" onclick="event.stopPropagation();window.open('https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}','_blank')" title="Share on X">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-          </button>
-          <button type="button" class="reader-share-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('${_rShareUrl}');_showToast('Link copied')" title="Copy link">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </button>
-        </div>` : '';
   const _rTopbarShareHtml = isAI ? `
-      <div class="reader-topbar-share">
-        <button type="button" class="reader-share-btn" onclick="event.stopPropagation();window.open('https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}','_blank')" title="Share on X">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      <div class="reader-topbar-share-wrap">
+        <button type="button" class="reader-topbar-share-trigger" aria-label="Share" onclick="event.stopPropagation();this.parentElement.classList.toggle('open')" title="Share">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
         </button>
-        <button type="button" class="reader-share-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('${_rShareUrl}');_showToast('Link copied')" title="Copy link">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        </button>
+        <div class="reader-topbar-share-popup">
+          <button type="button" class="reader-topbar-share-opt" onclick="window.open('https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}','_blank');this.closest('.reader-topbar-share-wrap').classList.remove('open')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+            Post on X
+          </button>
+          <button type="button" class="reader-topbar-share-opt" onclick="navigator.clipboard.writeText('${_rShareUrl}');_showToast('Link copied');this.closest('.reader-topbar-share-wrap').classList.remove('open')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Copy link
+          </button>
+        </div>
       </div>` : '';
   const titlePageHtml = `
     <div class="reader-cover">
@@ -4315,7 +4313,6 @@ async function renderReader(agentId) {
           ${chapterCount > 0 ? `<span class="reader-cover-dot"></span><span>${chapterCount} chapters</span>` : ''}
         </div>
         ${previewLabel}
-        ${_rShareHtml}
       </div>
       ${imprintHtml}
     </div>`;
@@ -4422,15 +4419,7 @@ async function renderReader(agentId) {
         </div>`
       : `<div class="reader-end-page">
           <p>End of book</p>
-          ${isAI ? `<p class="reader-end-subtitle">Enjoyed this book? Share it with others</p>
-          <div class="reader-share-bar">
-            <button type="button" class="reader-share-btn" onclick="event.stopPropagation();window.open('https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}','_blank')" title="Share on X">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-            </button>
-            <button type="button" class="reader-share-btn" onclick="event.stopPropagation();navigator.clipboard.writeText('${_rShareUrl}');_showToast('Link copied')" title="Copy link">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            </button>
-          </div>` : ''}
+          ${isAI ? `<p class="reader-end-subtitle">Enjoyed this book? Use the share control in the top bar, or <button type="button" class="reader-end-copy-link" onclick="event.stopPropagation();navigator.clipboard.writeText('${_rShareUrl}');_showToast('Link copied')">copy link</button></p>` : ''}
         </div>`;
     _readerPages.push({ html: endHtml, chNum: -1 });
 
@@ -4496,6 +4485,15 @@ async function renderReader(agentId) {
   window.addEventListener('resize', onResize);
   const origCleanup = _readerCleanup;
   _readerCleanup = () => { origCleanup(); window.removeEventListener('resize', onResize); };
+
+  function onDocClickShare(e) {
+    if (!e.target.closest('.reader-topbar-share-wrap')) {
+      page.querySelectorAll('.reader-topbar-share-wrap.open').forEach(w => w.classList.remove('open'));
+    }
+  }
+  document.addEventListener('click', onDocClickShare, true);
+  const origCleanup2 = _readerCleanup;
+  _readerCleanup = () => { origCleanup2(); document.removeEventListener('click', onDocClickShare, true); };
 
   paginate();
 }

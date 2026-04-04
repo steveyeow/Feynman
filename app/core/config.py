@@ -17,6 +17,9 @@ DB_PATH = Path(os.getenv("DB_PATH", DATA_DIR / "chatbook.db"))
 APP_NAME = os.getenv("APP_NAME", "Feynman")
 APP_TITLE = os.getenv("APP_TITLE", "Feynman")
 
+# Bump (or set env OG_IMAGE_CACHE_VERSION) when OG card artwork changes so social crawlers see a new URL.
+OG_IMAGE_CACHE_VERSION = os.getenv("OG_IMAGE_CACHE_VERSION", "2").strip() or "2"
+
 PROVIDER_ORDER = [p.strip().lower() for p in os.getenv("PROVIDER_ORDER", "deepseek,gemini,openai,novita,kimi,anthropic").split(",") if p.strip()]
 
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "auto").lower()
