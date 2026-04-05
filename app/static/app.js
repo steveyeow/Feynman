@@ -3097,7 +3097,7 @@ window.deleteBook = deleteBook;
 
 // ─── Share book ───
 async function shareBook(title, agentId) {
-  const url = `${window.location.origin}/share/${agentId}`;
+  const url = `${window.location.origin}/share/${agentId}?t=${Math.floor(Date.now()/86400000)}`;
   try {
     await navigator.clipboard.writeText(url);
     _showToast('Link copied');
@@ -3199,7 +3199,7 @@ window.startWriteBook = startWriteBook;
 
 function _wireCanvasShareMenus(root, book) {
   if (!book?.agent_id) return;
-  const shareUrl = `${window.location.origin}/share/${encodeURIComponent(book.agent_id)}`;
+  const shareUrl = `${window.location.origin}/share/${encodeURIComponent(book.agent_id)}?t=${Math.floor(Date.now()/86400000)}`;
   const _canvasAuthor = book.creator_name || '';
   const twitterText = encodeURIComponent(`${book.title || ''} — by ${_canvasAuthor || 'AI'} on feynman.wiki`);
   const twitterUrl = encodeURIComponent(shareUrl);
@@ -4418,7 +4418,7 @@ async function renderReader(agentId) {
       </div>` : '';
   const previewLabel = isPreview ? `<span class="reader-cover-preview-label">Preview</span>` : '';
   const chapterCount = isAI ? d.chapters?.length : (detectedChapters?.length || 0);
-  const _rShareUrl = `${window.location.origin}/share/${encodeURIComponent(agentId)}`;
+  const _rShareUrl = `${window.location.origin}/share/${encodeURIComponent(agentId)}?t=${Math.floor(Date.now()/86400000)}`;
   const _rAuthor = d.author?.replace(/ · AI$/, '') || '';
   const _rTweetText = encodeURIComponent(`${d.title} — by ${_rAuthor || 'AI'} on feynman.wiki`);
   const _rTweetUrl = encodeURIComponent(_rShareUrl);
