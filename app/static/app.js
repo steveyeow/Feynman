@@ -1503,6 +1503,12 @@ function _startLandingChatDemo(scenes) {
 
 function navigate() {
   const route = getRoute();
+  // Reader attaches a document-level keydown handler; remove it when leaving #/read
+  // or Space/arrow keys keep firing and break typing in composers elsewhere.
+  if (route.page !== 'read' && _readerCleanup) {
+    _readerCleanup();
+    _readerCleanup = null;
+  }
   document.querySelectorAll('.page-view').forEach(el => el.classList.add('hidden'));
   const el = document.getElementById('page-' + route.page);
   if (el) el.classList.remove('hidden');
@@ -4560,6 +4566,10 @@ async function renderReader(agentId) {
   document.getElementById('reader-next').addEventListener('click', () => showReaderPage(_readerPage + 1));
 
   function onKey(e) {
+    const el = e.target;
+    if (el instanceof Element && (el.closest('input, textarea, select, [contenteditable="true"]') || el.isContentEditable)) {
+      return;
+    }
     if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); showReaderPage(_readerPage + 1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); showReaderPage(_readerPage - 1); }
     if (e.key === 'Home') { e.preventDefault(); showReaderPage(0); }
