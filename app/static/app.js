@@ -3119,7 +3119,7 @@ async function renameBook(agentId, newName) {
   }
 }
 
-function makeEditableTitle(el, agentId, currentTitle) {
+function makeEditableTitle(el, agentId, currentTitle, onRenamed) {
   el.style.cursor = 'pointer';
   el.title = 'Click to rename';
   el.addEventListener('click', (e) => {
@@ -3143,16 +3143,17 @@ function makeEditableTitle(el, agentId, currentTitle) {
         if (!ok) el.innerHTML = origHtml;
         else {
           currentTitle = v;
+          if (onRenamed) onRenamed(v);
           if (getRoute().page === 'library') renderLibraryGrid();
         }
       } else {
         el.innerHTML = origHtml;
       }
-      makeEditableTitle(el, agentId, currentTitle);
+      makeEditableTitle(el, agentId, currentTitle, onRenamed);
     };
     input.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') { ev.preventDefault(); finish(); }
-      if (ev.key === 'Escape') { el.innerHTML = origHtml; makeEditableTitle(el, agentId, currentTitle); }
+      if (ev.key === 'Escape') { el.innerHTML = origHtml; makeEditableTitle(el, agentId, currentTitle, onRenamed); }
     });
     input.addEventListener('blur', finish);
   }, { once: true });
@@ -4598,11 +4599,23 @@ async function renderReader(agentId) {
     }
   }
 
-  // Editable title for owner in reader
+  // Track ownership for editable title in reader
   const _readerBook = allBooks.find(b => b.agentId === agentId);
-  if (isBookOwner(_readerBook)) {
-    const coverTitle = page.querySelector('.reader-cover-title');
-    if (coverTitle) makeEditableTitle(coverTitle, agentId, d.title);
+  const _readerIsOwner = isBookOwner(_readerBook);
+  let _readerCurrentTitle = d.title;
+
+  function _onReaderTitleRenamed(newTitle) {
+    _readerCurrentTitle = newTitle;
+    const topbar = page.querySelector('.reader-topbar-title');
+    if (topbar && !topbar.querySelector('input')) {
+      topbar.innerHTML = esc(newTitle);
+      makeEditableTitle(topbar, agentId, newTitle, _onReaderTitleRenamed);
+    }
+  }
+
+  if (_readerIsOwner) {
+    const topbarTitle = page.querySelector('.reader-topbar-title');
+    if (topbarTitle) makeEditableTitle(topbarTitle, agentId, _readerCurrentTitle, _onReaderTitleRenamed);
   }
 
   // Paginate: measure content into pages that fit the viewport
@@ -4697,6 +4710,12 @@ async function renderReader(agentId) {
       const ch = parseInt(a.dataset.ch);
       a.classList.toggle('active', ch === pg.chNum && pg.chNum >= 0);
     });
+
+    // Re-attach editable title on cover page (page 0) since innerHTML recreates elements
+    if (_readerIsOwner && _readerPage === 0) {
+      const coverTitle = inner.querySelector('.reader-cover-title');
+      if (coverTitle) makeEditableTitle(coverTitle, agentId, _readerCurrentTitle, _onReaderTitleRenamed);
+    }
   }
 
   // Navigation
