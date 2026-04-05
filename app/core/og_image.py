@@ -1,4 +1,4 @@
-"""Generate Open Graph / Twitter Card images — portrait book cover on dark field."""
+"""Generate Open Graph / Twitter Card images — clean book cover on dark field."""
 from __future__ import annotations
 
 import io
@@ -11,24 +11,16 @@ _FONTS_DIR = Path(__file__).resolve().parent.parent / "static" / "fonts"
 
 W, H = 1200, 630
 
-# Card background
 BG = (24, 22, 20)
 
-# Book cover palette
 COVER_BG = (250, 246, 238)
 SPINE = (70, 60, 50)
-SPINE_HIGHLIGHT = (185, 160, 120)
+SPINE_HL = (185, 160, 120)
 ACCENT = (139, 109, 82)
-GOLD = (185, 160, 120)
 RULE = (200, 188, 172)
 TEXT_DARK = (29, 29, 31)
 TEXT_MID = (100, 90, 80)
 TEXT_LIGHT = (145, 135, 122)
-TEXT_MUTED = (170, 160, 145)
-
-# Right-side text (on the dark bg)
-SIDE_TEXT = (200, 194, 184)
-SIDE_MUTED = (120, 114, 104)
 
 
 def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -90,24 +82,20 @@ def generate_og_image(
     img = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    # --- Portrait book cover dimensions (left portion of card) ---
-    cover_h = H - 60
-    cover_w = int(cover_h * 0.68)
-    spine_w = 18
-    cover_x = 80
+    # Book cover fills most of the card height, centered horizontally
+    cover_h = H - 40
+    cover_w = int(cover_h * 0.7)
+    spine_w = 20
+    cover_x = (W - spine_w - cover_w) // 2
     cover_y = (H - cover_h) // 2
 
-    # Shadow behind the book
-    for i in range(8):
-        alpha = 40 - i * 5
-        if alpha <= 0:
-            break
-        c = max(0, 24 - i * 2)
-        shadow_color = (c, c - 1 if c > 0 else 0, c - 2 if c > 1 else 0)
+    # Shadow
+    for i in range(10):
+        c = max(0, 18 - i * 2)
         draw.rectangle(
-            [(cover_x + spine_w + i + 3, cover_y + i + 3),
-             (cover_x + spine_w + cover_w + i + 3, cover_y + cover_h + i + 1)],
-            fill=shadow_color,
+            [(cover_x + spine_w + i + 4, cover_y + i + 4),
+             (cover_x + spine_w + cover_w + i + 4, cover_y + cover_h + i + 2)],
+            fill=(c, c, c),
         )
 
     # Spine
@@ -117,119 +105,63 @@ def generate_og_image(
     )
     draw.line(
         [(cover_x + spine_w, cover_y), (cover_x + spine_w, cover_y + cover_h)],
-        fill=SPINE_HIGHLIGHT, width=1,
+        fill=SPINE_HL, width=1,
     )
 
     # Cover face
-    face_l = cover_x + spine_w + 1
-    face_r = cover_x + spine_w + cover_w
-    draw.rectangle([(face_l, cover_y), (face_r, cover_y + cover_h)], fill=COVER_BG)
-    draw.rectangle([(face_l, cover_y), (face_r, cover_y + cover_h)], outline=RULE, width=1)
+    fl = cover_x + spine_w + 1
+    fr = cover_x + spine_w + cover_w
+    draw.rectangle([(fl, cover_y), (fr, cover_y + cover_h)], fill=COVER_BG)
+    draw.rectangle([(fl, cover_y), (fr, cover_y + cover_h)], outline=RULE, width=1)
 
-    face_cx = face_l + (face_r - face_l) // 2
-    pad = 28
-    text_l = face_l + pad
-    text_r = face_r - pad
-    text_w = text_r - text_l
+    fcx = fl + (fr - fl) // 2
+    pad = 36
+    tl = fl + pad
+    tr = fr - pad
+    tw = tr - tl
 
-    # Cover fonts
+    # Fonts
     ft_title = _font("Georgia-Bold.ttf", 28)
-    ft_sub = _font("Georgia-Regular.ttf", 13)
-    ft_author = _font("Georgia-Regular.ttf", 12)
-    ft_meta = _font("Arial-Regular.ttf", 10)
-    ft_imprint = _font("Georgia-Regular.ttf", 9)
+    ft_sub = _font("Georgia-Regular.ttf", 14)
+    ft_author = _font("Georgia-Regular.ttf", 13)
+    ft_imprint = _font("Georgia-Regular.ttf", 10)
 
     # Top accent band
-    band_y = cover_y + 24
-    draw.rectangle([(text_l + 10, band_y), (text_r - 10, band_y + 2)], fill=ACCENT)
+    draw.rectangle([(tl + 10, cover_y + 28), (tr - 10, cover_y + 31)], fill=ACCENT)
 
-    # Title on cover
-    title_lines = _wrap(title, ft_title, text_w, draw)[:4]
-    title_line_h = 36
-    total_title_h = len(title_lines) * title_line_h
+    # Title — centered vertically in upper zone
+    title_lines = _wrap(title, ft_title, tw, draw)[:5]
+    title_lh = 38
+    total_th = len(title_lines) * title_lh
 
-    title_zone_top = cover_y + 50
-    title_zone_bot = cover_y + cover_h - 120
-    title_start = title_zone_top + (title_zone_bot - title_zone_top - total_title_h) // 2
-    title_start = max(title_start, title_zone_top)
+    zone_top = cover_y + 56
+    zone_bot = cover_y + cover_h - 140
+    ty = zone_top + (zone_bot - zone_top - total_th) // 2
+    ty = max(ty, zone_top)
 
     for i, ln in enumerate(title_lines):
-        _text_centered(draw, title_start + i * title_line_h, ln, ft_title, TEXT_DARK, text_l, text_r)
-    cur_y = title_start + len(title_lines) * title_line_h
+        _text_centered(draw, ty + i * title_lh, ln, ft_title, TEXT_DARK, tl, tr)
+    cur_y = ty + len(title_lines) * title_lh
 
-    # Subtitle on cover
+    # Subtitle
     if subtitle:
-        cur_y += 8
-        sub_lines = _wrap(subtitle, ft_sub, text_w - 16, draw)[:2]
+        cur_y += 10
+        sub_lines = _wrap(subtitle, ft_sub, tw - 10, draw)[:2]
         for i, ln in enumerate(sub_lines):
-            _text_centered(draw, cur_y + i * 18, ln, ft_sub, TEXT_MID, text_l, text_r)
+            _text_centered(draw, cur_y + i * 22, ln, ft_sub, TEXT_MID, tl, tr)
 
-    # Bottom rule + author on cover
-    bot_rule_y = cover_y + cover_h - 64
-    draw.line([(text_l + 20, bot_rule_y), (text_r - 20, bot_rule_y)], fill=RULE, width=1)
-
-    author_display = f"by {author}" if author else ""
-    if author_display:
-        _text_centered(draw, bot_rule_y + 10, author_display, ft_author, TEXT_MID, text_l, text_r)
-
-    # Feynman imprint at bottom of cover
-    imprint_y = cover_y + cover_h - 22
-    _draw_feynman_mark(draw, face_cx - 20, imprint_y - 2, 0.35, TEXT_LIGHT)
-    ibbox = draw.textbbox((0, 0), "FEYNMAN", font=ft_imprint)
-    draw.text((face_cx - 8, imprint_y - (ibbox[3] - ibbox[1]) // 2 - 1),
-              "FEYNMAN", fill=TEXT_LIGHT, font=ft_imprint)
-
-    # --- Right side: info on dark background ---
-    info_l = face_r + 60
-    info_r = W - 60
-    info_w = info_r - info_l
-    if info_w < 100:
-        info_l = face_r + 30
-        info_r = W - 30
-        info_w = info_r - info_l
-
-    ft_side_title = _font("Georgia-Bold.ttf", 26)
-    ft_side_sub = _font("Georgia-Regular.ttf", 15)
-    ft_side_meta = _font("Arial-Regular.ttf", 13)
-    ft_side_brand = _font("Georgia-Regular.ttf", 12)
-
-    # Title (right side)
-    side_title_lines = _wrap(title, ft_side_title, info_w, draw)[:3]
-    side_y = cover_y + 30
-    for ln in side_title_lines:
-        draw.text((info_l, side_y), ln, fill=SIDE_TEXT, font=ft_side_title)
-        side_y += 34
-
-    # Subtitle (right side)
-    if subtitle:
-        side_y += 8
-        side_sub_lines = _wrap(subtitle, ft_side_sub, info_w, draw)[:2]
-        for ln in side_sub_lines:
-            draw.text((info_l, side_y), ln, fill=SIDE_MUTED, font=ft_side_sub)
-            side_y += 22
-
-    # Author (right side)
+    # Bottom rule + author
+    bot_y = cover_y + cover_h - 76
+    draw.line([(tl + 24, bot_y), (tr - 24, bot_y)], fill=RULE, width=1)
     if author:
-        side_y += 16
-        draw.text((info_l, side_y), author, fill=SIDE_TEXT, font=ft_side_sub)
-        side_y += 24
+        _text_centered(draw, bot_y + 12, author, ft_author, TEXT_MID, tl, tr)
 
-    # Stats
-    parts = []
-    if total_words:
-        parts.append(f"{total_words:,} words")
-    read_min = max(1, round(total_words / 230)) if total_words else 0
-    if read_min:
-        parts.append(f"~{read_min} min read")
-    if chapter_count:
-        parts.append(f"{chapter_count} chapters")
-    if parts:
-        side_y += 12
-        draw.text((info_l, side_y), "  \u00b7  ".join(parts), fill=SIDE_MUTED, font=ft_side_meta)
-
-    # feynman.wiki at bottom right
-    brand_y = cover_y + cover_h - 16
-    draw.text((info_l, brand_y), "feynman.wiki", fill=SIDE_MUTED, font=ft_side_brand)
+    # Feynman imprint
+    imp_y = cover_y + cover_h - 28
+    _draw_feynman_mark(draw, fcx - 22, imp_y - 1, 0.38, TEXT_LIGHT)
+    ibbox = draw.textbbox((0, 0), "FEYNMAN", font=ft_imprint)
+    draw.text((fcx - 10, imp_y - (ibbox[3] - ibbox[1]) // 2 - 1),
+              "FEYNMAN", fill=TEXT_LIGHT, font=ft_imprint)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
