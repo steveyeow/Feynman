@@ -1,4 +1,4 @@
-"""Generate Open Graph / Twitter Card images — clean book cover on dark field."""
+"""Generate Open Graph / Twitter Card images — book cover fills the card."""
 from __future__ import annotations
 
 import io
@@ -21,6 +21,7 @@ RULE = (200, 188, 172)
 TEXT_DARK = (29, 29, 31)
 TEXT_MID = (100, 90, 80)
 TEXT_LIGHT = (145, 135, 122)
+SIDE_MUTED = (110, 104, 94)
 
 
 def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -82,60 +83,52 @@ def generate_og_image(
     img = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    # Book cover fills most of the card height, centered horizontally
-    cover_h = H - 40
-    cover_w = int(cover_h * 0.7)
-    spine_w = 20
-    cover_x = (W - spine_w - cover_w) // 2
-    cover_y = (H - cover_h) // 2
+    # Book cover: full height, left-aligned
+    cover_h = H
+    cover_w = int(cover_h * 0.72)
+    spine_w = 22
 
     # Shadow
-    for i in range(10):
-        c = max(0, 18 - i * 2)
+    for i in range(12):
+        c = max(0, 20 - i * 2)
         draw.rectangle(
-            [(cover_x + spine_w + i + 4, cover_y + i + 4),
-             (cover_x + spine_w + cover_w + i + 4, cover_y + cover_h + i + 2)],
+            [(spine_w + cover_w + i + 2, i + 2),
+             (spine_w + cover_w + i + 6, cover_h)],
             fill=(c, c, c),
         )
 
     # Spine
-    draw.rectangle(
-        [(cover_x, cover_y), (cover_x + spine_w, cover_y + cover_h)],
-        fill=SPINE,
-    )
-    draw.line(
-        [(cover_x + spine_w, cover_y), (cover_x + spine_w, cover_y + cover_h)],
-        fill=SPINE_HL, width=1,
-    )
+    draw.rectangle([(0, 0), (spine_w, cover_h)], fill=SPINE)
+    draw.line([(spine_w, 0), (spine_w, cover_h)], fill=SPINE_HL, width=1)
 
     # Cover face
-    fl = cover_x + spine_w + 1
-    fr = cover_x + spine_w + cover_w
-    draw.rectangle([(fl, cover_y), (fr, cover_y + cover_h)], fill=COVER_BG)
-    draw.rectangle([(fl, cover_y), (fr, cover_y + cover_h)], outline=RULE, width=1)
+    fl = spine_w + 1
+    fr = spine_w + cover_w
+    draw.rectangle([(fl, 0), (fr, cover_h)], fill=COVER_BG)
 
     fcx = fl + (fr - fl) // 2
-    pad = 36
+    pad = 40
     tl = fl + pad
     tr = fr - pad
     tw = tr - tl
 
     # Fonts
-    ft_title = _font("Georgia-Bold.ttf", 28)
-    ft_sub = _font("Georgia-Regular.ttf", 14)
-    ft_author = _font("Georgia-Regular.ttf", 13)
-    ft_imprint = _font("Georgia-Regular.ttf", 10)
+    ft_title = _font("Georgia-Bold.ttf", 36)
+    ft_sub = _font("Georgia-Regular.ttf", 16)
+    ft_author = _font("Georgia-Regular.ttf", 15)
+    ft_imprint = _font("Georgia-Regular.ttf", 11)
+    ft_brand = _font("Georgia-Regular.ttf", 14)
 
     # Top accent band
-    draw.rectangle([(tl + 10, cover_y + 28), (tr - 10, cover_y + 31)], fill=ACCENT)
+    draw.rectangle([(tl + 12, 32), (tr - 12, 35)], fill=ACCENT)
 
-    # Title — centered vertically in upper zone
+    # Title
     title_lines = _wrap(title, ft_title, tw, draw)[:5]
-    title_lh = 38
+    title_lh = 48
     total_th = len(title_lines) * title_lh
 
-    zone_top = cover_y + 56
-    zone_bot = cover_y + cover_h - 140
+    zone_top = 64
+    zone_bot = cover_h - 160
     ty = zone_top + (zone_bot - zone_top - total_th) // 2
     ty = max(ty, zone_top)
 
@@ -145,23 +138,28 @@ def generate_og_image(
 
     # Subtitle
     if subtitle:
-        cur_y += 10
-        sub_lines = _wrap(subtitle, ft_sub, tw - 10, draw)[:2]
+        cur_y += 12
+        sub_lines = _wrap(subtitle, ft_sub, tw - 16, draw)[:2]
         for i, ln in enumerate(sub_lines):
-            _text_centered(draw, cur_y + i * 22, ln, ft_sub, TEXT_MID, tl, tr)
+            _text_centered(draw, cur_y + i * 24, ln, ft_sub, TEXT_MID, tl, tr)
 
     # Bottom rule + author
-    bot_y = cover_y + cover_h - 76
-    draw.line([(tl + 24, bot_y), (tr - 24, bot_y)], fill=RULE, width=1)
+    bot_y = cover_h - 88
+    draw.line([(tl + 28, bot_y), (tr - 28, bot_y)], fill=RULE, width=1)
     if author:
-        _text_centered(draw, bot_y + 12, author, ft_author, TEXT_MID, tl, tr)
+        _text_centered(draw, bot_y + 14, author, ft_author, TEXT_MID, tl, tr)
 
     # Feynman imprint
-    imp_y = cover_y + cover_h - 28
-    _draw_feynman_mark(draw, fcx - 22, imp_y - 1, 0.38, TEXT_LIGHT)
+    imp_y = cover_h - 32
+    _draw_feynman_mark(draw, fcx - 24, imp_y - 1, 0.42, TEXT_LIGHT)
     ibbox = draw.textbbox((0, 0), "FEYNMAN", font=ft_imprint)
     draw.text((fcx - 10, imp_y - (ibbox[3] - ibbox[1]) // 2 - 1),
               "FEYNMAN", fill=TEXT_LIGHT, font=ft_imprint)
+
+    # Right side: feynman.wiki brand only (X shows title/desc below the card)
+    rx = fr + 48
+    _draw_feynman_mark(draw, rx + 8, H // 2 - 6, 0.8, SIDE_MUTED)
+    draw.text((rx + 24, H // 2 - 8), "feynman.wiki", fill=SIDE_MUTED, font=ft_brand)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
