@@ -40,6 +40,7 @@ let _writeBookId = null;
 let _writeBookAgentId = null;
 let _writeBookOutline = null;
 let _writeBookPolling = null;
+let _writeBookPollSessionId = null;
 let _writeBookGen = 0;
 let _writeBookAbort = null;
 
@@ -561,7 +562,8 @@ function getRoute() {
     if (!window.FEYNMAN_PRO && !localStorage.getItem('feynman-landed')) return { page: 'landing' };
     return { page: 'home' };
   }
-  if (hash === '#/chat') return { page: 'chat' };
+  const chatRoute = hash.match(/^#\/chat(?:\/([^/?]+))?$/);
+  if (chatRoute) return { page: 'chat', sessionId: chatRoute[1] || null };
   if (hash === '#/chats') return { page: 'chats' };
   if (hash === '#/library') return { page: 'library' };
   if (hash === '#/minds') return { page: 'minds' };
@@ -574,6 +576,15 @@ function getRoute() {
   const rm = hash.match(/^#\/read\/(.+)$/);
   if (rm) return { page: 'read', id: rm[1] };
   return { page: 'home' };
+}
+
+/** Update the address bar to #/chat/<sessionId> without firing hashchange (bookmarkable per-thread). */
+function _setChatHashForSession(sessionId) {
+  if (!sessionId) return;
+  const desired = `#/chat/${sessionId}`;
+  if ((window.location.hash || '') !== desired) {
+    history.replaceState(null, '', desired);
+  }
 }
 
 // ─── Landing Page ───
@@ -1517,7 +1528,7 @@ function navigate() {
       renderHome();
       renderSelectedChips();
       break;
-    case 'chat': onChatPageShow(); break;
+    case 'chat': void onChatPageShow(); break;
     case 'chats':
       if (window.FEYNMAN_PRO && !currentUser) { window.location.hash = '#/login'; return; }
       renderChatsPage(); break;
@@ -2198,6 +2209,7 @@ async function createSession(mindId) {
     hideChatRightSidebar();
   }
   renderChatHistory();
+  if (getRoute().page === 'chat') _setChatHashForSession(session.id);
   return session;
 }
 
@@ -2255,9 +2267,15 @@ async function switchToSession(id) {
 
     // Restore write-book state (outline card / writing progress)
     _restoreWriteBookState(session, chatBox);
+  } else if (getRoute().page === 'chat') {
+    // Same session re-selected — refresh outline panel (e.g. book just finished indexing)
+    const chatBox = document.getElementById('chat-messages');
+    _restoreWriteBookState(session, chatBox);
   }
   if (getRoute().page !== 'chat') {
-    window.location.hash = '#/chat';
+    window.location.hash = `#/chat/${id}`;
+  } else {
+    _setChatHashForSession(id);
   }
 }
 
@@ -2780,6 +2798,21 @@ function handleChatSend() {
 }
 
 async function onChatPageShow() {
+  const route = getRoute();
+  // Only resolve #/chat/<id> after sessions are loaded — init calls navigate() before restoreSessions().
+  if (route.page === 'chat' && route.sessionId && chatSessions.length) {
+    if (chatSessions.some(s => s.id === route.sessionId)) {
+      if (currentSessionId !== route.sessionId) {
+        await switchToSession(route.sessionId);
+        return;
+      }
+    } else {
+      // Stale bookmark — drop unknown session id from the URL
+      if (currentSessionId) _setChatHashForSession(currentSessionId);
+      else history.replaceState(null, '', '#/chat');
+    }
+  }
+
   renderSelectedChips();
   renderChatHistory();
   _updateComposerMentionHint();
@@ -2825,6 +2858,7 @@ async function onChatPageShow() {
   }
 
   _restoreWriteBookState(session, chatBox);
+  if (currentSessionId) _setChatHashForSession(currentSessionId);
 }
 
 // ─── Chat sidebar (right) ───
@@ -3084,7 +3118,16 @@ window.shareBook = shareBook;
 
 // ─── AI Book Writing ───
 
+function _stopWriteBookPolling() {
+  if (_writeBookPolling) {
+    clearInterval(_writeBookPolling);
+    _writeBookPolling = null;
+  }
+  _writeBookPollSessionId = null;
+}
+
 async function _restoreWriteBookState(session, chatBox) {
+  _stopWriteBookPolling();
   const meta = session?.meta || session?.books?.get?.('_meta') || {};
   if (!(session?.sessionType === 'write_book' || meta.write_book)) {
     if (_writeBookAbort) { _writeBookAbort.abort(); _writeBookAbort = null; }
@@ -3101,10 +3144,12 @@ async function _restoreWriteBookState(session, chatBox) {
     _hideBookCanvas();
     return;
   }
+  const restoreSessionId = session?.id;
   _writeBookId = aiBookId;
   _writeBookAgentId = meta.agent_id || null;
   try {
     const book = await api(`/api/ai-books/${aiBookId}`);
+    if (restoreSessionId && restoreSessionId !== currentSessionId) return;
     _writeBookOutline = book.outline;
     if (book.status === 'writing') {
       _startWritingPoll(aiBookId, chatBox);
@@ -3142,7 +3187,7 @@ async function startWriteBook() {
 
   const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
   _queueSessionMessage(currentSessionId, 'assistant', greeting);
-  window.location.hash = '#/chat';
+  window.location.hash = '#/chat/' + currentSessionId;
 }
 window.startWriteBook = startWriteBook;
 
@@ -3608,16 +3653,24 @@ async function _retryWriteBook(bookId) {
 window._retryWriteBook = _retryWriteBook;
 
 function _startWritingPoll(bookId, chatBox) {
-  if (_writeBookPolling) clearInterval(_writeBookPolling);
+  _stopWriteBookPolling();
+  _writeBookPollSessionId = currentSessionId;
 
   async function poll() {
+    if (_writeBookId !== bookId || currentSessionId !== _writeBookPollSessionId) {
+      _stopWriteBookPolling();
+      return;
+    }
     try {
       const book = await api(`/api/ai-books/${bookId}`);
+      if (_writeBookId !== bookId || currentSessionId !== _writeBookPollSessionId) {
+        _stopWriteBookPolling();
+        return;
+      }
       _showBookCanvas(_renderCanvasWritingProgress(book));
 
       if (book.status === 'completed' || book.status === 'failed' || book.status === 'cancelled') {
-        clearInterval(_writeBookPolling);
-        _writeBookPolling = null;
+        _stopWriteBookPolling();
         if (book.status === 'completed' || book.status === 'cancelled') {
           await loadAgents();
           buildBookList();
@@ -3630,7 +3683,7 @@ function _startWritingPoll(bookId, chatBox) {
   }
 
   poll();
-  _writeBookPolling = setInterval(poll, 5000);
+  _writeBookPolling = setInterval(poll, 2000);
 }
 
 function _detectLanguage(text) {
