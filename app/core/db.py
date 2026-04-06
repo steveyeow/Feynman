@@ -1215,7 +1215,7 @@ def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
 
         if email:
             old = _fetchone(conn, _q(
-                "SELECT id FROM users WHERE email = ? AND id != ?"
+                "SELECT * FROM users WHERE email = ? AND id != ?"
             ), (email, user_id))
             if old:
                 old_id = old["id"]
@@ -1228,7 +1228,10 @@ def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
                 ) if _USE_PG else _q(
                     "UPDATE usage SET user_id = ? WHERE user_id = ?"
                 ), (user_id, old_id))
-                _execute(conn, _q("DELETE FROM users WHERE id = ?"), (old_id,))
+                _execute(conn, _q("UPDATE users SET id = ? WHERE id = ?"),
+                         (user_id, old_id))
+                row = _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (user_id,))
+                return row
 
         _execute(conn, _conflict_ignore(_q(
             "INSERT OR IGNORE INTO users (id, email, tier) VALUES (?, ?, 'free')"
