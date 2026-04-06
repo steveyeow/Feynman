@@ -5055,19 +5055,23 @@ function bindMentionAutocomplete(textarea) {
     if (!dropdown) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       setActive((activeIdx + 1) % items.length);
       const el = dropdown.querySelectorAll('.mention-item')[activeIdx];
       if (el) el.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       setActive((activeIdx - 1 + items.length) % items.length);
       const el = dropdown.querySelectorAll('.mention-item')[activeIdx];
       if (el) el.scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       selectItem(activeIdx);
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopImmediatePropagation();
       destroyDropdown();
     }
   });
