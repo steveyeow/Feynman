@@ -3231,7 +3231,9 @@ async function _restoreWriteBookState(session, chatBox) {
   } catch (e) { console.warn('Failed to restore write-book state:', e); }
 }
 
+let _startingWriteBook = false;
 async function startWriteBook() {
+  if (_startingWriteBook) return;
   if (!currentUser && window.FEYNMAN_PRO) {
     window.location.hash = '#/login';
     return;
@@ -3240,24 +3242,28 @@ async function startWriteBook() {
     showProOverlay();
     return;
   }
-  // Create a write_book session and jump to chat
-  await createSession();
-  const session = chatSessions.find(s => s.id === currentSessionId);
-  if (session) {
-    session.sessionType = 'write_book';
-    session.title = 'New book';
-  }
-  // Update session type on server
+  _startingWriteBook = true;
   try {
-    await api(`/api/sessions/${currentSessionId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meta: { write_book: true } }),
-    });
-  } catch (e) { console.warn('Failed to update session type:', e); }
+    await createSession();
+    const sessionId = currentSessionId;
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) {
+      session.sessionType = 'write_book';
+      session.title = 'New book';
+    }
+    try {
+      await api(`/api/sessions/${sessionId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: { write_book: true } }),
+      });
+    } catch (e) { console.warn('Failed to update session type:', e); }
 
-  const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
-  _queueSessionMessage(currentSessionId, 'assistant', greeting);
-  window.location.hash = '#/chat/' + currentSessionId;
+    const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
+    _queueSessionMessage(sessionId, 'assistant', greeting);
+    window.location.hash = '#/chat/' + sessionId;
+  } finally {
+    _startingWriteBook = false;
+  }
 }
 window.startWriteBook = startWriteBook;
 
