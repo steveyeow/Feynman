@@ -1202,11 +1202,34 @@ def list_session_messages(session_id: str, user_id: str | None = None) -> list[d
 # ─── Pro: User & Usage helpers ───
 
 def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
-    """Get existing user or create a new free-tier user."""
+    """Get existing user or create a new free-tier user.
+
+    If an old user record exists with the same email but a different id
+    (e.g. after migrating to a new Supabase project), all data is
+    re-linked from the old id to the new id automatically.
+    """
     with get_conn() as conn:
         row = _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (user_id,))
         if row:
             return row
+
+        if email:
+            old = _fetchone(conn, _q(
+                "SELECT id FROM users WHERE email = ? AND id != ?"
+            ), (email, user_id))
+            if old:
+                old_id = old["id"]
+                for tbl in ("agents", "chat_sessions", "ai_books", "messages", "mind_memories"):
+                    _execute(conn, _q(
+                        f'UPDATE "{tbl}" SET user_id = ? WHERE user_id = ?'
+                    ), (user_id, old_id))
+                _execute(conn, _q(
+                    "UPDATE usage SET user_id = ?::uuid WHERE user_id = ?::uuid"
+                ) if _USE_PG else _q(
+                    "UPDATE usage SET user_id = ? WHERE user_id = ?"
+                ), (user_id, old_id))
+                _execute(conn, _q("DELETE FROM users WHERE id = ?"), (old_id,))
+
         _execute(conn, _conflict_ignore(_q(
             "INSERT OR IGNORE INTO users (id, email, tier) VALUES (?, ?, 'free')"
         )), (user_id, email))
