@@ -937,6 +937,8 @@ body {
   padding: 12px 32px 20px;
   flex-shrink: 0;
   background: var(--bg-chat);
+  position: relative;
+  z-index: 10;
 }
 .chat-composer-inline {
   max-width: 720px; margin: 0 auto;
@@ -2770,6 +2772,8 @@ html.dark .lp-chat-card {
 .lp-chat-input-area {
   padding: 6px 24px 10px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 .lp-chat-input-area .chat-composer-inline { margin: 0 auto; }
 .lp-active-textarea {
