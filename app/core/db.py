@@ -1223,13 +1223,26 @@ def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
                     _execute(conn, _q(
                         f'UPDATE "{tbl}" SET user_id = ? WHERE user_id = ?'
                     ), (user_id, old_id))
-                _execute(conn, _q(
-                    "UPDATE usage SET user_id = ?::uuid WHERE user_id = ?::uuid"
-                ) if _USE_PG else _q(
-                    "UPDATE usage SET user_id = ? WHERE user_id = ?"
-                ), (user_id, old_id))
-                _execute(conn, _q("UPDATE users SET id = ? WHERE id = ?"),
-                         (user_id, old_id))
+                if _USE_PG:
+                    _execute(conn, _q(
+                        "INSERT INTO users (id, email, tier, stripe_customer_id, "
+                        "stripe_subscription_id, subscription_status, "
+                        "subscription_ended_at, created_at) "
+                        "SELECT ?, email, tier, stripe_customer_id, "
+                        "stripe_subscription_id, subscription_status, "
+                        "subscription_ended_at, created_at "
+                        "FROM users WHERE id = ?"
+                    ), (user_id, old_id))
+                    _execute(conn,
+                        "UPDATE usage SET user_id = %s WHERE user_id = %s",
+                        (user_id, old_id))
+                    _execute(conn, _q("DELETE FROM users WHERE id = ?"), (old_id,))
+                else:
+                    _execute(conn, _q(
+                        "UPDATE usage SET user_id = ? WHERE user_id = ?"
+                    ), (user_id, old_id))
+                    _execute(conn, _q("UPDATE users SET id = ? WHERE id = ?"),
+                             (user_id, old_id))
                 row = _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (user_id,))
                 return row
 
