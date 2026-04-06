@@ -1917,7 +1917,7 @@ function showOnboarding() {
 }
 
 // ─── Chat messages ───
-function appendMsg(container, role, text, sources, opts, hasMentions) {
+function appendMsg(container, role, text, sources, opts, hasMentions, contextMinds) {
   const raw = String(text ?? '');
   const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   const el = document.createElement('div');
@@ -1926,6 +1926,7 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
   el.dataset.raw = raw;
   if (sources?.length) el.dataset.sources = JSON.stringify(sources);
   if (opts && Object.keys(opts).length) el.dataset.opts = JSON.stringify(opts);
+  if (contextMinds?.length) el.dataset.contextMinds = JSON.stringify(contextMinds);
   const webSrcs = opts?.webSources || [];
   const refs = opts?.references || [];
   const refsByIndex = new Map(refs.map(r => [Number(r.index), r]));
@@ -1968,8 +1969,24 @@ function appendMsg(container, role, text, sources, opts, hasMentions) {
         if (refEl) refEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     });
-  } else if (role === 'user' && hasMentions) {
-    el.innerHTML = renderUserMsgWithMentions(cleaned);
+  } else if (role === 'user') {
+    if (contextMinds?.length) {
+      const tagsEl = document.createElement('div');
+      tagsEl.className = 'msg-context-minds';
+      tagsEl.innerHTML = contextMinds.map(m => {
+        const c = mindColor(m.name);
+        const i = mindInitials(m.name);
+        return `<span class="msg-context-mind"><span class="msg-context-avatar" style="background:${c}">${i}</span>${esc(m.name)}</span>`;
+      }).join('');
+      el.appendChild(tagsEl);
+    }
+    const textEl = document.createElement('span');
+    if (hasMentions) {
+      textEl.innerHTML = renderUserMsgWithMentions(cleaned);
+    } else {
+      textEl.textContent = cleaned;
+    }
+    el.appendChild(textEl);
   } else {
     el.textContent = cleaned;
   }
@@ -2265,7 +2282,8 @@ async function switchToSession(id) {
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
-        appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
+        const cm = m.role === 'user' ? m.contextMinds : undefined;
+        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, false, cm);
       }
     }
     renderSelectedChips();
@@ -2410,15 +2428,16 @@ async function sendGlobalChat(message) {
   _globalChatAbort = abort;
 
   const mentionedNames = parseMentions(message);
+  const contextMinds = [...selectedMinds.values()].filter(m => !mentionedNames.includes(m.name));
 
   if (!currentSessionId) await createSession();
   updateSessionTitle(message);
   const sentSessionId = currentSessionId;
 
-  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0);
+  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
   showLoading(chatBox);
 
-  _queueSessionMessage(sentSessionId, 'user', message);
+  _queueSessionMessage(sentSessionId, 'user', message, contextMinds.length ? { contextMinds: contextMinds.map(m => ({ name: m.name })) } : undefined);
 
   _inflightSessionId = sentSessionId;
   const renderGenAtStart = _chatRenderGen;
@@ -2860,7 +2879,8 @@ async function onChatPageShow() {
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
-        appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
+        const cm = m.role === 'user' ? m.contextMinds : undefined;
+        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, false, cm);
       }
     }
     restoreChatSidebar(session.messages);
@@ -3884,10 +3904,11 @@ async function sendBookChat(bookId, message) {
   const chatBox = document.getElementById('book-chat-messages');
   const input = document.getElementById('book-chat-input');
   const mentionedNames = parseMentions(message);
+  const contextMinds = [...selectedMinds.values()].filter(m => !mentionedNames.includes(m.name));
   // Cancel any in-flight minds invitation from previous message
   _mindsInviteGen++;
   removeMindsLoading();
-  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0);
+  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
   if (input) input.value = '';
   showLoading(chatBox);
   const cleanMessage = mentionedNames.length ? stripMentions(message) : message;
@@ -6367,7 +6388,7 @@ async function renderMindDetail(mindId) {
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else if (m.role === 'user') {
-        appendMsg(chatBox, 'user', m.content);
+        appendMsg(chatBox, 'user', m.content, null, null, false, m.contextMinds);
         mindChatHistory.push({ role: 'user', content: m.content });
       } else {
         appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
@@ -6417,10 +6438,11 @@ async function sendMindChat(mindId, message) {
   const chatBox = document.getElementById('mind-chat-messages');
   const input = document.getElementById('mind-chat-input');
   const mentionedNames = parseMentions(message);
+  const contextMinds = [...selectedMinds.values()].filter(m => !mentionedNames.includes(m.name));
   // Cancel any in-flight minds invitation from previous message
   _mindsInviteGen++;
   removeMindsLoading();
-  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0);
+  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
   if (input) input.value = '';
   showLoading(chatBox);
 
@@ -6482,7 +6504,11 @@ function _saveMindSession(chatBox) {
       msgs.push({ role: 'mind', content: el.dataset.raw || '', mindName: el.dataset.mindName || '' });
     } else {
       const role = el.classList.contains('user') ? 'user' : 'assistant';
-      msgs.push({ role, content: el.dataset.raw || el.textContent });
+      const msg = { role, content: el.dataset.raw || el.textContent };
+      if (role === 'user' && el.dataset.contextMinds) {
+        try { msg.contextMinds = JSON.parse(el.dataset.contextMinds); } catch {}
+      }
+      msgs.push(msg);
     }
   });
   session.messages = msgs;
