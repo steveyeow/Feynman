@@ -328,6 +328,8 @@ def _learn_agent(agent_id: str) -> None:
             return
 
         index_meta = index_text(agent_id, text, update_status=False)
+        from .core.db import sync_fts
+        sync_fts(agent_id)
         # Merge skills info + index meta into existing meta
         skills = {"rag": True, "content_fetch": True}
         if config.GEMINI_API_KEY:
@@ -1241,6 +1243,8 @@ def api_rename_agent(agent_id: str, payload: AgentRenameRequest, request: Reques
 def _run_index(agent_id: str, text: str) -> None:
     try:
         index_text(agent_id, text)
+        from .core.db import sync_fts
+        sync_fts(agent_id)
     except Exception as exc:
         update_agent_status(agent_id, "error", {"error": str(exc)})
 

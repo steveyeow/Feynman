@@ -23,6 +23,7 @@ from .db import (
     list_minds_missing_embeddings,
     list_minds_with_embeddings,
     update_mind_embedding,
+    upsert_compiled_memory,
 )
 from .providers import ProviderError, chat_with_fallback, pick_provider
 from .rag import build_context, retrieve_cross_book
@@ -760,10 +761,12 @@ def extract_and_save_memory(
 ) -> None:
     """Extract memory from a conversation turn.
 
-    Saves two types:
-    - Private memory (with user_id): full conversation summary, only visible to that user.
+    Saves three types:
+    - Private interaction memory (with user_id): full conversation summary, only visible to that user.
     - Global topic tag (without user_id): anonymized topic keyword only, safe to share
       across users. Useful for mind's knowledge of popular topics and future user matching.
+    - Compiled memory: synthesized understanding of user from all past interactions,
+      rewritten after each conversation (one per mind-user pair).
     """
     prompt = (
         "Analyze this conversation and return a JSON object with two fields:\n"
@@ -789,8 +792,44 @@ def extract_and_save_memory(
             add_mind_memory(mind_id, summary, topic=topic, user_id=user_id)
         if topic and user_id:
             add_mind_memory(mind_id, topic, topic=topic)
+
+        # Synthesize compiled memory from all interactions
+        if user_id:
+            _update_compiled_memory(mind_id, user_id)
     except Exception as exc:
         log.warning("Memory extraction failed for mind %s: %s", mind_id, exc)
+
+
+def _update_compiled_memory(mind_id: str, user_id: str) -> None:
+    """Fetch all interaction memories for this mind+user and synthesize a compiled understanding."""
+    try:
+        memories = list_mind_memories(mind_id, user_id=user_id, limit=50)
+        interaction_summaries = [
+            m["summary"] for m in memories
+            if m.get("user_id") == user_id and m.get("summary")
+        ]
+        if len(interaction_summaries) < 2:
+            return
+
+        summaries_text = "\n".join(f"- {s}" for s in interaction_summaries[:30])
+        prompt = (
+            "Based on these conversation summaries between a mind and a user, "
+            "write a concise compiled understanding of the user. Include:\n"
+            "- Their interests and recurring themes\n"
+            "- Their intellectual preferences and curiosities\n"
+            "- Any patterns in what they ask about\n\n"
+            f"Conversation summaries:\n{summaries_text}\n\n"
+            "Write 2-4 sentences. Return ONLY the compiled understanding, no JSON."
+        )
+        result, _ = chat_with_fallback(
+            system="You are a concise profiler. Summarize what you know about this user.",
+            user=prompt,
+        )
+        compiled = result.content.strip()
+        if compiled:
+            upsert_compiled_memory(mind_id, user_id, compiled)
+    except Exception as exc:
+        log.warning("Compiled memory update failed for mind %s user %s: %s", mind_id, user_id, exc)
 
 
 def _usage_from_result(result) -> dict[str, int]:

@@ -76,19 +76,59 @@ def extract_text_from_file(path: Path) -> str:
 
 
 def chunk_text(text: str, max_chars: int | None = None, overlap: int | None = None) -> list[str]:
+    """Split text into chunks respecting paragraph and heading boundaries."""
     if not text:
         return []
     max_chars = max_chars or MAX_CHUNK_CHARS
     overlap = overlap if overlap is not None else CHUNK_OVERLAP
+
+    # Step 1: Split on headings and double newlines
+    sections = re.split(r"(?=\n#{1,3}\s)|\n{2,}", text)
+    sections = [s.strip() for s in sections if s and s.strip()]
+
+    # Step 2: Merge small sections, split oversized ones
+    merged: list[str] = []
+    current = ""
+    for section in sections:
+        candidate = (current + "\n\n" + section).strip() if current else section
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            if current:
+                merged.append(current)
+            if len(section) <= max_chars:
+                current = section
+            else:
+                for sub in _split_by_sentences(section, max_chars, overlap):
+                    merged.append(sub)
+                current = ""
+    if current:
+        merged.append(current)
+
+    return merged if merged else [text[:max_chars]]
+
+
+def _split_by_sentences(text: str, max_chars: int, overlap: int) -> list[str]:
+    """Fall back to sentence-level splitting for oversized sections."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     chunks: list[str] = []
-    start = 0
-    length = len(text)
-    while start < length:
-        end = min(start + max_chars, length)
-        chunk = text[start:end]
-        chunks.append(chunk)
-        if end == length:
-            break
-        start = max(0, end - overlap)
+    current = ""
+    for sent in sentences:
+        # If a single sentence exceeds max_chars, hard-split it
+        if len(sent) > max_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            for i in range(0, len(sent), max_chars - overlap):
+                chunks.append(sent[i:i + max_chars])
+            continue
+        candidate = (current + " " + sent).strip() if current else sent
+        if len(candidate) > max_chars and current:
+            chunks.append(current)
+            current = current[-overlap:] + " " + sent if overlap else sent
+        else:
+            current = candidate
+    if current.strip():
+        chunks.append(current.strip())
     return chunks
 

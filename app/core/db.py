@@ -161,6 +161,17 @@ def init_db() -> None:
                 )
             """)
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_chunks_agent_id ON chunks(agent_id)")
+            # Migration: add tsvector column for full-text search
+            try:
+                _execute(conn, "SAVEPOINT sp_chunks_search_vec")
+                _execute(conn, "ALTER TABLE chunks ADD COLUMN search_vector tsvector")
+                _execute(conn, """
+                    CREATE INDEX IF NOT EXISTS idx_chunks_search
+                    ON chunks USING gin(search_vector)
+                """)
+                _execute(conn, "RELEASE SAVEPOINT sp_chunks_search_vec")
+            except Exception:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_chunks_search_vec")
             _execute(conn, """
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
@@ -307,6 +318,14 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_mind_memories_uid")
 
+            # Migration: add memory_type to mind_memories
+            try:
+                _execute(conn, "SAVEPOINT sp_mem_type")
+                _execute(conn, "ALTER TABLE mind_memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'interaction'")
+                _execute(conn, "RELEASE SAVEPOINT sp_mem_type")
+            except Exception:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_mem_type")
+
             # Migration: add embedding columns to minds table
             for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL")]:
                 try:
@@ -405,6 +424,12 @@ def init_db() -> None:
                 )
             """)
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_chunks_agent_id ON chunks(agent_id)")
+            # FTS5 full-text search index for hybrid search
+            _execute(conn, """
+                CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                    text, content=chunks, content_rowid=rowid
+                )
+            """)
             _execute(conn, """
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
@@ -558,6 +583,12 @@ def init_db() -> None:
             except Exception:
                 pass
 
+            # Migration: add memory_type to mind_memories
+            try:
+                _execute(conn, "ALTER TABLE mind_memories ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'interaction'")
+            except Exception:
+                pass
+
             # Migration: add embedding columns to minds table
             for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION")]:
                 try:
@@ -698,6 +729,70 @@ def get_chunks_batch(agent_ids: list[str]) -> list[dict[str, Any]]:
         return _fetchall(conn, _q(
             f"SELECT id, agent_id, chunk_index, text, vector, dim, norm FROM chunks WHERE agent_id IN ({placeholders}) ORDER BY agent_id, chunk_index ASC"
         ), tuple(agent_ids))
+
+
+def keyword_search_chunks(query: str, agent_ids: list[str] | None = None, limit: int = 30) -> list[dict[str, Any]]:
+    """FTS keyword search over chunks. Returns [] if FTS is unavailable."""
+    with get_conn() as conn:
+        if _USE_PG:
+            where_agent = ""
+            params: list = [query, query, limit]
+            if agent_ids:
+                placeholders = ",".join(["%s"] * len(agent_ids))
+                where_agent = f"AND c.agent_id IN ({placeholders})"
+                params = [query, query] + agent_ids + [limit]
+            try:
+                rows = _fetchall(conn,
+                    f"""SELECT c.id, c.agent_id, c.chunk_index, c.text, c.vector, c.dim, c.norm,
+                               ts_rank(c.search_vector, plainto_tsquery('english', %s)) AS fts_rank
+                        FROM chunks c
+                        WHERE c.search_vector @@ plainto_tsquery('english', %s)
+                        {where_agent}
+                        ORDER BY fts_rank DESC LIMIT %s""",
+                    tuple(params))
+                return rows
+            except Exception:
+                return []
+        else:
+            try:
+                tokens = query.strip().split()
+                fts_q = " OR ".join('"' + t.replace('"', '""') + '"' for t in tokens) if tokens else '""'
+                if agent_ids:
+                    placeholders = ",".join(["?"] * len(agent_ids))
+                    rows = _fetchall(conn, _q(
+                        f"""SELECT c.id, c.agent_id, c.chunk_index, c.text, c.vector, c.dim, c.norm,
+                                   chunks_fts.rank AS fts_rank
+                            FROM chunks_fts
+                            JOIN chunks c ON c.rowid = chunks_fts.rowid
+                            WHERE chunks_fts MATCH ?
+                              AND c.agent_id IN ({placeholders})
+                            ORDER BY chunks_fts.rank LIMIT ?"""
+                    ), (fts_q, *agent_ids, limit))
+                else:
+                    rows = _fetchall(conn, _q(
+                        """SELECT c.id, c.agent_id, c.chunk_index, c.text, c.vector, c.dim, c.norm,
+                                  chunks_fts.rank AS fts_rank
+                           FROM chunks_fts
+                           JOIN chunks c ON c.rowid = chunks_fts.rowid
+                           WHERE chunks_fts MATCH ?
+                           ORDER BY chunks_fts.rank LIMIT ?"""
+                    ), (fts_q, limit))
+                return rows
+            except Exception:
+                return []
+
+
+def sync_fts(agent_id: str) -> None:
+    """Populate FTS index for an agent's chunks (SQLite only)."""
+    if _USE_PG:
+        return
+    with get_conn() as conn:
+        rows = _fetchall(conn, "SELECT rowid, text FROM chunks WHERE agent_id = ?", (agent_id,))
+        for r in rows:
+            try:
+                _execute(conn, "INSERT INTO chunks_fts(rowid, text) VALUES (?, ?)", (r["rowid"], r["text"]))
+            except Exception:
+                pass
 
 
 def _get_or_create_book_session(agent_id: str, user_id: str) -> str:
@@ -1030,19 +1125,45 @@ def add_mind_memory(mind_id: str, summary: str, topic: str = "", user_id: str | 
         ), (str(uuid.uuid4()), mind_id, user_id, summary, topic, _utcnow()))
 
 
+def upsert_compiled_memory(mind_id: str, user_id: str, summary: str, topic: str = "user_profile") -> None:
+    """Update the compiled memory for a mind-user pair. Creates if doesn't exist."""
+    with get_conn() as conn:
+        existing = _fetchone(conn, _q(
+            "SELECT id FROM mind_memories WHERE mind_id = ? AND user_id = ? AND memory_type = 'compiled'"
+        ), (mind_id, user_id or ""))
+        if existing:
+            _execute(conn, _q(
+                "UPDATE mind_memories SET summary = ?, topic = ?, created_at = ? WHERE id = ?"
+            ), (summary, topic, _utcnow(), existing["id"]))
+        else:
+            _execute(conn, _q(
+                "INSERT INTO mind_memories (id, mind_id, user_id, summary, topic, memory_type, created_at) VALUES (?, ?, ?, ?, ?, 'compiled', ?)"
+            ), (str(uuid.uuid4()), mind_id, user_id or "", summary, topic, _utcnow()))
+
+
 def list_mind_memories(mind_id: str, user_id: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
     """Return memories for a mind.
 
     Privacy model:
+    - Compiled memory (memory_type='compiled'): synthesized understanding of user,
+      returned first as primary context.
     - Private memories (user_id matches): return full summary + topic.
     - Global topic tags (user_id IS NULL): return topic ONLY (no summary) to
       prevent leaking specific conversation content across users.
     """
     with get_conn() as conn:
         if user_id:
+            # Compiled memory first (primary context)
+            compiled = _fetchall(conn, _q(
+                """SELECT summary, topic, created_at, user_id FROM mind_memories
+                   WHERE mind_id = ? AND user_id = ? AND memory_type = 'compiled'
+                   ORDER BY created_at DESC LIMIT 1"""
+            ), (mind_id, user_id))
+            # Then interaction memories (secondary context)
             private = _fetchall(conn, _q(
                 """SELECT summary, topic, created_at, user_id FROM mind_memories
                    WHERE mind_id = ? AND user_id = ?
+                   AND (memory_type = 'interaction' OR memory_type IS NULL)
                    ORDER BY created_at DESC LIMIT ?"""
             ), (mind_id, user_id, limit))
             global_tags = _fetchall(conn, _q(
@@ -1050,7 +1171,7 @@ def list_mind_memories(mind_id: str, user_id: str | None = None, limit: int = 20
                    WHERE mind_id = ? AND user_id IS NULL AND topic != ''
                    ORDER BY created_at DESC LIMIT ?"""
             ), (mind_id, limit))
-            rows = list(private)
+            rows = list(compiled) + list(private)
             for g in global_tags:
                 rows.append({"summary": "", "topic": g["topic"],
                              "created_at": g["created_at"], "user_id": None})
