@@ -38,7 +38,7 @@ PUBLIC_PATHS = {
     "/llms.txt",
     "/llms-full.txt",
 }
-PUBLIC_PREFIXES = ("/static/", "/share/")
+PUBLIC_PREFIXES = ("/static/", "/share/", "/book/", "/mind/", "/api/public/")
 
 # GET requests to these paths require authentication (user-specific data)
 PRIVATE_GET_PREFIXES = (

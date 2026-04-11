@@ -560,24 +560,30 @@ def robots_txt():
     from fastapi.responses import PlainTextResponse
     content = f"""User-agent: *
 Allow: /
+Allow: /book/
+Allow: /mind/
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 Disallow: /static/
 
 User-agent: GPTBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 User-agent: Google-Extended
 Allow: /
@@ -586,16 +592,19 @@ User-agent: PerplexityBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 User-agent: Applebot-Extended
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 User-agent: cohere-ai
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
+Allow: /api/public/
 
 Sitemap: {_SITE_URL}/sitemap.xml
 """
@@ -631,12 +640,22 @@ def sitemap_xml():
     <priority>{p["priority"]}</priority>
   </url>
 """
-    # Include published AI book share pages
+    # Include all ready books and minds
     try:
         for agent in list_agents():
-            if agent.get("status") == "ready" and agent.get("agent_type") == "ai_book":
-                urls += f"""  <url>
-    <loc>{_SITE_URL}/share/{agent["id"]}</loc>
+            if agent.get("status") != "ready":
+                continue
+            priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
+            urls += f"""  <url>
+    <loc>{_SITE_URL}/book/{agent["id"]}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>{priority}</priority>
+  </url>
+"""
+        for mind in list_minds():
+            urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["id"]}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -800,6 +819,35 @@ The project draws inspiration from Richard Feynman's approach to learning:
 - [Terms of Service]({_SITE_URL}/terms)
 - [Privacy Policy]({_SITE_URL}/privacy)
 
+## Available Books
+
+"""
+    try:
+        for agent in list_agents():
+            if agent.get("status") != "ready":
+                continue
+            name = agent.get("name", "Untitled")
+            source = agent.get("source", "")
+            agent_type = agent.get("type", "book")
+            label = "AI-generated book" if agent_type == "ai_book" else "book"
+            author_part = f" by {source}" if source else ""
+            content += f"- [{name}]({_SITE_URL}/book/{agent['id']}): {label}{author_part}\n"
+    except Exception:
+        content += "- (catalog temporarily unavailable)\n"
+
+    content += f"""
+## Available Great Minds
+
+"""
+    try:
+        for mind in list_minds():
+            name = mind.get("name", "Unknown")
+            domain = mind.get("domain", "")
+            content += f"- [{name}]({_SITE_URL}/mind/{mind['id']}): {domain}\n"
+    except Exception:
+        content += "- (minds catalog temporarily unavailable)\n"
+
+    content += f"""
 ## Contact
 
 - Creator: Steve Yao
@@ -817,62 +865,10 @@ The project draws inspiration from Richard Feynman's approach to learning:
 
 @app.get("/share/{agent_id}", response_class=HTMLResponse)
 def share_page(agent_id: str) -> HTMLResponse:
-    """Serve a lightweight page with OG/Twitter meta tags for social sharing.
-
-    Crawlers (Twitter, etc.) must see stable og:image URLs and must not be sent
-    through meta-refresh to the SPA (hash routes strip book-specific tags).
-    Humans are redirected via JavaScript only so bots keep this HTML + image URL.
-    """
-    from html import escape as html_esc
+    """Legacy share URL — 301 redirect to canonical /book/ path."""
+    from fastapi.responses import RedirectResponse
     from urllib.parse import quote
-
-    agent = get_agent(agent_id)
-    book = get_ai_book_by_agent(agent_id) if agent else None
-    title = html_esc(book["title"] if book and book.get("title") else (agent["title"] if agent else "Untitled"))
-    outline = book.get("outline") if book else None
-    subtitle_raw = outline.get("subtitle", "") if isinstance(outline, dict) else ""
-    chapter_count = len(outline.get("chapters", [])) if isinstance(outline, dict) else 0
-    author_raw = _resolve_og_author(agent, book)
-    if subtitle_raw:
-        desc = html_esc(subtitle_raw)
-    elif author_raw:
-        desc = html_esc(f"by {author_raw} — A {chapter_count}-chapter book on feynman.wiki")
-    else:
-        desc = html_esc(f"A {chapter_count}-chapter book on feynman.wiki")
-    base = _SITE_URL
-    id_path = quote(agent_id, safe="")
-    reader_url = f"{base}/#/read/{id_path}"
-    v = config.OG_IMAGE_CACHE_VERSION
-    og_image_url = f"{base}/share/{id_path}/og.png?v={v}"
-    share_canonical = f"{base}/share/{id_path}"
-
-    # JSON-escape for use inside <script> (human redirect only; crawlers do not run JS)
-    reader_js = json.dumps(reader_url)
-
-    html = f"""<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<title>{title} — Feynman</title>
-<meta name="description" content="{desc}">
-<meta property="og:type" content="article">
-<meta property="og:title" content="{title}">
-<meta property="og:description" content="{desc}">
-<meta property="og:image" content="{og_image_url}">
-<meta property="og:image:secure_url" content="{og_image_url}">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:url" content="{share_canonical}">
-<meta property="og:site_name" content="Feynman">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{title}">
-<meta name="twitter:description" content="{desc}">
-<meta name="twitter:image" content="{og_image_url}">
-</head><body>
-<p>Redirecting to <a href="{html_esc(reader_url)}">{title}</a>…</p>
-<script>window.location.replace({reader_js});</script>
-<noscript><p><a href="{html_esc(reader_url)}">Continue to the book</a></p></noscript>
-</body></html>"""
-    return HTMLResponse(html)
+    return RedirectResponse(f"/book/{quote(agent_id, safe='')}", status_code=301)
 
 
 @app.get("/share/{agent_id}/og.png")
@@ -905,6 +901,177 @@ def api_og_image(agent_id: str):
     return Response(content=png_bytes, media_type="image/png", headers={
         "Cache-Control": "public, max-age=86400, s-maxage=604800",
     })
+
+
+# ─── Crawlable SSR pages for books and minds ───
+
+@app.get("/book/{agent_id}", response_class=HTMLResponse)
+def book_page(agent_id: str) -> HTMLResponse:
+    """Server-rendered book landing page with OG tags and JSON-LD for SEO/GEO."""
+    from html import escape as html_esc
+    from urllib.parse import quote
+
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    book = get_ai_book_by_agent(agent_id) if agent else None
+    title = html_esc(book["title"] if book and book.get("title") else agent.get("name", "Untitled"))
+    meta = agent.get("meta") or {}
+    outline = book.get("outline") if book else None
+    subtitle_raw = outline.get("subtitle", "") if isinstance(outline, dict) else ""
+    chapter_count = len(outline.get("chapters", [])) if isinstance(outline, dict) else 0
+    author_raw = _resolve_og_author(agent, book)
+    total_words = book.get("total_words", 0) if book else 0
+
+    if subtitle_raw:
+        desc = html_esc(subtitle_raw)
+    elif author_raw:
+        desc = html_esc(f"by {author_raw} — Read and chat with this book on Feynman")
+    else:
+        desc = html_esc(f"Read and chat with this book on Feynman")
+
+    base = _SITE_URL
+    id_path = quote(agent_id, safe="")
+    canonical = f"{base}/book/{id_path}"
+    reader_url = f"{base}/#/read/{id_path}"
+    v = config.OG_IMAGE_CACHE_VERSION
+    og_image_url = f"{base}/share/{id_path}/og.png?v={v}"
+    reader_js = json.dumps(reader_url)
+
+    chapters_json = "[]"
+    toc_html = ""
+    if book and isinstance(outline, dict):
+        chapters = outline.get("chapters", [])
+        toc_items = "".join(f"<li>{html_esc(ch.get('title', ''))}</li>" for ch in chapters)
+        toc_html = f"<h2>Table of Contents</h2><ol>{toc_items}</ol>" if toc_items else ""
+        chapters_json = json.dumps([
+            {"@type": "Chapter", "name": ch.get("title", ""), "position": i + 1}
+            for i, ch in enumerate(chapters)
+        ])
+
+    jsonld = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "Book",
+        "name": book["title"] if book and book.get("title") else agent.get("name", "Untitled"),
+        "description": subtitle_raw or desc,
+        "author": {"@type": "Person", "name": author_raw} if author_raw else None,
+        "url": canonical,
+        "image": og_image_url,
+        "numberOfPages": chapter_count or None,
+        "wordCount": total_words or None,
+        "hasPart": json.loads(chapters_json) if chapters_json != "[]" else None,
+        "publisher": {"@type": "Organization", "name": "Feynman", "url": base},
+    }, ensure_ascii=False)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>{title} — Feynman</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="book">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
+<script type="application/ld+json">{jsonld}</script>
+</head><body>
+<h1>{title}</h1>
+{f'<p>{desc}</p>' if desc else ''}
+{f'<p>by {html_esc(author_raw)}</p>' if author_raw else ''}
+{toc_html}
+<p><a href="{html_esc(reader_url)}">Read and chat with this book on Feynman →</a></p>
+<script>window.location.replace({reader_js});</script>
+<noscript><p><a href="{html_esc(reader_url)}">Continue to the book</a></p></noscript>
+</body></html>"""
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+@app.get("/book/{agent_id}/og.png")
+def book_og_image(agent_id: str):
+    """OG image via /book/ path — delegates to the shared generator."""
+    return api_og_image(agent_id)
+
+
+@app.get("/mind/{mind_id}", response_class=HTMLResponse)
+def mind_page(mind_id: str) -> HTMLResponse:
+    """Server-rendered mind landing page with OG tags and JSON-LD Person schema."""
+    from html import escape as html_esc
+
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+
+    name = html_esc(mind.get("name", "Unknown"))
+    era = html_esc(mind.get("era", ""))
+    domain = html_esc(mind.get("domain", ""))
+    bio = html_esc(mind.get("bio_summary", ""))
+    works_raw = mind.get("works") or []
+    works_list = works_raw if isinstance(works_raw, list) else []
+
+    desc = bio or f"{name} — {domain} thinker on Feynman"
+    base = _SITE_URL
+    canonical = f"{base}/mind/{mind_id}"
+    reader_url = f"{base}/#/minds"
+    reader_js = json.dumps(reader_url)
+
+    works_html = ""
+    if works_list:
+        items = "".join(f"<li>{html_esc(w)}</li>" for w in works_list[:20])
+        works_html = f"<h2>Notable Works</h2><ul>{items}</ul>"
+
+    jsonld = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": mind.get("name", "Unknown"),
+        "description": mind.get("bio_summary", ""),
+        "knowsAbout": mind.get("domain", ""),
+        "url": canonical,
+        "sameAs": [],
+    }, ensure_ascii=False)
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>{name} — Feynman Great Minds</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="{name}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{name}">
+<meta name="twitter:description" content="{desc}">
+<script type="application/ld+json">{jsonld}</script>
+</head><body>
+<h1>{name}</h1>
+{f'<p>{era} · {domain}</p>' if era else f'<p>{domain}</p>'}
+{f'<p>{bio}</p>' if bio else ''}
+{works_html}
+<p><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
+<script>window.location.replace({reader_js});</script>
+<noscript><p><a href="{html_esc(reader_url)}">Continue to Great Minds</a></p></noscript>
+</body></html>"""
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+@app.get("/api/public/book/{agent_id}/read")
+def api_public_read_book(agent_id: str) -> dict[str, Any]:
+    """Public read endpoint — only serves ready (published) books without auth."""
+    agent = get_agent(agent_id)
+    if not agent or agent.get("status") != "ready":
+        raise HTTPException(status_code=404, detail="Book not found or not published")
+    return api_read_book(agent_id)
 
 
 @app.get("/api/health")
