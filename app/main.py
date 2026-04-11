@@ -930,7 +930,7 @@ def book_page(agent_id: str) -> HTMLResponse:
     canonical = f"{base}/book/{id_path}"
     reader_url = f"{base}/#/read/{id_path}"
     v = config.OG_IMAGE_CACHE_VERSION
-    og_image_url = f"{base}/share/{id_path}/og.png?v={v}"
+    og_image_url = f"{base}/book/{id_path}/og.png?v={v}"
     reader_js = json.dumps(reader_url)
 
     chapters_json = "[]"
@@ -1005,6 +1005,26 @@ def book_og_image(agent_id: str):
     return api_og_image(agent_id)
 
 
+@app.get("/mind/{mind_id}/og.png")
+def mind_og_image(mind_id: str):
+    """Generate a dynamic Open Graph image for a mind."""
+    from fastapi.responses import Response
+    from .core.og_image import generate_mind_og_image
+
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+
+    png_bytes = generate_mind_og_image(
+        name=mind.get("name", "Unknown"),
+        domain=mind.get("domain", ""),
+        era=mind.get("era", ""),
+        bio=mind.get("bio_summary", ""),
+    )
+    return Response(content=png_bytes, media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=86400, s-maxage=604800"})
+
+
 @app.get("/mind/{mind_id}", response_class=HTMLResponse)
 def mind_page(mind_id: str) -> HTMLResponse:
     """Server-rendered mind landing page with OG tags and JSON-LD Person schema."""
@@ -1024,6 +1044,7 @@ def mind_page(mind_id: str) -> HTMLResponse:
     desc = bio or f"{name} — {domain} thinker on Feynman"
     base = _SITE_URL
     canonical = f"{base}/mind/{mind_id}"
+    og_image_url = f"{base}/mind/{mind_id}/og.png"
     reader_url = f"{base}/#/mind/{mind_id}"
     reader_js = json.dumps(reader_url)
 
@@ -1039,6 +1060,7 @@ def mind_page(mind_id: str) -> HTMLResponse:
         "description": mind.get("bio_summary", ""),
         "knowsAbout": mind.get("domain", ""),
         "url": canonical,
+        "image": og_image_url,
         "sameAs": [],
     }, ensure_ascii=False)
 
@@ -1057,11 +1079,15 @@ def mind_page(mind_id: str) -> HTMLResponse:
 <meta property="og:type" content="profile">
 <meta property="og:title" content="{name}">
 <meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
-<meta name="twitter:card" content="summary">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{name}">
 <meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
 <script type="application/ld+json">{jsonld}</script>
 </head><body>
 <h1>{name}</h1>

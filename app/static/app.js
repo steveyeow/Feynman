@@ -6454,7 +6454,37 @@ async function renderMindDetail(mindId) {
     ${domains.length ? `<div style="margin-bottom:12px">${domains.map(d => `<span class="mind-domain-tag">${esc(d)}</span> `).join('')}</div>` : ''}
     ${works.length ? `<h3 class="sidebar-title" style="margin-top:16px">WORKS</h3><ul style="font-size:12px;color:var(--text-secondary);padding-left:16px;margin:0">${works.map(w => `<li style="margin-bottom:4px">${esc(w)}</li>`).join('')}</ul>` : ''}
     <p style="font-size:11px;color:var(--text-muted);margin-top:12px">${mind.chat_count || 0} discussions</p>
-    <button type="button" class="mind-share-btn" onclick="shareMind('${esc(mind.id)}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share</button>`;
+    <div class="mind-share-wrap">
+      <button type="button" class="mind-share-btn mind-share-trigger"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>Share</button>
+      <div class="mind-share-popup">
+        <button type="button" class="mind-share-opt mind-share-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>Post on X</button>
+        <button type="button" class="mind-share-opt mind-share-copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Copy link</button>
+      </div>
+    </div>`;
+
+  const mindShareWrap = metaSidebar.querySelector('.mind-share-wrap');
+  if (mindShareWrap) {
+    const mindShareUrl = `${window.location.origin}/mind/${encodeURIComponent(mind.id)}`;
+    const mindTweetText = encodeURIComponent(`Chat with ${mind.name} on feynman.wiki`);
+    const mindTweetUrl = encodeURIComponent(mindShareUrl);
+    const mindTweetIntent = `https://twitter.com/intent/tweet?text=${mindTweetText}&url=${mindTweetUrl}`;
+    mindShareWrap.querySelector('.mind-share-trigger').addEventListener('click', (e) => {
+      e.stopPropagation();
+      mindShareWrap.classList.toggle('open');
+    });
+    mindShareWrap.querySelector('.mind-share-x').addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open(mindTweetIntent, '_blank');
+      mindShareWrap.classList.remove('open');
+    });
+    mindShareWrap.querySelector('.mind-share-copy').addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(mindShareUrl);
+      _showToast('Link copied');
+      mindShareWrap.classList.remove('open');
+    });
+    document.addEventListener('click', () => mindShareWrap.classList.remove('open'), { once: false });
+  }
 }
 
 async function sendMindChat(mindId, message) {

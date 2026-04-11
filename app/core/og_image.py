@@ -1,4 +1,4 @@
-"""Generate Open Graph / Twitter Card images — clean book cover on dark field."""
+"""Generate Open Graph / Twitter Card images for books and minds."""
 from __future__ import annotations
 
 import io
@@ -21,6 +21,12 @@ RULE = (200, 188, 172)
 TEXT_DARK = (29, 29, 31)
 TEXT_MID = (100, 90, 80)
 TEXT_LIGHT = (145, 135, 122)
+
+MIND_COLORS = [
+    (66, 133, 133), (133, 94, 66), (94, 66, 133),
+    (66, 94, 133), (133, 66, 94), (66, 133, 94),
+    (120, 100, 80), (80, 120, 100), (100, 80, 120),
+]
 
 
 def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
@@ -162,6 +168,81 @@ def generate_og_image(
     ibbox = draw.textbbox((0, 0), "FEYNMAN", font=ft_imprint)
     draw.text((fcx - 10, imp_y - (ibbox[3] - ibbox[1]) // 2 - 1),
               "FEYNMAN", fill=TEXT_LIGHT, font=ft_imprint)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def _mind_initials(name: str) -> str:
+    parts = name.split()
+    if len(parts) >= 2:
+        return (parts[0][0] + parts[-1][0]).upper()
+    return name[:2].upper() if name else "?"
+
+
+def _mind_color(name: str) -> tuple[int, int, int]:
+    h = sum(ord(c) for c in name)
+    return MIND_COLORS[h % len(MIND_COLORS)]
+
+
+def generate_mind_og_image(
+    name: str,
+    domain: str = "",
+    era: str = "",
+    bio: str = "",
+) -> bytes:
+    """Generate an OG image for a mind — initials avatar with name and tagline."""
+    img = Image.new("RGB", (W, H), BG)
+    draw = ImageDraw.Draw(img)
+
+    ft_name = _font("Georgia-Bold.ttf", 36)
+    ft_tag = _font("Georgia-Regular.ttf", 18)
+    ft_imprint = _font("Georgia-Regular.ttf", 12)
+
+    color = _mind_color(name)
+    initials = _mind_initials(name)
+    radius = 64
+    cx, cy_avatar = W // 2, 190
+    draw.ellipse(
+        [(cx - radius, cy_avatar - radius), (cx + radius, cy_avatar + radius)],
+        fill=color,
+    )
+    ft_init = _font("Georgia-Bold.ttf", 52)
+    ibbox = draw.textbbox((0, 0), initials, font=ft_init)
+    iw = ibbox[2] - ibbox[0]
+    ih = ibbox[3] - ibbox[1]
+    draw.text(
+        (cx - iw // 2, cy_avatar - ih // 2 - ibbox[1]),
+        initials, fill=(255, 255, 255), font=ft_init,
+    )
+
+    name_y = cy_avatar + radius + 28
+    _text_centered(draw, name_y, name, ft_name, COVER_BG, 100, W - 100)
+
+    tagline = ""
+    if era and domain:
+        tagline = f"{era} · {domain}"
+    elif domain:
+        tagline = domain
+    elif era:
+        tagline = era
+    if tagline:
+        tag_lines = _wrap(tagline, ft_tag, W - 240, draw)[:2]
+        ty = name_y + 50
+        for ln in tag_lines:
+            _text_centered(draw, ty, ln, ft_tag, TEXT_LIGHT, 120, W - 120)
+            ty += 28
+
+    imp_y = H - 40
+    _draw_feynman_mark(draw, W // 2 - 30, imp_y, 0.4, TEXT_LIGHT)
+    ft_mark = _font("Georgia-Regular.ttf", 11)
+    mbbox = draw.textbbox((0, 0), "FEYNMAN  GREAT MINDS", font=ft_mark)
+    mw = mbbox[2] - mbbox[0]
+    draw.text(
+        (W // 2 - mw // 2 + 8, imp_y - (mbbox[3] - mbbox[1]) // 2),
+        "FEYNMAN  GREAT MINDS", fill=TEXT_LIGHT, font=ft_mark,
+    )
 
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)

@@ -1986,8 +1986,11 @@ body {
   background: var(--bg-sidebar);
   color: var(--text-secondary);
 }
+.mind-share-wrap {
+  position: relative; margin-top: 12px;
+}
 .mind-share-btn {
-  margin-top: 12px; width: 100%; padding: 8px 0;
+  width: 100%; padding: 8px 0;
   border: 1px solid var(--border); border-radius: 8px;
   background: transparent; color: var(--text-secondary);
   cursor: pointer; font-size: 12px;
@@ -1997,6 +2000,24 @@ body {
 .mind-share-btn:hover {
   background: var(--bg-hover); color: var(--text-primary);
 }
+.mind-share-popup {
+  display: none; position: absolute; bottom: calc(100% + 6px); left: 0; right: 0;
+  background: var(--bg-chat); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 4px; min-width: 168px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 50;
+}
+html.dark .mind-share-popup { box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+.mind-share-wrap.open .mind-share-popup { display: block; }
+.mind-share-opt {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border: none; border-radius: 6px;
+  background: transparent; color: var(--text);
+  font: 500 13px/1 'Inter', sans-serif;
+  cursor: pointer; transition: background 0.12s;
+}
+.mind-share-opt:hover { background: rgba(0,0,0,0.05); }
+html.dark .mind-share-opt:hover { background: rgba(255,255,255,0.08); }
+.mind-share-opt svg { flex-shrink: 0; color: var(--text-secondary); }
 .mind-chat-btn {
   font-size: 12px;
   font-weight: 500;
