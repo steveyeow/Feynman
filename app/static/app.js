@@ -4497,14 +4497,14 @@ async function renderReader(agentId) {
   page.innerHTML = `<div class="reader-loading"><span class="loading-dot">Loading book...</span></div>`;
 
   try {
-    _readerData = await api(`/api/agents/${agentId}/read`);
-  } catch (err) {
-    try {
+    if (window.FEYNMAN_PRO && !currentUser) {
       _readerData = await api(`/api/public/book/${agentId}/read`);
-    } catch (err2) {
-      page.innerHTML = `<div class="reader-empty"><p>Could not load book: ${esc(err2.message)}</p><a href="#/library" class="reader-back-link">&larr; Back to Library</a></div>`;
-      return;
+    } else {
+      _readerData = await api(`/api/agents/${agentId}/read`);
     }
+  } catch (err) {
+    page.innerHTML = `<div class="reader-empty"><p>Could not load book: ${esc(err.message)}</p><a href="#/library" class="reader-back-link">&larr; Back to Library</a></div>`;
+    return;
   }
 
   const d = _readerData;

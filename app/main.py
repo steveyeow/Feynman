@@ -59,6 +59,7 @@ from .core.db import (
     get_ai_book_by_agent,
     get_ai_book_status,
     get_chunks,
+    get_chunks_text_only,
     list_ai_books,
     update_ai_book_outline,
     update_ai_book_status,
@@ -564,26 +565,22 @@ Allow: /book/
 Allow: /mind/
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 Disallow: /static/
 
 User-agent: GPTBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 User-agent: ChatGPT-User
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 User-agent: ClaudeBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 User-agent: Google-Extended
 Allow: /
@@ -592,19 +589,16 @@ User-agent: PerplexityBot
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 User-agent: Applebot-Extended
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 User-agent: cohere-ai
 Allow: /
 Disallow: /api/
 Allow: /api/og-image/
-Allow: /api/public/
 
 Sitemap: {_SITE_URL}/sitemap.xml
 """
@@ -1081,12 +1075,13 @@ def mind_page(mind_id: str) -> HTMLResponse:
 
 
 @app.get("/api/public/book/{agent_id}/read")
-def api_public_read_book(agent_id: str) -> dict[str, Any]:
+def api_public_read_book(agent_id: str, request: Request) -> dict[str, Any]:
     """Public read endpoint — only serves ready (published) books without auth."""
     agent = get_agent(agent_id)
     if not agent or agent.get("status") != "ready":
         raise HTTPException(status_code=404, detail="Book not found or not published")
-    return api_read_book(agent_id)
+    request.state._public_agent = agent
+    return api_read_book(agent_id, _agent=agent)
 
 
 @app.get("/api/health")
@@ -2193,9 +2188,9 @@ def api_ai_books_list(request: Request) -> list[dict[str, Any]]:
 # ─── Book Reader endpoint ───
 
 @app.get("/api/agents/{agent_id}/read")
-def api_read_book(agent_id: str) -> dict[str, Any]:
+def api_read_book(agent_id: str, _agent: dict | None = None) -> dict[str, Any]:
     """Return book content for the reader. AI books return chapters; regular books return reassembled chunks."""
-    agent = get_agent(agent_id)
+    agent = _agent or get_agent(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -2235,8 +2230,8 @@ def api_read_book(agent_id: str) -> dict[str, Any]:
             "total_words": sum(c["word_count"] for c in chapters),
         }
 
-    # Regular book: reassemble chunks into readable text
-    chunks = get_chunks(agent_id)
+    # Regular book: reassemble chunks into readable text (text-only, no vectors)
+    chunks = get_chunks_text_only(agent_id)
     if not chunks:
         raise HTTPException(status_code=404, detail="No content available")
 

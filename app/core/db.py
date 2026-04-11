@@ -720,6 +720,14 @@ def get_chunks(agent_id: str) -> list[dict[str, Any]]:
         ), (agent_id,))
 
 
+def get_chunks_text_only(agent_id: str) -> list[dict[str, Any]]:
+    """Lightweight variant that skips vector/dim/norm — for the reader."""
+    with get_conn() as conn:
+        return _fetchall(conn, _q(
+            "SELECT id, chunk_index, text FROM chunks WHERE agent_id = ? ORDER BY chunk_index ASC"
+        ), (agent_id,))
+
+
 def get_chunks_batch(agent_ids: list[str]) -> list[dict[str, Any]]:
     """Fetch chunks for multiple agents in a single query."""
     if not agent_ids:
