@@ -438,7 +438,7 @@ body {
   align-items: stretch;
   justify-content: center;
   padding: 0 24px;
-  max-width: 768px;
+  max-width: 720px;
   width: 100%; margin: 0 auto;
   margin-top: -80px;
 }
@@ -972,7 +972,7 @@ body {
   z-index: 10;
 }
 .chat-composer-inline {
-  max-width: 768px; margin: 0 auto;
+  max-width: 720px; margin: 0 auto;
 }
 
 /* Messages */
