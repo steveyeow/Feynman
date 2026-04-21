@@ -355,6 +355,7 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: b
         result, _ = chat_with_fallback(
             system="You are an expert on intellectual history. Return only valid JSON.",
             user=prompt,
+            timeout=90,
         )
         data = _parse_json_response(result.content)
     except Exception as exc:
@@ -463,6 +464,7 @@ def create_mind_from_content(
         result, _ = chat_with_fallback(
             system="You are an expert at analyzing writing to build persona profiles. Return only valid JSON.",
             user=prompt,
+            timeout=90,
         )
         data = _parse_json_response(result.content)
     except Exception as exc:

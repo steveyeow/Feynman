@@ -46,7 +46,7 @@ class BaseProvider:
     def embed_texts(self, texts: list[str], task_type: str | None = None) -> list[list[float]]:
         raise NotImplementedError
 
-    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False) -> ChatResult:
+    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None) -> ChatResult:
         raise NotImplementedError
 
 
@@ -88,7 +88,7 @@ class OpenAICompatibleProvider(BaseProvider):
         data = self._post("/embeddings", payload, timeout=_EMBED_TIMEOUT)
         return [item["embedding"] for item in data.get("data", [])]
 
-    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False) -> ChatResult:
+    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None) -> ChatResult:
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -100,7 +100,7 @@ class OpenAICompatibleProvider(BaseProvider):
             "messages": messages,
             "temperature": 0.2,
         }
-        data = self._post("/chat/completions", payload)
+        data = self._post("/chat/completions", payload, timeout=timeout)
         content = data["choices"][0]["message"]["content"]
         usage = None
         if "usage" in data:
@@ -190,7 +190,7 @@ class GeminiProvider(BaseProvider):
                 all_embeddings.append(item.get("values", []))
         return all_embeddings
 
-    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False) -> ChatResult:
+    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None) -> ChatResult:
         parts: list[dict[str, str]] = []
         prompt = system.strip()
         if prompt:
@@ -208,7 +208,7 @@ class GeminiProvider(BaseProvider):
         if use_grounding:
             payload["tools"] = [{"google_search": {}}]
         path = f"/models/{self.chat_model}:generateContent"
-        data = self._post(path, payload)
+        data = self._post(path, payload, timeout=timeout)
         candidates = data.get("candidates", [])
         if not candidates:
             raise ProviderError("Gemini returned no candidates")
@@ -290,7 +290,7 @@ class AnthropicProvider(BaseProvider):
     def has_key(self) -> bool:
         return bool(self.api_key)
 
-    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False) -> ChatResult:
+    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None) -> ChatResult:
         messages: list[dict[str, Any]] = []
         if history:
             messages.extend(history)
@@ -307,7 +307,7 @@ class AnthropicProvider(BaseProvider):
             "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
         }
-        with httpx.Client(timeout=_CHAT_TIMEOUT) as client:
+        with httpx.Client(timeout=timeout or _CHAT_TIMEOUT) as client:
             resp = client.post(f"{self.base_url}/v1/messages", headers=headers, json=payload)
         if resp.status_code >= 400:
             raise ProviderError(f"anthropic error {resp.status_code}: {resp.text}")
@@ -385,13 +385,20 @@ def chat_with_fallback(
     user: str,
     history: list[dict[str, str]] | None = None,
     use_grounding: bool = False,
-    max_total_seconds: float = 50,
+    max_total_seconds: float | None = None,
+    timeout: int | None = None,
 ) -> tuple[ChatResult, BaseProvider]:
     """Try each provider in order until one succeeds. Returns (result, provider).
 
-    *max_total_seconds* caps total wall-clock time across all attempts so the
-    caller (e.g. a serverless function) doesn't get killed by the platform.
+    *timeout* is the per-provider HTTP timeout (defaults to _CHAT_TIMEOUT = 30s).
+    Callers expecting long outputs (e.g. mind persona generation) should pass a
+    larger value like 90. *max_total_seconds* caps total wall-clock time across
+    all attempts; defaults to timeout + 20s so at least one provider gets its
+    full budget before the deadline.
     """
+    per_timeout = timeout or _CHAT_TIMEOUT
+    if max_total_seconds is None:
+        max_total_seconds = per_timeout + 20
     errors: list[str] = []
     deadline = time.monotonic() + max_total_seconds
     for name in config.PROVIDER_ORDER:
@@ -407,6 +414,7 @@ def chat_with_fallback(
                 user=user,
                 history=history,
                 use_grounding=use_grounding and isinstance(provider, GeminiProvider),
+                timeout=per_timeout,
             )
             return result, provider
         except Exception as exc:
