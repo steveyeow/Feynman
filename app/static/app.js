@@ -2125,6 +2125,23 @@ function appendJoinNotice(container, mindNames) {
   container.scrollTop = container.scrollHeight;
 }
 
+function appendChatErrorNotice(container, mindNames) {
+  const el = document.createElement('div');
+  el.className = 'chat-system-notice mind-error-notice';
+  let label;
+  if (!mindNames || !mindNames.length) {
+    label = "Couldn't reach the model right now. Please try again in a moment.";
+  } else if (mindNames.length === 1) {
+    label = `${mindNames[0]} couldn't respond right now. Please try again.`;
+  } else {
+    const joined = mindNames.slice(0, -1).join(', ') + ' and ' + mindNames[mindNames.length - 1];
+    label = `${joined} couldn't respond right now. Please try again.`;
+  }
+  el.innerHTML = `<div class="join-notice-inner"><span>${esc(label)}</span></div>`;
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+}
+
 function showMindsLoading(c) {
   let el = document.getElementById('minds-loading-msg');
   if (el) return;
@@ -2655,6 +2672,10 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
       });
     } catch (err) {
       console.warn('[minds] panel-chat failed:', err);
+      if (_mindsInviteGen === inviteGen) {
+        const names = mindIds.map(id => activeMinds.get(id)?.name).filter(Boolean);
+        appendChatErrorNotice(chatBox, names);
+      }
       return;
     }
     if (_mindsInviteGen !== inviteGen) return;
@@ -2695,6 +2716,11 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
             mindChatHistory.push({ role: 'assistant', content: `[${r.mind_name}]: ${r.response}` });
           }
         }
+      }
+      // If panel-chat returned but every mind hit a provider error, surface it instead of silent.
+      if (respondedNames.size === 0) {
+        const failedNames = mindIds.map(id => activeMinds.get(id)?.name).filter(Boolean);
+        appendChatErrorNotice(chatBox, failedNames);
       }
       if (onMindPage) _saveMindSession(chatBox);
     } else if (currentSessionId === sessionId && currentPage === 'chat') {
