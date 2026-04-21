@@ -2618,122 +2618,14 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
   const sessionId = currentSessionId;
   const renderGenAtStart = _chatRenderGen;
   const inviteGen = ++_mindsInviteGen;
-  const autoAddedMindIds = [];
   const onMindPage = getRoute().page === 'mind';
+  const hasMentions = targetMindNames && targetMindNames.length > 0;
 
-  try {
-    const mindIds = [...activeMinds.keys()];
-    for (const [id] of selectedMinds) {
-      if (!mindIds.includes(id)) mindIds.push(id);
-    }
-
-    const hasMentions = targetMindNames && targetMindNames.length > 0;
-    const skipSuggest = hasMentions || (!isProUser() && _mindsInvitedOnce);
-
-    const allKnownNames = [...activeMinds.values(), ...selectedMinds.values()].map(m => m.name);
-    const suggestCount = Math.floor(Math.random() * 3) + 1;
-    const suggestBody = { count: suggestCount, exclude: allKnownNames };
-    if (bookContext && bookContext.length) {
-      suggestBody.book_title = bookContext[0].title;
-      suggestBody.book_author = bookContext[0].author || '';
-    } else {
-      suggestBody.topic = message.slice(0, 100);
-    }
-
-    showMindsLoading(chatBox);
-
-    const newJoinedNames = [];
-    const invitedMindIds = [];
-    for (const [id, m] of selectedMinds) {
-      if (!activeMinds.has(id)) {
-        activeMinds.set(id, m);
-        newJoinedNames.push(m.name);
-        invitedMindIds.push(id);
-      }
-    }
-
-    if (!skipSuggest) {
-      try {
-        const suggestions = await api('/api/minds/suggest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(suggestBody),
-        });
-        if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
-        for (const s of (suggestions.minds || [])) {
-          if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
-          try {
-            const mind = await api('/api/minds/generate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '', link_works: false }),
-            });
-            if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
-            if (!mindIds.includes(mind.id)) {
-              mindIds.push(mind.id);
-              if (!activeMinds.has(mind.id)) {
-                activeMinds.set(mind.id, { id: mind.id, name: mind.name });
-                newJoinedNames.push(mind.name);
-                autoAddedMindIds.push(mind.id);
-              }
-            }
-          } catch (genErr) { console.warn('[minds] generate failed for', s.name, genErr); }
-        }
-      } catch (suggestErr) { console.warn('[minds] suggest failed:', suggestErr); }
-    }
-
-    if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
-
-    // Fallback: if suggest/generate yielded no minds, pick from existing seed minds
-    if (!mindIds.length && allMinds.length) {
-      const topic = (bookContext?.[0]?.title || message || '').toLowerCase();
-      const words = topic.split(/\s+/).filter(w => w.length > 3);
-      const scored = allMinds.map(m => {
-        const hay = ((m.domain || '') + ' ' + (m.era || '') + ' ' + (m.name || '')).toLowerCase();
-        const score = words.reduce((s, w) => s + (hay.includes(w) ? 1 : 0), 0);
-        return { m, score };
-      });
-      scored.sort((a, b) => b.score - a.score || Math.random() - 0.5);
-      const pickCount = Math.min(2, scored.length);
-      for (let i = 0; i < pickCount; i++) {
-        const { m } = scored[i];
-        mindIds.push(m.id);
-        if (!activeMinds.has(m.id)) {
-          activeMinds.set(m.id, { id: m.id, name: m.name });
-          newJoinedNames.push(m.name);
-          autoAddedMindIds.push(m.id);
-        }
-      }
-      console.info('[minds] Used fallback seed minds:', newJoinedNames.join(', '));
-    }
-
-    removeMindsLoading();
-
-    if (!mindIds.length) {
-      console.warn('[minds] No minds available at all (no seed minds either). skipSuggest=', skipSuggest, 'hasMentions=', hasMentions);
-      return;
-    }
-    if (_mindsInviteGen !== inviteGen) return;
-
-    if (!hasMentions && autoAddedMindIds.length > 0) {
-      const consentNames = autoAddedMindIds.map((id) => activeMinds.get(id)?.name).filter(Boolean);
-      const allowed = await showMindJoinPrompt(chatBox, consentNames, inviteGen);
-      if (_mindsInviteGen !== inviteGen) return;
-      if (!allowed) {
-        for (const id of autoAddedMindIds) activeMinds.delete(id);
-        mindIds.length = 0;
-        mindIds.push(...activeMinds.keys());
-        for (const [id] of selectedMinds) {
-          if (!mindIds.includes(id)) mindIds.push(id);
-        }
-        loadMinds();
-        _updateComposerMentionHint();
-        if (!mindIds.length) return;
-      }
-    }
-
-    if (_mindsInviteGen !== inviteGen) return;
-
+  // Run a panel-chat call for the given mind IDs, render results, and persist.
+  // joinedNames are minds new to the conversation (get a join notice).
+  // If applyTargetFilter, target_minds is sent so backend restricts to @-mentioned ones.
+  const runPanelChat = async (mindIds, joinedNames, applyTargetFilter) => {
+    if (!mindIds.length) return;
     const history = [];
     chatBox.querySelectorAll('.chat-message:not(#loading-msg):not(.minds-loading-notice)').forEach(el => {
       if (el.classList.contains('mind-message')) {
@@ -2743,75 +2635,203 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
         history.push({ role, content: el.dataset.raw || el.textContent });
       }
     });
-
-    const cleanMessage = hasMentions ? stripMentions(message) : message;
-    const panelMindIds = excludeMindId ? mindIds.filter(id => id !== excludeMindId) : mindIds;
-    if (!panelMindIds.length) return;
-    const panelBody = { message: cleanMessage, mind_ids: panelMindIds, history };
+    const cleanMessage = applyTargetFilter && hasMentions ? stripMentions(message) : message;
+    const panelBody = { message: cleanMessage, mind_ids: mindIds, history };
     if (bookContext?.length) panelBody.book_context = bookContext;
     if (agentIds?.length) panelBody.agent_ids = agentIds;
-    if (invitedMindIds.length) panelBody.invited_mind_ids = invitedMindIds;
-    if (hasMentions) panelBody.target_minds = targetMindNames;
-
-    const panelData = await api('/api/minds/panel-chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(panelBody),
+    const invitedIds = mindIds.filter(id => {
+      const m = activeMinds.get(id);
+      return m && joinedNames.includes(m.name);
     });
+    if (invitedIds.length) panelBody.invited_mind_ids = invitedIds;
+    if (applyTargetFilter && hasMentions) panelBody.target_minds = targetMindNames;
 
+    let panelData;
+    try {
+      panelData = await api('/api/minds/panel-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(panelBody),
+      });
+    } catch (err) {
+      console.warn('[minds] panel-chat failed:', err);
+      return;
+    }
     if (_mindsInviteGen !== inviteGen) return;
 
-    if (panelData.responses?.length) {
-      const respondedNames = new Set();
-      for (const r of panelData.responses) {
+    const responses = panelData.responses || [];
+    const respondedNames = new Set();
+    for (const r of responses) {
+      if (r.response && !r.response.startsWith('[')) respondedNames.add(r.mind_name);
+    }
+    // Remove freshly-joined minds that failed to actually respond
+    for (const [id, m] of activeMinds) {
+      if (joinedNames.includes(m.name) && !respondedNames.has(m.name)) {
+        activeMinds.delete(id);
+      }
+    }
+    const joinedResponded = joinedNames.filter(n => respondedNames.has(n));
+
+    if (joinedResponded.length) {
+      _queueSessionMessage(sessionId, 'system-notice', '', { mindNames: joinedResponded });
+    }
+    for (const r of responses) {
+      if (r.response && !r.response.startsWith('[')) {
+        _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name });
+      }
+    }
+
+    const currentPage = getRoute().page;
+    const stillOnSamePage = currentSessionId === sessionId
+      && _chatRenderGen === renderGenAtStart
+      && (currentPage === 'chat' || currentPage === 'mind');
+
+    if (stillOnSamePage) {
+      if (joinedResponded.length) appendJoinNotice(chatBox, joinedResponded);
+      for (const r of responses) {
         if (r.response && !r.response.startsWith('[')) {
-          respondedNames.add(r.mind_name);
-        }
-      }
-      // Remove newly added minds that failed to respond
-      for (const [id, m] of activeMinds) {
-        if (newJoinedNames.includes(m.name) && !respondedNames.has(m.name)) {
-          activeMinds.delete(id);
-        }
-      }
-
-      const joinedRespondedNames = newJoinedNames.filter(name => respondedNames.has(name));
-
-      // Queue persistence even if user navigated away so the session stays recoverable.
-      if (joinedRespondedNames.length) {
-        _queueSessionMessage(sessionId, 'system-notice', '', { mindNames: joinedRespondedNames });
-      }
-      for (const r of panelData.responses) {
-        if (r.response && !r.response.startsWith('[')) {
-          _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name });
-        }
-      }
-
-      const currentPage = getRoute().page;
-      const stillOnSamePage = currentSessionId === sessionId
-        && _chatRenderGen === renderGenAtStart
-        && (currentPage === 'chat' || currentPage === 'mind');
-
-      if (stillOnSamePage) {
-        if (joinedRespondedNames.length) {
-          appendJoinNotice(chatBox, joinedRespondedNames);
-        }
-        for (const r of panelData.responses) {
-          if (r.response && !r.response.startsWith('[')) {
-            appendMindMsg(chatBox, r.mind_name, r.response);
-            if (onMindPage) {
-              mindChatHistory.push({ role: 'assistant', content: `[${r.mind_name}]: ${r.response}` });
-            }
+          appendMindMsg(chatBox, r.mind_name, r.response);
+          if (onMindPage) {
+            mindChatHistory.push({ role: 'assistant', content: `[${r.mind_name}]: ${r.response}` });
           }
         }
-        if (onMindPage) _saveMindSession(chatBox);
-      } else if (currentSessionId === sessionId && (currentPage === 'chat' || currentPage === 'mind')) {
-        if (currentPage === 'chat') onChatPageShow();
       }
+      if (onMindPage) _saveMindSession(chatBox);
+    } else if (currentSessionId === sessionId && currentPage === 'chat') {
+      onChatPageShow();
+    }
+  };
+
+  try {
+    // Move chip-selected minds into activeMinds so they're available for panel-chat
+    const invitedMindIds = [];
+    const invitedNames = [];
+    for (const [id, m] of selectedMinds) {
+      if (!activeMinds.has(id)) {
+        activeMinds.set(id, m);
+        invitedMindIds.push(id);
+        invitedNames.push(m.name);
+      }
+    }
+
+    // Phase 1: explicitly invited (chip) and @-mentioned minds respond first
+    const phase1Set = new Set();
+    if (hasMentions) {
+      for (const [id, m] of activeMinds) {
+        if (id === excludeMindId) continue;
+        if (targetMindNames.some(n => n.toLowerCase() === m.name.toLowerCase())) {
+          phase1Set.add(id);
+        }
+      }
+    }
+    for (const id of invitedMindIds) {
+      if (id !== excludeMindId) phase1Set.add(id);
+    }
+
+    if (phase1Set.size > 0) {
+      showMindsLoading(chatBox);
+      const phase1Ids = [...phase1Set];
+      const phase1Joined = phase1Ids
+        .map(id => activeMinds.get(id)?.name)
+        .filter(n => n && invitedNames.includes(n));
+      removeMindsLoading();
+      await runPanelChat(phase1Ids, phase1Joined, hasMentions);
+      if (_mindsInviteGen !== inviteGen) return;
+    }
+
+    // Phase 2: auto-suggest new minds (skipped on @-mention or non-Pro repeat)
+    const skipSuggest = hasMentions || (!isProUser() && _mindsInvitedOnce);
+    if (skipSuggest) {
       _mindsInvitedOnce = true;
       loadMinds();
       _updateComposerMentionHint();
+      return;
     }
+
+    const allKnownNames = [...activeMinds.values(), ...selectedMinds.values()].map(m => m.name);
+    const suggestCount = Math.floor(Math.random() * 3) + 1;
+    const suggestBody = { count: suggestCount, exclude: allKnownNames };
+    if (bookContext?.length) {
+      suggestBody.book_title = bookContext[0].title;
+      suggestBody.book_author = bookContext[0].author || '';
+    } else {
+      suggestBody.topic = message.slice(0, 100);
+    }
+
+    showMindsLoading(chatBox);
+    const autoAddedMindIds = [];
+    const autoAddedNames = [];
+
+    try {
+      const suggestions = await api('/api/minds/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(suggestBody),
+      });
+      if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
+      for (const s of (suggestions.minds || [])) {
+        if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
+        try {
+          const mind = await api('/api/minds/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: s.name, era: s.era || '', domain: s.domain || '', link_works: false }),
+          });
+          if (_mindsInviteGen !== inviteGen) { removeMindsLoading(); return; }
+          if (!activeMinds.has(mind.id) && mind.id !== excludeMindId) {
+            activeMinds.set(mind.id, { id: mind.id, name: mind.name });
+            autoAddedMindIds.push(mind.id);
+            autoAddedNames.push(mind.name);
+          }
+        } catch (genErr) { console.warn('[minds] generate failed for', s.name, genErr); }
+      }
+    } catch (suggestErr) { console.warn('[minds] suggest failed:', suggestErr); }
+
+    // Fallback: if generate failed, pick from existing seed minds so UI isn't silent
+    if (!autoAddedMindIds.length && allMinds.length) {
+      const topic = (bookContext?.[0]?.title || message || '').toLowerCase();
+      const words = topic.split(/\s+/).filter(w => w.length > 3);
+      const scored = allMinds
+        .filter(m => !activeMinds.has(m.id) && m.id !== excludeMindId)
+        .map(m => {
+          const hay = ((m.domain || '') + ' ' + (m.era || '') + ' ' + (m.name || '')).toLowerCase();
+          const score = words.reduce((s, w) => s + (hay.includes(w) ? 1 : 0), 0);
+          return { m, score };
+        });
+      scored.sort((a, b) => b.score - a.score || Math.random() - 0.5);
+      const pickCount = Math.min(2, scored.length);
+      for (let i = 0; i < pickCount; i++) {
+        const { m } = scored[i];
+        activeMinds.set(m.id, { id: m.id, name: m.name });
+        autoAddedMindIds.push(m.id);
+        autoAddedNames.push(m.name);
+      }
+      if (autoAddedNames.length) console.info('[minds] Used fallback seed minds:', autoAddedNames.join(', '));
+    }
+
+    removeMindsLoading();
+
+    if (!autoAddedMindIds.length) {
+      _mindsInvitedOnce = true;
+      loadMinds();
+      _updateComposerMentionHint();
+      return;
+    }
+    if (_mindsInviteGen !== inviteGen) return;
+
+    const allowed = await showMindJoinPrompt(chatBox, autoAddedNames, inviteGen);
+    if (_mindsInviteGen !== inviteGen) return;
+    if (!allowed) {
+      for (const id of autoAddedMindIds) activeMinds.delete(id);
+      loadMinds();
+      _updateComposerMentionHint();
+      return;
+    }
+
+    await runPanelChat(autoAddedMindIds, autoAddedNames, false);
+    _mindsInvitedOnce = true;
+    loadMinds();
+    _updateComposerMentionHint();
   } catch (err) {
     removeMindsLoading();
     console.log('Mind chat failed:', err.message);
