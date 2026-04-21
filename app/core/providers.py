@@ -116,31 +116,50 @@ class OpenAICompatibleProvider(BaseProvider):
 class GeminiProvider(BaseProvider):
     name = "gemini"
 
-    def __init__(self, api_key: str, base_url: str, chat_model: str, embed_model: str):
-        self.api_key = api_key
+    def __init__(self, api_keys: list[str], base_url: str, chat_model: str, embed_model: str):
+        self.api_keys = [k for k in api_keys if k]
         self.base_url = base_url.rstrip("/")
         self.chat_model = chat_model
         self.embed_model = embed_model
 
+    @property
+    def api_key(self) -> str:
+        return self.api_keys[0] if self.api_keys else ""
+
     def has_key(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_keys)
 
     def supports_embeddings(self) -> bool:
         return bool(self.embed_model)
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, key: str) -> dict[str, str]:
         return {
-            "x-goog-api-key": self.api_key,
+            "x-goog-api-key": key,
             "Content-Type": "application/json",
         }
 
     def _post(self, path: str, payload: dict[str, Any], timeout: int | None = None) -> dict[str, Any]:
+        """POST with multi-key rotation. On 4xx/5xx, try the next key."""
         url = f"{self.base_url}{path}"
-        with httpx.Client(timeout=timeout or _CHAT_TIMEOUT) as client:
-            resp = client.post(url, headers=self._headers(), json=payload)
-        if resp.status_code >= 400:
-            raise ProviderError(f"Gemini error {resp.status_code}: {resp.text}")
-        return resp.json()
+        last_err: str | None = None
+        for i, key in enumerate(self.api_keys):
+            try:
+                with httpx.Client(timeout=timeout or _CHAT_TIMEOUT) as client:
+                    resp = client.post(url, headers=self._headers(key), json=payload)
+                if resp.status_code >= 400:
+                    last_err = f"{resp.status_code}: {resp.text[:200]}"
+                    if i < len(self.api_keys) - 1:
+                        log.info("Gemini key #%d failed (%s), rotating to next key", i + 1, last_err[:100])
+                        continue
+                    raise ProviderError(f"Gemini error {last_err}")
+                return resp.json()
+            except httpx.HTTPError as exc:
+                last_err = str(exc)[:200]
+                if i < len(self.api_keys) - 1:
+                    log.info("Gemini key #%d network error (%s), rotating to next key", i + 1, last_err[:100])
+                    continue
+                raise ProviderError(f"Gemini network error: {last_err}") from exc
+        raise ProviderError(f"Gemini all keys failed: {last_err}")
 
     def embed_texts(self, texts: list[str], task_type: str | None = None) -> list[list[float]]:
         task_type = task_type or "RETRIEVAL_DOCUMENT"
@@ -334,7 +353,7 @@ def _anthropic_provider() -> AnthropicProvider:
 
 def _gemini_provider() -> GeminiProvider:
     return GeminiProvider(
-        api_key=config.GEMINI_API_KEY,
+        api_keys=config.GEMINI_API_KEYS or ([config.GEMINI_API_KEY] if config.GEMINI_API_KEY else []),
         base_url=config.GEMINI_BASE_URL,
         chat_model=config.GEMINI_CHAT_MODEL,
         embed_model=config.GEMINI_EMBED_MODEL,
@@ -387,6 +406,7 @@ def chat_with_fallback(
     use_grounding: bool = False,
     max_total_seconds: float | None = None,
     timeout: int | None = None,
+    provider_order: list[str] | None = None,
 ) -> tuple[ChatResult, BaseProvider]:
     """Try each provider in order until one succeeds. Returns (result, provider).
 
@@ -394,14 +414,17 @@ def chat_with_fallback(
     Callers expecting long outputs (e.g. mind persona generation) should pass a
     larger value like 90. *max_total_seconds* caps total wall-clock time across
     all attempts; defaults to timeout + 20s so at least one provider gets its
-    full budget before the deadline.
+    full budget before the deadline. *provider_order* overrides the default
+    PROVIDER_ORDER for this call only — useful when a different ordering is
+    better suited to the task (e.g. Gemini-first for fast JSON generation).
     """
     per_timeout = timeout or _CHAT_TIMEOUT
     if max_total_seconds is None:
         max_total_seconds = per_timeout + 20
     errors: list[str] = []
     deadline = time.monotonic() + max_total_seconds
-    for name in config.PROVIDER_ORDER:
+    order = provider_order if provider_order is not None else config.PROVIDER_ORDER
+    for name in order:
         if time.monotonic() >= deadline:
             errors.append("deadline exceeded")
             break

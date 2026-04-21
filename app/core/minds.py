@@ -356,6 +356,7 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: b
             system="You are an expert on intellectual history. Return only valid JSON.",
             user=prompt,
             timeout=90,
+            provider_order=["gemini", "deepseek", "openai", "kimi", "anthropic"],
         )
         data = _parse_json_response(result.content)
     except Exception as exc:
@@ -465,6 +466,7 @@ def create_mind_from_content(
             system="You are an expert at analyzing writing to build persona profiles. Return only valid JSON.",
             user=prompt,
             timeout=90,
+            provider_order=["gemini", "deepseek", "openai", "kimi", "anthropic"],
         )
         data = _parse_json_response(result.content)
     except Exception as exc:
