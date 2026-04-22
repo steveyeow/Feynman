@@ -2478,10 +2478,17 @@ def api_suggest_minds(payload: MindSuggestRequest, request: Request) -> dict[str
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Suggestion failed: {exc}")
 
-    # Defensive exclude filter in case a fallback path returned a name we already have
+    # Defensive exclude filter in case a fallback path returned a name we already have.
+    # Use normalized keys so 'Guo Xiang (郭象)' / '郭象 (Guō Xiàng)' collide.
+    from .core.minds import mind_name_keys
     if payload.exclude:
-        excluded = {n.lower() for n in payload.exclude}
-        suggestions = [s for s in suggestions if s.get("name", "").lower() not in excluded]
+        excluded_keys: set[str] = set()
+        for n in payload.exclude:
+            excluded_keys |= mind_name_keys(n)
+        suggestions = [
+            s for s in suggestions
+            if not (mind_name_keys(s.get("name", "")) & excluded_keys)
+        ]
 
     _track_usage(request, "generate_mind")
     return {"minds": suggestions, "usage": usage}

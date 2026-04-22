@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -42,6 +43,54 @@ def _clean_snippet(text: str, max_len: int = 150) -> str:
     return cleaned[:max_len] + ("..." if len(cleaned) > max_len else "")
 
 
+# ─── Name normalization for dedup ───
+#
+# Two minds are considered "potentially the same person" when their names
+# normalize to the same key. Normalization handles common formatting drift:
+#   - case
+#   - diacritics (Guō Xiàng → Guo Xiang)
+#   - parenthetical aliases ("Guo Xiang (郭象)" → "Guo Xiang", and we also
+#     emit a key for the inner "郭象" so the reverse "郭象 (Guō Xiàng)"
+#     collides too)
+#   - whitespace and punctuation noise
+
+_PAREN_RE = re.compile(r"[（(][^()（）]*[）)]")
+_PUNCT_RE = re.compile(r"[\s\-_.,'\"·]+")
+
+
+def _strip_diacritics(s: str) -> str:
+    """Convert "Guō Xiàng" → "Guo Xiang" via NFD decomposition."""
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def _normalize_mind_key(name: str) -> str:
+    """Single canonical key for fuzzy name matching."""
+    if not name:
+        return ""
+    no_paren = _PAREN_RE.sub(" ", name)
+    flattened = _strip_diacritics(no_paren).lower()
+    return _PUNCT_RE.sub("", flattened).strip()
+
+
+def mind_name_keys(name: str) -> set[str]:
+    """All canonical keys a name could collide on.
+
+    Includes the outer (parens-stripped) form AND each parenthetical group as
+    its own key, so 'Guo Xiang (郭象)' and '郭象 (Guō Xiàng)' both produce
+    the keys {'guoxiang', '郭象'} and therefore match.
+    """
+    keys: set[str] = set()
+    main = _normalize_mind_key(name)
+    if main:
+        keys.add(main)
+    for inner in _PAREN_RE.findall(name):
+        stripped = inner.strip("()（） ")
+        k = _normalize_mind_key(stripped)
+        if k:
+            keys.add(k)
+    return keys
+
+
 # ─── Mind embedding helpers ───
 
 def _mind_embedding_text(mind_data: dict[str, Any]) -> str:
@@ -78,6 +127,57 @@ def embed_mind(mind_id: str, mind_data: dict[str, Any]) -> None:
         update_mind_embedding(mind_id, arr.tobytes(), arr.shape[0], norm)
     except Exception as exc:
         log.warning("Failed to embed mind %s: %s", mind_id, exc)
+
+
+def _find_semantically_near_mind(
+    mind_data: dict[str, Any], threshold: float = 0.92
+) -> dict[str, Any] | None:
+    """Embed *mind_data*'s bio-text and return the closest existing mind if
+    the cosine similarity is above *threshold*. Used to deduplicate at create
+    time across language variants (荣格 ↔ Carl Jung).
+
+    Returns None on any failure (missing embedder, no embedded minds, etc.) so
+    creation can proceed normally.
+    """
+    text = _mind_embedding_text(mind_data)
+    if not text.strip():
+        return None
+    try:
+        embedder = pick_provider("embed")
+        q = np.array(
+            embedder.embed_texts([text], task_type="RETRIEVAL_DOCUMENT")[0],
+            dtype=np.float32,
+        )
+    except Exception as exc:
+        log.info("Dedup: query embed failed (%s); skipping similarity check", exc)
+        return None
+    q_norm = float(np.linalg.norm(q)) or 1.0
+
+    rows = list_minds_with_embeddings()
+    best_sim = 0.0
+    best_row: dict[str, Any] | None = None
+    for r in rows:
+        emb = bytes(r["embedding"]) if isinstance(r.get("embedding"), memoryview) else r.get("embedding")
+        if not emb:
+            continue
+        try:
+            v = np.frombuffer(emb, dtype=np.float32, count=r["embedding_dim"])
+        except Exception:
+            continue
+        norm = r.get("embedding_norm") or float(np.linalg.norm(v)) or 1.0
+        sim = float(np.dot(q, v) / (q_norm * norm))
+        if sim > best_sim:
+            best_sim = sim
+            best_row = r
+    if best_row is None or best_sim < threshold:
+        return None
+    # Hydrate full mind row so the caller gets the same shape as get_mind()
+    full = get_mind(best_row["id"])
+    log.info(
+        "Dedup: '%s' matched existing '%s' with cosine=%.3f",
+        mind_data.get("name"), best_row.get("name"), best_sim,
+    )
+    return full or best_row
 
 
 def backfill_mind_embeddings(batch_size: int = 10) -> int:
@@ -344,9 +444,27 @@ def _parse_json_response(text: str) -> dict[str, Any]:
 
 # ─── Core functions ───
 
+def find_existing_mind_by_keys(name: str) -> dict[str, Any] | None:
+    """Fuzzy lookup that catches transliteration / parens variants.
+
+    Tries exact-name first (cheap, indexed), then walks the catalog matching
+    on normalized keys so 'Guo Xiang (郭象)' resolves to '郭象 (Guō Xiàng)'.
+    """
+    direct = find_mind_by_name(name)
+    if direct:
+        return direct
+    target_keys = mind_name_keys(name)
+    if not target_keys:
+        return None
+    for m in list_minds():
+        if mind_name_keys(m.get("name") or "") & target_keys:
+            return m
+    return None
+
+
 def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: bool = True) -> dict[str, Any]:
     """Look up a mind by name; generate via LLM if not cached. Returns mind dict."""
-    existing = find_mind_by_name(name)
+    existing = find_existing_mind_by_keys(name)
     if existing:
         return existing
 
@@ -373,6 +491,15 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: b
         "thinking_style": data.get("thinking_style", ""),
         "typical_phrases": data.get("typical_phrases", []),
     }
+
+    # Embedding-similarity dedup: catches cross-language duplicates that the
+    # name-based check misses (e.g. '荣格' vs 'Carl Jung'). If the new mind's
+    # bio embedding is very close to an existing one, return that one instead.
+    near = _find_semantically_near_mind(mind_data, threshold=0.92)
+    if near:
+        log.info("Skipping create — '%s' is semantically equivalent to existing '%s'", name, near.get("name"))
+        return near
+
     mind_id = create_mind(mind_data)
     mind = get_mind(mind_id)
 
@@ -425,7 +552,7 @@ def create_mind_from_content(
     The LLM analyzes the provided content to extract the person's voice,
     thinking style, domains, and then creates a mind agent.
     """
-    existing = find_mind_by_name(name)
+    existing = find_existing_mind_by_keys(name)
     if existing:
         return existing
 
@@ -483,6 +610,12 @@ def create_mind_from_content(
         "thinking_style": data.get("thinking_style", ""),
         "typical_phrases": data.get("typical_phrases", []),
     }
+
+    near = _find_semantically_near_mind(mind_data, threshold=0.92)
+    if near:
+        log.info("Skipping create — '%s' is semantically equivalent to existing '%s'", name, near.get("name"))
+        return near
+
     mind_id = create_mind(mind_data)
     mind = get_mind(mind_id)
 
@@ -523,12 +656,15 @@ def suggest_minds_hybrid(
     Falls back to the LLM-only topic suggestion when embeddings are
     unavailable or the embedded pool is too small.
     """
-    exclude_names = {n.strip().lower() for n in (exclude or []) if n.strip()}
+    # Build a key set that catches Guō Xiàng / Guo Xiang / 郭象 variants
+    exclude_keys: set[str] = set()
+    for n in (exclude or []):
+        exclude_keys |= mind_name_keys(n)
     if primary_name:
-        exclude_names.add(primary_name.strip().lower())
+        exclude_keys |= mind_name_keys(primary_name)
 
     rows = list_minds_with_embeddings()
-    eligible = [r for r in rows if (r.get("name") or "").lower() not in exclude_names]
+    eligible = [r for r in rows if not (mind_name_keys(r.get("name") or "") & exclude_keys)]
 
     # Fall back to LLM-only when we don't have enough candidates to retrieve from
     if len(eligible) < min_pool:
@@ -616,19 +752,26 @@ def suggest_minds_hybrid(
         picks = [{"name": r.get("name"), "reason": "High semantic relevance to the topic."} for _, r in pool[:count]]
         result = None
 
-    # Map LLM's chosen names back to full mind rows (so we return era/domain too)
-    by_name_lower = {(r.get("name") or "").lower(): r for _, r in pool}
+    # Map LLM's chosen names back to full mind rows (so we return era/domain too).
+    # Index by every normalized key the row produces so the LLM's casing/diacritic
+    # variant still resolves to the same row.
+    by_key: dict[str, dict[str, Any]] = {}
+    for _, r in pool:
+        for k in mind_name_keys(r.get("name") or ""):
+            by_key.setdefault(k, r)
     selected: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen_keys: set[str] = set(exclude_keys)
     for pk in picks:
         nm = (pk.get("name") or "").strip()
-        key = nm.lower()
-        if not nm or key in seen:
+        if not nm:
             continue
-        row = by_name_lower.get(key)
+        keys = mind_name_keys(nm)
+        if keys & seen_keys:
+            continue
+        row = next((by_key[k] for k in keys if k in by_key), None)
         if not row:
             continue
-        seen.add(key)
+        seen_keys |= mind_name_keys(row.get("name") or "")
         selected.append({
             "name": row.get("name") or nm,
             "era": row.get("era") or "",
@@ -641,10 +784,10 @@ def suggest_minds_hybrid(
     # If LLM returned too few valid picks, top-up from pool
     if len(selected) < count:
         for _, r in pool:
-            key = (r.get("name") or "").lower()
-            if key in seen:
+            keys = mind_name_keys(r.get("name") or "")
+            if keys & seen_keys:
                 continue
-            seen.add(key)
+            seen_keys |= keys
             selected.append({
                 "name": r.get("name") or "",
                 "era": r.get("era") or "",
