@@ -382,10 +382,12 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_subended")
 
-            # Migration: dedupe rows that share an email, then enforce UNIQUE(email).
-            # Without this, two concurrent /api requests for the same logged-in user
-            # could each pass the "user not found" check and both INSERT, leaving
-            # duplicates (ON CONFLICT DO NOTHING only fires on declared constraints).
+            # Migration: dedupe rows that share an email, then enforce PRIMARY KEY(id)
+            # and UNIQUE(email). Legacy tables created before these constraints were
+            # declared in the schema may have neither — CREATE TABLE IF NOT EXISTS
+            # won't add constraints to a pre-existing table. As a result two rows
+            # could share the same id, and DELETE WHERE id = X would wipe both.
+            # We use ctid (Postgres physical row identity) to delete one row at a time.
             try:
                 _execute(conn, "SAVEPOINT sp_users_email_dedupe")
                 dup_emails = _fetchall(conn, """
@@ -396,24 +398,41 @@ def init_db() -> None:
                 """)
                 for de in dup_emails:
                     em = de["email"]
-                    rows = _fetchall(conn,
-                        "SELECT id FROM users WHERE email = %s ORDER BY created_at ASC",
-                        (em,))
-                    keeper = rows[0]["id"]
+                    rows = _fetchall(conn, """
+                        SELECT id, ctid::text AS ctid FROM users
+                        WHERE email = %s
+                        ORDER BY created_at ASC, ctid ASC
+                    """, (em,))
+                    keeper_id = rows[0]["id"]
                     for r in rows[1:]:
                         dup_id = r["id"]
-                        for tbl in ("agents", "chat_sessions", "ai_books", "messages", "mind_memories"):
+                        dup_ctid = r["ctid"]
+                        # Only repoint FKs when the dup is a genuinely separate user
+                        # (different id). If the rows happen to share an id, FKs
+                        # already point at the surviving row.
+                        if dup_id != keeper_id:
+                            for tbl in ("agents", "chat_sessions", "ai_books", "messages", "mind_memories"):
+                                _execute(conn,
+                                    f'UPDATE "{tbl}" SET user_id = %s WHERE user_id = %s',
+                                    (keeper_id, dup_id))
                             _execute(conn,
-                                f'UPDATE "{tbl}" SET user_id = %s WHERE user_id = %s',
-                                (keeper, dup_id))
+                                "UPDATE usage SET user_id = %s WHERE user_id = %s",
+                                (keeper_id, dup_id))
                         _execute(conn,
-                            "UPDATE usage SET user_id = %s WHERE user_id = %s",
-                            (keeper, dup_id))
-                        _execute(conn, "DELETE FROM users WHERE id = %s", (dup_id,))
+                            "DELETE FROM users WHERE ctid = %s::tid",
+                            (dup_ctid,))
                 _execute(conn, "RELEASE SAVEPOINT sp_users_email_dedupe")
             except Exception as e:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_email_dedupe")
                 log.warning("users email dedupe migration skipped: %s", e)
+
+            # Add PRIMARY KEY on id if the legacy table is missing it
+            try:
+                _execute(conn, "SAVEPOINT sp_users_pk")
+                _execute(conn, "ALTER TABLE users ADD CONSTRAINT users_pkey PRIMARY KEY (id)")
+                _execute(conn, "RELEASE SAVEPOINT sp_users_pk")
+            except Exception:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_pk")
 
             try:
                 _execute(conn, "SAVEPOINT sp_users_email_unique")
