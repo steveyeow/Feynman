@@ -441,6 +441,38 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_email_unique")
 
+            # Surface (don't auto-merge) any existing stripe_customer_id
+            # collisions before attempting the unique index. Picking the
+            # "real" subscriber when two users share a customer id is not
+            # safe to do automatically.
+            try:
+                dup_customers = _fetchall(conn, """
+                    SELECT stripe_customer_id, COUNT(*) AS n
+                    FROM users
+                    WHERE stripe_customer_id IS NOT NULL AND stripe_customer_id <> ''
+                    GROUP BY stripe_customer_id
+                    HAVING COUNT(*) > 1
+                """)
+                for dc in dup_customers:
+                    log.error(
+                        "Duplicate stripe_customer_id %s on %s users — manual reconciliation required before users_stripe_customer_unique can be enforced",
+                        dc["stripe_customer_id"], dc["n"])
+            except Exception as e:
+                log.warning("stripe_customer_id duplicate scan failed: %s", e)
+
+            # Partial unique index lets multiple free users coexist with NULL
+            # customer ids while still enforcing uniqueness for paying users.
+            try:
+                _execute(conn, "SAVEPOINT sp_users_stripe_unique")
+                _execute(conn,
+                    "CREATE UNIQUE INDEX IF NOT EXISTS users_stripe_customer_unique "
+                    "ON users (stripe_customer_id) "
+                    "WHERE stripe_customer_id IS NOT NULL")
+                _execute(conn, "RELEASE SAVEPOINT sp_users_stripe_unique")
+            except Exception as e:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_stripe_unique")
+                log.warning("users_stripe_customer_unique not created: %s", e)
+
             _execute(conn, """
                 CREATE TABLE IF NOT EXISTS usage (
                     id SERIAL PRIMARY KEY,
@@ -1497,6 +1529,41 @@ def update_user_tier(user_id: str, tier: str, stripe_customer_id: str | None = N
 def find_user_by_stripe_customer(customer_id: str) -> dict[str, Any] | None:
     with get_conn() as conn:
         return _fetchone(conn, _q("SELECT * FROM users WHERE stripe_customer_id = ?"), (customer_id,))
+
+
+def update_user_tier_by_stripe_customer(
+    customer_id: str,
+    tier: str | None = None,
+    subscription_status: str | None = None,
+    subscription_ended_at: str | None = None,
+) -> dict[str, Any] | None:
+    """Atomically locate a user by stripe_customer_id and apply tier updates
+    in a single transaction. On Postgres the SELECT takes a row-level lock
+    (FOR UPDATE) so concurrent webhooks for the same customer serialize
+    instead of racing through SELECT-then-UPDATE with stale state.
+
+    Returns the post-update user row, or None if no user matched.
+    Pass None for fields that should remain unchanged (COALESCE semantics).
+    """
+    with get_conn() as conn:
+        if _USE_PG:
+            row = _fetchone(conn,
+                "SELECT id FROM users WHERE stripe_customer_id = %s FOR UPDATE",
+                (customer_id,))
+        else:
+            row = _fetchone(conn,
+                "SELECT id FROM users WHERE stripe_customer_id = ?",
+                (customer_id,))
+        if not row:
+            return None
+        _execute(conn, _q("""
+            UPDATE users SET
+                tier = COALESCE(?, tier),
+                subscription_status = COALESCE(?, subscription_status),
+                subscription_ended_at = COALESCE(?, subscription_ended_at)
+            WHERE id = ?
+        """), (tier, subscription_status, subscription_ended_at, row["id"]))
+        return _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (row["id"],))
 
 
 def mark_stripe_webhook_processed(event_id: str) -> bool:

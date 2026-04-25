@@ -9,10 +9,10 @@ from fastapi.responses import JSONResponse
 
 from ..core.db import (
     clear_stripe_webhook,
-    find_user_by_stripe_customer,
     get_user,
     mark_stripe_webhook_processed,
     update_user_tier,
+    update_user_tier_by_stripe_customer,
 )
 
 log = logging.getLogger(__name__)
@@ -100,28 +100,34 @@ async def stripe_webhook(request: Request):
         elif event_type == "customer.subscription.updated":
             customer_id = data.get("customer")
             status = data.get("status")
-            user = find_user_by_stripe_customer(customer_id) if customer_id else None
-            if user:
+            if customer_id:
                 tier = "pro" if status in ("active", "trialing") else "free"
                 ended_at = None
                 if status in ("canceled", "unpaid", "past_due"):
                     from datetime import datetime, timezone
                     ended_at = datetime.now(timezone.utc).isoformat()
-                update_user_tier(str(user["id"]), tier,
-                                 subscription_status=status,
-                                 subscription_ended_at=ended_at)
-                log.info("Subscription updated for user %s: status=%s tier=%s", user["id"], status, tier)
+                user = update_user_tier_by_stripe_customer(
+                    customer_id,
+                    tier=tier,
+                    subscription_status=status,
+                    subscription_ended_at=ended_at,
+                )
+                if user:
+                    log.info("Subscription updated for user %s: status=%s tier=%s", user["id"], status, tier)
 
         elif event_type == "customer.subscription.deleted":
             customer_id = data.get("customer")
-            user = find_user_by_stripe_customer(customer_id) if customer_id else None
-            if user:
+            if customer_id:
                 from datetime import datetime, timezone
                 ended_at = datetime.now(timezone.utc).isoformat()
-                update_user_tier(str(user["id"]), "free",
-                                 subscription_status="canceled",
-                                 subscription_ended_at=ended_at)
-                log.info("Subscription cancelled for user %s", user["id"])
+                user = update_user_tier_by_stripe_customer(
+                    customer_id,
+                    tier="free",
+                    subscription_status="canceled",
+                    subscription_ended_at=ended_at,
+                )
+                if user:
+                    log.info("Subscription cancelled for user %s", user["id"])
     except Exception:
         # Roll back the idempotency record so Stripe's retry can re-process.
         if event_id:
