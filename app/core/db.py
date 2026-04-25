@@ -500,6 +500,57 @@ def init_db() -> None:
             """)
             # Best-effort cleanup of old idempotency records (keep 30 days for replay window)
             _execute(conn, "DELETE FROM stripe_webhook_events WHERE processed_at < NOW() - INTERVAL '30 days'")
+
+            # Backfill PRIMARY KEY constraints on legacy tables. CREATE TABLE
+            # IF NOT EXISTS does not add constraints to a pre-existing table,
+            # so deployments that pre-date the current schema may have id
+            # columns with no uniqueness enforced (the same root cause that
+            # let two users coexist with the same UUID and that the dedupe
+            # bug then collapsed). We attempt the ALTER per table; if a PK
+            # already exists or duplicates block creation, we just log it
+            # and move on — auto-deduping these tables is unsafe because the
+            # right keep-row choice is table-specific.
+            _legacy_pks = [
+                ("agents", "id"),
+                ("chunks", "id"),
+                ("messages", "id"),
+                ("questions", "id"),
+                ("votes", "id"),
+                ("minds", "id"),
+                ("mind_memories", "id"),
+                ("chat_sessions", "id"),
+                ("session_messages", "id"),
+                ("ai_books", "id"),
+            ]
+            for _tbl, _col in _legacy_pks:
+                _sp = f"sp_{_tbl}_pk"
+                try:
+                    _execute(conn, f"SAVEPOINT {_sp}")
+                    _execute(conn,
+                        f'ALTER TABLE "{_tbl}" ADD CONSTRAINT "{_tbl}_pkey" PRIMARY KEY ({_col})')
+                    _execute(conn, f"RELEASE SAVEPOINT {_sp}")
+                except Exception as _e:
+                    _execute(conn, f"ROLLBACK TO SAVEPOINT {_sp}")
+                    msg = str(_e).lower()
+                    # "already" → constraint already exists (silent, expected on healthy schemas).
+                    # "duplicate"/"unique" → real duplicate values blocking the PK.
+                    if "duplicate" in msg or ("unique" in msg and "already" not in msg):
+                        log.error(
+                            "PK on %s.%s blocked by duplicate values — manual cleanup needed: %s",
+                            _tbl, _col, _e)
+
+            # mind_works has a composite PK
+            try:
+                _execute(conn, "SAVEPOINT sp_mind_works_pk")
+                _execute(conn,
+                    'ALTER TABLE mind_works ADD CONSTRAINT mind_works_pkey PRIMARY KEY (mind_id, agent_id)')
+                _execute(conn, "RELEASE SAVEPOINT sp_mind_works_pk")
+            except Exception as _e:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_mind_works_pk")
+                msg = str(_e).lower()
+                if "duplicate" in msg or ("unique" in msg and "already" not in msg):
+                    log.error(
+                        "PK on mind_works(mind_id, agent_id) blocked by duplicates: %s", _e)
         else:
             _execute(conn, """
                 CREATE TABLE IF NOT EXISTS agents (
