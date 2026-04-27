@@ -834,11 +834,21 @@ def get_agent(agent_id: str) -> dict[str, Any] | None:
         return _row_to_agent(row)
 
 
-def list_agents() -> list[dict[str, Any]]:
+def list_agents(limit: int | None = None) -> list[dict[str, Any]]:
+    """List all non-deleted agents.
+
+    `limit` is a defensive cap to prevent unbounded reads from blowing through
+    egress quotas when the table grows. Default None preserves existing
+    behavior; callers that touch this on every request (sitemap, llms-full,
+    cron loops, public endpoints) should always pass an explicit limit.
+    """
+    sql = "SELECT * FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
+    params: tuple[Any, ...] = (False if _USE_PG else 0,)
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = params + (limit,)
     with get_conn() as conn:
-        rows = _fetchall(conn, _q(
-            "SELECT * FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
-        ), (False if _USE_PG else 0,))
+        rows = _fetchall(conn, _q(sql), params)
         return [_row_to_agent(r) for r in rows]
 
 
@@ -1209,13 +1219,22 @@ def find_mind_by_name(name: str) -> dict[str, Any] | None:
         return _row_to_mind(row)
 
 
-def list_minds() -> list[dict[str, Any]]:
+def list_minds(limit: int | None = None) -> list[dict[str, Any]]:
+    """List all minds, ordered by popularity.
+
+    `limit` is a defensive cap (see `list_agents` rationale).
+    """
+    sql = (
+        "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
+        "typical_phrases, works, avatar_seed, version, chat_count, created_at "
+        "FROM minds ORDER BY chat_count DESC, created_at ASC"
+    )
+    params: tuple[Any, ...] = ()
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = (limit,)
     with get_conn() as conn:
-        rows = _fetchall(conn, (
-            "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
-            "typical_phrases, works, avatar_seed, version, chat_count, created_at "
-            "FROM minds ORDER BY chat_count DESC, created_at ASC"
-        ))
+        rows = _fetchall(conn, _q(sql), params)
         return [_row_to_mind(r) for r in rows]
 
 

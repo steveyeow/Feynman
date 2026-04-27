@@ -265,6 +265,38 @@ def _usage_dict(result) -> dict[str, int]:
     return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
+# ─── In-process TTL cache for crawler-facing endpoints ───────────────────────
+# Sitemap, llms-full.txt and the public book reader are hit repeatedly by
+# search engine / AI crawlers. Without caching, each hit triggers full table
+# scans (list_agents, list_minds, get_chunks_text_only) that flow back through
+# the Supabase pooler — the dominant source of egress overage.
+#
+# This is a defensive in-memory cache; CDN Cache-Control headers are set
+# separately on the responses themselves. Both are needed because Vercel's
+# edge cache for Python serverless functions is not always honored.
+_seo_cache: dict[str, tuple[float, Any]] = {}
+_seo_cache_lock = threading.Lock()
+_SEO_CACHE_TTL = 3600  # 1 hour — acceptable staleness for catalog listings
+_BOOK_CACHE_TTL = 1800  # 30 min for individual published book content
+
+
+def _cache_get(key: str, ttl: float) -> Any | None:
+    """Return cached value if fresh, else None."""
+    with _seo_cache_lock:
+        entry = _seo_cache.get(key)
+    if not entry:
+        return None
+    ts, value = entry
+    if time.time() - ts > ttl:
+        return None
+    return value
+
+
+def _cache_set(key: str, value: Any) -> None:
+    with _seo_cache_lock:
+        _seo_cache[key] = (time.time(), value)
+
+
 class TopicAgentRequest(BaseModel):
     topic: str = Field(..., min_length=1)
     language: str = Field("en")
@@ -403,7 +435,7 @@ def _background_discover(topic: str) -> None:
 def _discover_books() -> None:
     """Scheduled discovery: pick underrepresented categories and discover new books via LLM."""
     try:
-        agents = list_agents()
+        agents = list_agents(limit=5000)
         # Count books per category
         cat_counts: dict[str, int] = {}
         for a in agents:
@@ -620,6 +652,18 @@ def sitemap_redirect():
 def sitemap_xml():
     from fastapi.responses import Response
     from datetime import date
+
+    cached = _cache_get("sitemap_xml", _SEO_CACHE_TTL)
+    if cached is not None:
+        return Response(
+            content=cached,
+            media_type="application/xml; charset=utf-8",
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
     today = date.today().isoformat()
     pages = [
         {"loc": "/", "priority": "1.0", "changefreq": "daily"},
@@ -635,9 +679,12 @@ def sitemap_xml():
     <priority>{p["priority"]}</priority>
   </url>
 """
-    # Include all ready books and minds
+    # Include all ready books and minds. These two list_* calls are the
+    # expensive part — they each scan their tables and stream rows back
+    # through the Supabase pooler. We cap them with a defensive limit
+    # AND wrap the whole response in a TTL cache.
     try:
-        for agent in list_agents():
+        for agent in list_agents(limit=5000):
             if agent.get("status") != "ready":
                 continue
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
@@ -648,7 +695,7 @@ def sitemap_xml():
     <priority>{priority}</priority>
   </url>
 """
-        for mind in list_minds():
+        for mind in list_minds(limit=5000):
             urls += f"""  <url>
     <loc>{_SITE_URL}/mind/{mind["id"]}</loc>
     <lastmod>{today}</lastmod>
@@ -662,10 +709,14 @@ def sitemap_xml():
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 {urls}</urlset>"""
+    _cache_set("sitemap_xml", xml)
     return Response(
         content=xml,
         media_type="application/xml; charset=utf-8",
-        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
     )
 
 
@@ -729,6 +780,18 @@ scientists, and practitioners — who automatically join conversations with rele
 @app.get("/llms-full.txt")
 def llms_full_txt():
     from fastapi.responses import PlainTextResponse
+
+    cached = _cache_get("llms_full_txt", _SEO_CACHE_TTL)
+    if cached is not None:
+        return PlainTextResponse(
+            cached,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Cache-Control": "public, max-age=86400, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
     content = f"""# Feynman — Full Documentation for AI Systems
 
 > An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.
@@ -817,8 +880,11 @@ The project draws inspiration from Richard Feynman's approach to learning:
 ## Available Books
 
 """
+    # Defensive limits — these endpoints are repeatedly hit by SEO/AI crawlers
+    # and used to pull the entire catalog through Supabase's pooler on every
+    # request. Limits are large enough to cover the catalog, but bounded.
     try:
-        for agent in list_agents():
+        for agent in list_agents(limit=5000):
             if agent.get("status") != "ready":
                 continue
             name = agent.get("name", "Untitled")
@@ -835,7 +901,7 @@ The project draws inspiration from Richard Feynman's approach to learning:
 
 """
     try:
-        for mind in list_minds():
+        for mind in list_minds(limit=5000):
             name = mind.get("name", "Unknown")
             domain = mind.get("domain", "")
             content += f"- [{name}]({_SITE_URL}/mind/{mind['id']}): {domain}\n"
@@ -851,10 +917,14 @@ The project draws inspiration from Richard Feynman's approach to learning:
 - Email: support@academiai.app
 - GitHub: https://github.com/steveyeow/feynman
 """
+    _cache_set("llms_full_txt", content)
     return PlainTextResponse(
         content,
         media_type="text/plain; charset=utf-8",
-        headers={"Cache-Control": "public, max-age=86400, s-maxage=86400"},
+        headers={
+            "Cache-Control": "public, max-age=86400, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
     )
 
 
@@ -1102,13 +1172,42 @@ def mind_page(mind_id: str) -> HTMLResponse:
 
 
 @app.get("/api/public/book/{agent_id}/read")
-def api_public_read_book(agent_id: str, request: Request) -> dict[str, Any]:
-    """Public read endpoint — only serves ready (published) books without auth."""
+def api_public_read_book(agent_id: str, request: Request):
+    """Public read endpoint — only serves ready (published) books without auth.
+
+    This is a major egress hot path: every crawler / share-link visitor
+    pulls the full reassembled book (potentially MBs of chunk text) from
+    Postgres. We wrap it in a TTL cache by agent_id and emit a long
+    Cache-Control so Vercel's edge can also serve hits. Published book
+    content is essentially static between writes, so 30 min staleness
+    is fine.
+    """
+    from fastapi.responses import JSONResponse
+
+    cache_key = f"public_book:{agent_id}"
+    cached = _cache_get(cache_key, _BOOK_CACHE_TTL)
+    if cached is not None:
+        return JSONResponse(
+            content=cached,
+            headers={
+                "Cache-Control": "public, max-age=300, s-maxage=1800",
+                "X-Cache": "HIT",
+            },
+        )
+
     agent = get_agent(agent_id)
     if not agent or agent.get("status") != "ready":
         raise HTTPException(status_code=404, detail="Book not found or not published")
     request.state._public_agent = agent
-    return api_read_book(agent_id, _agent=agent)
+    payload = api_read_book(agent_id, _agent=agent)
+    _cache_set(cache_key, payload)
+    return JSONResponse(
+        content=payload,
+        headers={
+            "Cache-Control": "public, max-age=300, s-maxage=1800",
+            "X-Cache": "MISS",
+        },
+    )
 
 
 @app.get("/api/health")
@@ -1214,12 +1313,12 @@ def _verify_cron(request: Request) -> None:
 def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     """Cron-triggered book discovery. Replaces the daemon discovery loop."""
     _verify_cron(request)
-    agents = list_agents()
+    agents = list_agents(limit=5000)
     if not agents:
         return {"status": "skip", "reason": "no agents yet"}
     _discover_books()
     # Trigger learning for any new catalog agents
-    for a in list_agents():
+    for a in list_agents(limit=5000):
         if a["status"] == "catalog":
             background_tasks.add_task(_learn_agent, a["id"])
     return {"status": "ok"}
@@ -1229,7 +1328,7 @@ def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> di
 def api_cron_seed_minds(request: Request) -> dict[str, Any]:
     """Cron-triggered mind seeding. Seeds a batch per run (Hobby has 60s timeout)."""
     _verify_cron(request)
-    existing_count = len(list_minds())
+    existing_count = len(list_minds(limit=5000))
     if existing_count >= len(SEED_MINDS):
         return {"status": "complete", "total": existing_count}
     seeded = _seed_minds_batch(_SEED_BATCH_SIZE)
@@ -1339,7 +1438,11 @@ def pro_config() -> dict[str, Any]:
 @app.get("/api/agents")
 def api_list_agents():
     from fastapi.responses import JSONResponse
-    result = list_agents()
+    # Defensive cap. Frontend renders a library grid; 5000 books is comfortably
+    # past any realistic user-perceivable size. Without a cap, this endpoint
+    # is hit on every page load and pulls the full agents table over the
+    # Supabase pooler.
+    result = list_agents(limit=5000)
     try:
         _enrich_ai_book_agents(result)
     except Exception as exc:
@@ -2343,12 +2446,12 @@ _embed_backfill_done = False
 def api_list_minds(background_tasks: BackgroundTasks):
     from fastapi.responses import JSONResponse
     global _embed_backfill_done
-    minds = list_minds()
+    minds = list_minds(limit=5000)
     # Lazy seeding: seed 1 mind per request to stay within Vercel's 10s timeout
     if _IS_SERVERLESS and len(minds) < len(SEED_MINDS):
         seeded = _seed_minds_batch(_LAZY_SEED_SIZE)
         if seeded:
-            minds = list_minds()
+            minds = list_minds(limit=5000)
     # Lazy embedding backfill: only schedule if there's actual work
     if not _embed_backfill_done:
         _embed_backfill_done = True
