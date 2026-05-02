@@ -382,12 +382,17 @@ def _learn_agent(agent_id: str) -> None:
 
 # ─── Scheduled discovery ───
 
-def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT, exclude_titles: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Use LLM to discover top books for a topic. Returns (books, usage)."""
+    exclude_clause = ""
+    if exclude_titles:
+        titles_str = ", ".join(f'"{t}"' for t in exclude_titles[:30])
+        exclude_clause = f" Do NOT recommend any of these books the user already has: [{titles_str}]."
     prompt = (
         f"Recommend exactly {count} must-read books on the topic \"{topic}\". "
         "Return a JSON array of objects with keys: title, author, description (one sentence). "
         "Only output the JSON array, no other text."
+        f"{exclude_clause}"
     )
     try:
         result, _ = chat_with_fallback(system="You are a book recommendation expert.", user=prompt)
@@ -410,13 +415,12 @@ def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT) -> 
         desc = entry.get("description", "").strip()
         if not title:
             continue
+        already_existed = find_agent_by_name(title) is not None
         agent_id = create_catalog_agent(
             title=title, author=author, category=topic, description=desc,
         )
-        existing = find_agent_by_name(title)
-        created = existing is not None and existing["id"] == agent_id
-        results.append({"id": agent_id, "title": title, "author": author, "created": created})
-        log.info("Discovered book: %s by %s [%s]", title, author, topic)
+        results.append({"id": agent_id, "title": title, "author": author, "new": not already_existed})
+        log.info("Discovered book: %s by %s [%s] new=%s", title, author, topic, not already_existed)
     return results, usage
 
 
@@ -990,11 +994,15 @@ def book_page(agent_id: str) -> HTMLResponse:
     total_words = book.get("total_words", 0) if book else 0
 
     if subtitle_raw:
-        desc = html_esc(subtitle_raw)
+        desc_raw = subtitle_raw
     elif author_raw:
-        desc = html_esc(f"by {author_raw} — Read and chat with this book on Feynman")
+        desc_raw = f"by {author_raw} — Read and chat with this book on Feynman"
     else:
-        desc = html_esc(f"Read and chat with this book on Feynman")
+        desc_raw = "Read and chat with this book on Feynman"
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    og_image_alt = html_esc(f"Cover of {agent.get('name', 'this book')} on Feynman")
 
     base = _SITE_URL
     id_path = quote(agent_id, safe="")
@@ -1052,12 +1060,17 @@ def book_page(agent_id: str) -> HTMLResponse:
 <meta property="og:image" content="{og_image_url}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
+{f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''}
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:creator" content="@steve_yeow">
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+<meta name="twitter:image:alt" content="{og_image_alt}">
 <script type="application/ld+json">{jsonld}</script>
 </head><body>
 <h1>{title}</h1>
@@ -1112,7 +1125,14 @@ def mind_page(mind_id: str) -> HTMLResponse:
     works_raw = mind.get("works") or []
     works_list = works_raw if isinstance(works_raw, list) else []
 
-    desc = bio or f"{name} — {domain} thinker on Feynman"
+    desc_raw = mind.get("bio_summary", "") or f"{mind.get('name', 'Unknown')} — {mind.get('domain', '')} thinker on Feynman"
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    name_parts = mind.get("name", "").strip().split()
+    first_name = html_esc(name_parts[0]) if name_parts else ""
+    last_name = html_esc(" ".join(name_parts[1:])) if len(name_parts) > 1 else ""
+    og_image_alt = html_esc(f"Portrait of {mind.get('name', 'great mind')} on Feynman")
     base = _SITE_URL
     canonical = f"{base}/mind/{mind_id}"
     og_image_url = f"{base}/mind/{mind_id}/og.png"
@@ -1153,12 +1173,18 @@ def mind_page(mind_id: str) -> HTMLResponse:
 <meta property="og:image" content="{og_image_url}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
+{f'<meta property="profile:first_name" content="{first_name}">' if first_name else ''}
+{f'<meta property="profile:last_name" content="{last_name}">' if last_name else ''}
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:creator" content="@steve_yeow">
 <meta name="twitter:title" content="{name}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+<meta name="twitter:image:alt" content="{og_image_alt}">
 <script type="application/ld+json">{jsonld}</script>
 </head><body>
 <h1>{name}</h1>
@@ -1238,8 +1264,9 @@ class SearchBookRequest(BaseModel):
 @app.post("/api/discover")
 def api_discover(payload: DiscoverRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     _check_quota(request, "discover")
+    existing_titles = [a["name"] for a in list_agents(limit=200)]
     try:
-        books, usage = _discover_books_for_topic(payload.topic.strip(), count=payload.count)
+        books, usage = _discover_books_for_topic(payload.topic.strip(), count=payload.count, exclude_titles=existing_titles)
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
@@ -1430,6 +1457,7 @@ def pro_config() -> dict[str, Any]:
         "supabase_url": os.getenv("SUPABASE_URL", "").strip(),
         "supabase_key": os.getenv("SUPABASE_ANON_KEY", os.getenv("SUPABASE_KEY", "")).strip(),
         "stripe_enabled": bool(os.getenv("STRIPE_SECRET_KEY")),
+        "posthog_key": os.getenv("POSTHOG_KEY", "").strip(),
     }
 
 

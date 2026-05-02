@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "feynman-backend",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000", "--reload"],
-      "port": 8000
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--reload"],
+      "port": 8001
     }
   ]
 }

@@ -71,6 +71,9 @@ async function loadProConfig() {
     if (proConfig.auth_enabled) {
       window.FEYNMAN_PRO = true;
     }
+    if (proConfig.posthog_key) {
+      window.POSTHOG_KEY = proConfig.posthog_key;
+    }
   } catch { proConfig = { auth_enabled: false }; }
 }
 
@@ -100,6 +103,10 @@ async function initSupabase() {
       }
       if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         await loadUserTier();
+      }
+      if (event === 'SIGNED_IN' && session?.user) {
+        phIdentify(session.user.id, { email: session.user.email, tier: userTier });
+        phTrack('signed_up', { method: session.user.app_metadata?.provider || 'email' });
       }
       updateAuthUI();
       if (event === 'SIGNED_IN' && (window.location.hash === '' || window.location.hash === '#' || window.location.hash === '#/' || window.location.hash === '#/login' || window.location.hash === '#/landing')) {
@@ -361,6 +368,26 @@ function renderLoginPage() {
   });
 }
 
+const FREE_FEATURES = [
+  'Chat with any book in your library',
+  'Four-layer answers: text, metadata, web, LLM',
+  'Great minds join your first chats',
+  'Discover books & topics (3/day)',
+  'Upload up to 3 books (PDF / EPUB / TXT / MD)',
+];
+const PRO_FEATURES = [
+  'Everything in Free',
+  'Upload more books',
+  'Discover more books in chat & library',
+  'Write your own book on any topic',
+  'Great minds continuously join chats',
+  'Invite great minds into your chats',
+  'Upload your own minds or from any source',
+  'Discover & expand the minds network',
+  'Higher daily usage limits',
+  'Priority access',
+];
+
 function renderSubscriptionPage() {
   const el = document.getElementById('page-subscription');
   if (!el) return;
@@ -369,25 +396,6 @@ function renderSubscriptionPage() {
     let sub = { tier: 'free', subscription: null };
     try { sub = await api('/api/pro/subscription'); } catch {}
     const isPro = sub.tier === 'pro';
-    const freeFeatures = [
-      'Chat with any book in your library',
-      'Four-layer answers: text, metadata, web, LLM',
-      'Great minds join once per chat',
-      'Discover books & topics (3/day)',
-      'Upload up to 3 books (PDF / EPUB / TXT / MD)',
-    ];
-    const proFeatures = [
-      'Everything in Free',
-      'Upload more books',
-      'Discover more books in chat & library',
-      'Write your own book on any topic',
-      'Great minds continuously join chats',
-      'Invite great minds into your chats',
-      'Upload your own minds or from any source',
-      'Discover & expand the minds network',
-      'Higher daily usage limits',
-      'Priority access',
-    ];
     const featureRow = (text, isPro) => `<div class="sub-feature-row"><span class="sub-feature-check ${isPro ? 'pro-check' : ''}">\u2713</span><span class="sub-feature-label">${esc(text)}</span></div>`;
     el.innerHTML = `<div class="sub-page">
       <div class="sub-header">
@@ -402,7 +410,7 @@ function renderSubscriptionPage() {
             <p class="sub-price-note">Get started, no credit card needed</p>
           </div>
           <div class="sub-card-body">
-            ${freeFeatures.map(f => featureRow(f, false)).join('')}
+            ${FREE_FEATURES.map(f => featureRow(f, false)).join('')}
           </div>
           ${!isPro ? '<div class="sub-card-foot"><button class="sub-btn sub-btn-secondary" disabled>Current Plan</button></div>' : ''}
         </div>
@@ -413,7 +421,7 @@ function renderSubscriptionPage() {
             <p class="sub-price-note">For power users who read and learn every day</p>
           </div>
           <div class="sub-card-body">
-            ${proFeatures.map(f => featureRow(f, true)).join('')}
+            ${PRO_FEATURES.map(f => featureRow(f, true)).join('')}
           </div>
           <div class="sub-card-foot">
             ${isPro
@@ -436,6 +444,7 @@ function renderSubscriptionPage() {
           alert('Payments are not configured on this server.');
           return;
         }
+        phTrack('upgrade_clicked', { source: 'subscription_page' });
         upgradeBtn.textContent = 'Redirecting...';
         upgradeBtn.disabled = true;
         try {
@@ -463,6 +472,7 @@ function renderSubscriptionPage() {
 function showProOverlay() {
   const existing = document.getElementById('pro-overlay');
   if (existing) return;
+  phTrack('upgrade_prompt_shown', { tier: userTier });
   const overlay = document.createElement('div');
   overlay.id = 'pro-overlay';
   overlay.className = 'pro-overlay';
@@ -478,25 +488,6 @@ function showProOverlay() {
     let sub = { tier: 'free', subscription: null };
     try { sub = await api('/api/pro/subscription'); } catch {}
     const isPro = sub.tier === 'pro';
-    const freeFeatures = [
-      'Chat with any book in your library',
-      'Four-layer answers: text, metadata, web, LLM',
-      'Great minds join once per chat',
-      'Discover books & topics (3/day)',
-      'Upload up to 3 books (PDF / EPUB / TXT / MD)',
-    ];
-    const proFeatures = [
-      'Everything in Free',
-      'Upload more books',
-      'Discover more books in chat & library',
-      'Write your own book on any topic',
-      'Great minds continuously join chats',
-      'Invite great minds into your chats',
-      'Upload your own minds or from any source',
-      'Discover & expand the minds network',
-      'Higher daily usage limits',
-      'Priority access',
-    ];
     const featureRow = (text, pro) => `<div class="sub-feature-row"><span class="sub-feature-check ${pro ? 'pro-check' : ''}">\u2713</span><span class="sub-feature-label">${esc(text)}</span></div>`;
     const inner = overlay.querySelector('.pro-overlay-inner');
     inner.innerHTML = `${closeBtn}<div class="sub-page">
@@ -512,7 +503,7 @@ function showProOverlay() {
             <p class="sub-price-note">Get started, no credit card needed</p>
           </div>
           <div class="sub-card-body">
-            ${freeFeatures.map(f => featureRow(f, false)).join('')}
+            ${FREE_FEATURES.map(f => featureRow(f, false)).join('')}
           </div>
           ${!isPro ? '<div class="sub-card-foot"><button class="sub-btn sub-btn-secondary" disabled>Current Plan</button></div>' : ''}
         </div>
@@ -523,7 +514,7 @@ function showProOverlay() {
             <p class="sub-price-note">For power users who read and learn every day</p>
           </div>
           <div class="sub-card-body">
-            ${proFeatures.map(f => featureRow(f, true)).join('')}
+            ${PRO_FEATURES.map(f => featureRow(f, true)).join('')}
           </div>
           <div class="sub-card-foot">
             ${isPro
@@ -537,6 +528,7 @@ function showProOverlay() {
     const upgradeBtn = document.getElementById('overlay-upgrade-btn');
     if (upgradeBtn) {
       upgradeBtn.addEventListener('click', async () => {
+        phTrack('upgrade_clicked', { source: 'overlay' });
         if (!currentUser) { close(); window.location.hash = '#/login'; return; }
         if (!proConfig?.stripe_enabled) { alert('Payments are not configured on this server.'); return; }
         upgradeBtn.textContent = 'Redirecting...';
@@ -1524,6 +1516,22 @@ function _startLandingChatDemo(scenes) {
   playScene();
 }
 
+function _updateSidebarActive(page) {
+  const map = {
+    home: '#new-chat-btn',
+    chat: '#new-chat-btn',
+    chats: '.sidebar-chats-link',
+    library: '.sidebar-library-link',
+    minds: '.sidebar-minds-link',
+    mind: '.sidebar-minds-link',
+    book: '.sidebar-library-link',
+    read: '.sidebar-library-link',
+  };
+  document.querySelectorAll('.app-sidebar .sidebar-nav-link, .app-sidebar .new-chat-action').forEach(el => el.classList.remove('active'));
+  const sel = map[page];
+  if (sel) document.querySelector(sel)?.classList.add('active');
+}
+
 function navigate() {
   const route = getRoute();
   // Reader attaches a document-level keydown handler; remove it when leaving #/read
@@ -1535,6 +1543,7 @@ function navigate() {
   document.querySelectorAll('.page-view').forEach(el => el.classList.add('hidden'));
   const el = document.getElementById('page-' + route.page);
   if (el) el.classList.remove('hidden');
+  _updateSidebarActive(route.page);
 
   const appLayout = document.getElementById('app-layout');
   if (route.page === 'landing') {
@@ -1547,6 +1556,8 @@ function navigate() {
   } else {
     appLayout.classList.remove('login-active');
   }
+
+  phTrack('$pageview', { page: route.page, path: window.location.hash });
 
   switch (route.page) {
     case 'landing':
@@ -1604,8 +1615,11 @@ async function api(path, opts = {}) {
   let d;
   try { d = await r.json(); } catch { d = { detail: r.statusText || 'Request failed' }; }
   if (r.status === 429 && (d.detail?.code === 'quota_exceeded' || d.detail?.code === 'upload_limit_reached')) {
-    showProOverlay();
-    throw new Error(d.detail.message || 'Quota exceeded');
+    phTrack('quota_hit', { action: d.detail.action, limit: d.detail.limit, used: d.detail.used, tier: d.detail.tier });
+    if (d.detail.action !== 'generate_mind') showProOverlay();
+    const qe = new Error(d.detail.message || 'Quota exceeded');
+    qe.quota = true;
+    throw qe;
   }
   // Token expired or invalid — try refreshing the session before giving up
   if (r.status === 401 && (d.code === 'token_expired' || d.code === 'invalid_token') && supabaseClient) {
@@ -1922,14 +1936,81 @@ function showOnboarding() {
       container.classList.add('hidden');
       document.getElementById('home-center-main').classList.remove('hidden');
       document.getElementById('greeting').textContent = getGreeting();
-      if (selectedTopics.size) {
+      const topics = [...selectedTopics];
+      if (topics.length) {
         window.location.hash = '#/library';
-        for (const topic of selectedTopics) {
-          handleTopicClick(topic);
-        }
+        setTimeout(() => showOnboardingBookPicker(topics), 250);
       }
     });
   }
+}
+
+// ─── Onboarding book picker (shown over library after tag selection) ───
+function showOnboardingBookPicker(topics, _retryCount = 0) {
+  if (document.getElementById('onboarding-book-overlay')) return;
+  if (!allBooks.length && _retryCount < 10) {
+    setTimeout(() => showOnboardingBookPicker(topics, _retryCount + 1), 300);
+    return;
+  }
+  const topicLower = new Set(topics.map(t => t.toLowerCase()));
+  const chattable = b => b.available || b.hasFullText;
+  const inTopic = b => topicLower.has((b.category || '').toLowerCase());
+  const rank = b => (b.hasFullText ? 0 : 1) * 10 + (b.available ? 0 : 1);
+  let candidates = allBooks.filter(b => chattable(b) && inTopic(b)).sort((a,b) => rank(a) - rank(b));
+  if (candidates.length < 3) {
+    const seen = new Set(candidates.map(b => b.id));
+    const extras = allBooks.filter(b => chattable(b) && !seen.has(b.id)).sort((a,b) => rank(a) - rank(b));
+    candidates = candidates.concat(extras).slice(0, 3);
+  }
+  if (!candidates.length) return;
+  const picks = candidates.slice(0, Math.min(3, candidates.length));
+  const firstName = (userName || '').split(' ')[0] || 'there';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'onboarding-book-overlay';
+  overlay.className = 'onboarding-book-overlay';
+  overlay.innerHTML = `
+    <div class="onboarding-book-modal" role="dialog" aria-label="Pick a book to chat with">
+      <button class="onboarding-book-close" aria-label="Close">&times;</button>
+      <h2 class="onboarding-book-title">Welcome, ${esc(firstName)}!</h2>
+      <p class="onboarding-book-subtitle">Pick a book to chat with — great minds will join the discussion</p>
+      <div class="onboarding-book-grid">
+        ${picks.map(b => {
+          const coverBg = b.isAIGenerated ? 'background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)' : `background:${coverColor(b.title)}`;
+          return `
+            <div class="onboarding-book-card" data-id="${esc(b.id)}">
+              <div class="onboarding-book-cover" style="${coverBg}"><span>${coverInitials(b.title)}</span></div>
+              <div class="onboarding-book-info">
+                <h3>${esc(b.title)}</h3>
+                <p>${esc(b.author || '')}</p>
+              </div>
+              <button class="onboarding-book-chat-btn" data-id="${esc(b.id)}">Chat</button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('visible'));
+
+  function close() {
+    overlay.classList.remove('visible');
+    setTimeout(() => overlay.remove(), 200);
+  }
+  function pickBook(bookId) {
+    close();
+    selectBookForChat(bookId);
+  }
+
+  overlay.querySelector('.onboarding-book-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelectorAll('.onboarding-book-card').forEach(card => {
+    card.addEventListener('click', e => {
+      e.stopPropagation();
+      pickBook(card.dataset.id);
+    });
+  });
 }
 
 // ─── Chat messages ───
@@ -2080,17 +2161,19 @@ function appendMsg(container, role, text, sources, opts, hasMentions, contextMin
   container.scrollTop = container.scrollHeight;
 }
 
-function appendMindMsg(container, mindName, text) {
+function appendMindMsg(container, mindName, text, mindId) {
   const raw = String(text ?? '');
   const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   // Strip leading "[Name]: " prefix if LLM echoed it
   const prefixRe = new RegExp(`^\\[${mindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*`, 'i');
   const strippedRaw = raw.replace(prefixRe, '');
+  const resolvedMindId = mindId || _findMindIdByName(mindName);
   const el = document.createElement('div');
   el.className = 'chat-message mind-message';
   el.setAttribute('dir', 'auto');
   el.dataset.raw = strippedRaw;
   el.dataset.mindName = mindName;
+  if (resolvedMindId) el.dataset.mindId = resolvedMindId;
   const color = mindColor(mindName);
   const initials = mindInitials(mindName);
   const avatar = document.createElement('div');
@@ -2106,9 +2189,38 @@ function appendMindMsg(container, mindName, text) {
   content.setAttribute('dir', 'auto');
   content.innerHTML = renderMarkdown(cleaned.replace(prefixRe, '').trim());
   body.appendChild(content);
+  const actions = document.createElement('div');
+  actions.className = 'mind-msg-actions';
+  actions.innerHTML = `<button class="mind-share-btn" title="Share this response"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>`;
+  actions.querySelector('.mind-share-btn').addEventListener('click', () => shareMindMessage(mindName, strippedRaw, resolvedMindId));
+  body.appendChild(actions);
   el.appendChild(body);
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
+}
+
+function _findMindIdByName(name) {
+  if (!name || !Array.isArray(allMinds)) return null;
+  const m = allMinds.find(x => x.name === name);
+  return m ? m.id : null;
+}
+
+async function shareMindMessage(mindName, text, mindId) {
+  const id = mindId || _findMindIdByName(mindName);
+  const url = id ? `${window.location.origin}/mind/${id}` : 'https://feynman.wiki';
+  const shareText = `${mindName} on Feynman:\n\n"${text.slice(0, 280)}${text.length > 280 ? '...' : ''}"\n\n${url}`;
+  if (navigator.share) {
+    try { await navigator.share({ text: shareText }); } catch {}
+  } else if (navigator.clipboard) {
+    await navigator.clipboard.writeText(shareText);
+    const toast = document.createElement('div');
+    toast.className = 'share-toast';
+    toast.textContent = 'Copied to clipboard';
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('visible'));
+    setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 200); }, 2000);
+  }
+  phTrack('mind_shared', { mind: mindName, has_url: !!id });
 }
 
 function appendJoinNotice(container, mindNames) {
@@ -2307,7 +2419,7 @@ async function switchToSession(id) {
 
     for (const m of session.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content);
+        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
@@ -2463,6 +2575,7 @@ async function sendGlobalChat(message) {
   if (!currentSessionId) await createSession();
   updateSessionTitle(message);
   const sentSessionId = currentSessionId;
+  phTrack('chat_sent', { has_books: selectedBooks.size > 0, has_minds: selectedMinds.size > 0, has_mentions: mentionedNames.length > 0 });
 
   appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
   showLoading(chatBox);
@@ -2623,9 +2736,13 @@ function showMindJoinPrompt(chatBox, mindNames, inviteGen) {
         finish(false);
         return;
       }
+      phTrack('mind_joined', { minds: mindNames, count: mindNames.length });
       finish(true);
     });
-    wrap.querySelector('.mind-consent-decline').addEventListener('click', () => finish(false));
+    wrap.querySelector('.mind-consent-decline').addEventListener('click', () => {
+      phTrack('mind_declined', { minds: mindNames, count: mindNames.length });
+      finish(false);
+    });
     chatBox.appendChild(wrap);
     chatBox.scrollTop = chatBox.scrollHeight;
   });
@@ -2698,7 +2815,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
     }
     for (const r of responses) {
       if (r.response && !r.response.startsWith('[')) {
-        _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name });
+        _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name, mindId: r.mind_id });
       }
     }
 
@@ -2711,7 +2828,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
       if (joinedResponded.length) appendJoinNotice(chatBox, joinedResponded);
       for (const r of responses) {
         if (r.response && !r.response.startsWith('[')) {
-          appendMindMsg(chatBox, r.mind_name, r.response);
+          appendMindMsg(chatBox, r.mind_name, r.response, r.mind_id);
           if (onMindPage) {
             mindChatHistory.push({ role: 'assistant', content: `[${r.mind_name}]: ${r.response}` });
           }
@@ -2942,7 +3059,7 @@ async function onChatPageShow() {
   if (session?.messages?.length) {
     for (const m of session.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content);
+        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
@@ -3082,6 +3199,7 @@ async function discoverMore(topics) {
   if (barBtn) { barBtn.textContent = 'Discovering...'; barBtn.disabled = true; }
   try {
     let totalTokens = 0;
+    let newCount = 0;
     for (const topic of topics) {
       const count = Math.floor(Math.random() * 3) + 1;
       const data = await api('/api/discover', {
@@ -3090,11 +3208,14 @@ async function discoverMore(topics) {
         body: JSON.stringify({ topic, count }),
       });
       if (data.usage?.total_tokens) totalTokens += data.usage.total_tokens;
+      if (data.books) newCount += data.books.filter(b => b.new).length;
     }
     await loadAgents();
     if (totalTokens > 0) _searchUsage = { total_tokens: totalTokens, input_tokens: 0, output_tokens: 0 };
+    if (newCount > 0) showToast(`Added ${newCount} new book${newCount > 1 ? 's' : ''}`);
+    else showToast('These books are already in your library — try a different topic');
   } catch (err) {
-    alert('Discovery failed: ' + err.message);
+    if (!err.quota) showToast('Discovery failed: ' + err.message);
   }
   for (const topic of topics) loadingTopics.delete(topic);
   renderTopicTags();
@@ -6500,7 +6621,7 @@ async function renderMindDetail(mindId) {
     }
     for (const m of existingSession.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content);
+        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
         mindChatHistory.push({ role: 'assistant', content: m.content });
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
@@ -6534,9 +6655,9 @@ async function renderMindDetail(mindId) {
       const greet = await api('/api/minds/' + mindId + '/greet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       removeLoading();
       if (greet?.response) {
-        appendMindMsg(chatBox, mind.name, greet.response);
+        appendMindMsg(chatBox, mind.name, greet.response, mind.id);
         mindChatHistory.push({ role: 'assistant', content: greet.response });
-        _queueSessionMessage(session.id, 'mind', greet.response, { mindName: mind.name });
+        _queueSessionMessage(session.id, 'mind', greet.response, { mindName: mind.name, mindId: mind.id });
         _saveMindSession(chatBox);
       }
     } catch (e) {
@@ -6636,12 +6757,12 @@ async function sendMindChat(mindId, message) {
       removeLoading();
 
       const mindName = primaryMind?.name || 'Mind';
-      appendMindMsg(chatBox, mindName, data.response);
+      appendMindMsg(chatBox, mindName, data.response, mindId);
 
       mindChatHistory.push({ role: 'user', content: message });
       mindChatHistory.push({ role: 'assistant', content: data.response });
 
-      _queueSessionMessage(sentSessionId, 'mind', data.response, { mindName });
+      _queueSessionMessage(sentSessionId, 'mind', data.response, { mindName, mindId });
 
       if (!activeMinds.has(mindId) && primaryMind) {
         activeMinds.set(mindId, { id: mindId, name: primaryMind.name });
@@ -6893,9 +7014,29 @@ function initTheme() {
   }
 }
 
+function initPostHog() {
+  const key = window.POSTHOG_KEY;
+  if (!key || typeof posthog === 'undefined') return;
+  posthog.init(key, {
+    api_host: 'https://us.i.posthog.com',
+    person_profiles: 'identified_only',
+    capture_pageview: false,
+    autocapture: false,
+  });
+}
+
+function phTrack(event, props) {
+  if (typeof posthog !== 'undefined' && posthog.capture) posthog.capture(event, props);
+}
+
+function phIdentify(userId, traits) {
+  if (typeof posthog !== 'undefined' && posthog.identify) posthog.identify(userId, traits);
+}
+
 async function init() {
   initTheme();
   await loadProConfig();
+  initPostHog();
   if (window.FEYNMAN_PRO) await initSupabase();
   await loadUserTier();
 

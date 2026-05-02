@@ -52,6 +52,12 @@ def check_quota(request: Request, action: str) -> None:
 
     used = count_usage_today(user_id, action)
     if used >= limit:
+        messages = {
+            "chat": "You've used all your daily chats. Upgrade to Pro for 200 chats/day.",
+            "mind_chat": "You've reached your daily mind conversations limit. Upgrade to Pro for 100/day.",
+            "generate_mind": "Great minds are waiting to join your discussions. Upgrade to Pro for unlimited mind suggestions.",
+            "discover": "You've used all your daily discoveries. Upgrade to Pro to discover 50 books/day.",
+        }
         raise HTTPException(
             status_code=429,
             detail={
@@ -60,7 +66,7 @@ def check_quota(request: Request, action: str) -> None:
                 "limit": limit,
                 "used": used,
                 "tier": tier,
-                "message": f"Daily {action} limit reached ({limit}). Upgrade to Pro for higher limits.",
+                "message": messages.get(action, f"Daily {action} limit reached ({limit}). Upgrade to Pro for higher limits."),
             },
         )
 
