@@ -1903,6 +1903,9 @@ function showOnboarding() {
       if (!name) return;
       userName = name;
       localStorage.setItem('userName', userName);
+      if (supabaseClient && currentUser) {
+        supabaseClient.auth.updateUser({ data: { full_name: name } }).catch(() => {});
+      }
       showStep2();
     }
   }
@@ -2161,19 +2164,17 @@ function appendMsg(container, role, text, sources, opts, hasMentions, contextMin
   container.scrollTop = container.scrollHeight;
 }
 
-function appendMindMsg(container, mindName, text, mindId) {
+function appendMindMsg(container, mindName, text, usage) {
   const raw = String(text ?? '');
   const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   // Strip leading "[Name]: " prefix if LLM echoed it
   const prefixRe = new RegExp(`^\\[${mindName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*`, 'i');
   const strippedRaw = raw.replace(prefixRe, '');
-  const resolvedMindId = mindId || _findMindIdByName(mindName);
   const el = document.createElement('div');
   el.className = 'chat-message mind-message';
   el.setAttribute('dir', 'auto');
   el.dataset.raw = strippedRaw;
   el.dataset.mindName = mindName;
-  if (resolvedMindId) el.dataset.mindId = resolvedMindId;
   const color = mindColor(mindName);
   const initials = mindInitials(mindName);
   const avatar = document.createElement('div');
@@ -2189,38 +2190,16 @@ function appendMindMsg(container, mindName, text, mindId) {
   content.setAttribute('dir', 'auto');
   content.innerHTML = renderMarkdown(cleaned.replace(prefixRe, '').trim());
   body.appendChild(content);
-  const actions = document.createElement('div');
-  actions.className = 'mind-msg-actions';
-  actions.innerHTML = `<button class="mind-share-btn" title="Share this response"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>`;
-  actions.querySelector('.mind-share-btn').addEventListener('click', () => shareMindMessage(mindName, strippedRaw, resolvedMindId));
-  body.appendChild(actions);
+  if (usage && usage.total_tokens > 0) {
+    const tu = document.createElement('div');
+    tu.className = 'token-usage';
+    tu.textContent = `${usage.total_tokens} tokens`;
+    tu.title = `Input: ${usage.input_tokens} · Output: ${usage.output_tokens}`;
+    body.appendChild(tu);
+  }
   el.appendChild(body);
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
-}
-
-function _findMindIdByName(name) {
-  if (!name || !Array.isArray(allMinds)) return null;
-  const m = allMinds.find(x => x.name === name);
-  return m ? m.id : null;
-}
-
-async function shareMindMessage(mindName, text, mindId) {
-  const id = mindId || _findMindIdByName(mindName);
-  const url = id ? `${window.location.origin}/mind/${id}` : 'https://feynman.wiki';
-  const shareText = `${mindName} on Feynman:\n\n"${text.slice(0, 280)}${text.length > 280 ? '...' : ''}"\n\n${url}`;
-  if (navigator.share) {
-    try { await navigator.share({ text: shareText }); } catch {}
-  } else if (navigator.clipboard) {
-    await navigator.clipboard.writeText(shareText);
-    const toast = document.createElement('div');
-    toast.className = 'share-toast';
-    toast.textContent = 'Copied to clipboard';
-    document.body.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('visible'));
-    setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 200); }, 2000);
-  }
-  phTrack('mind_shared', { mind: mindName, has_url: !!id });
 }
 
 function appendJoinNotice(container, mindNames) {
@@ -2419,7 +2398,7 @@ async function switchToSession(id) {
 
     for (const m of session.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
+        appendMindMsg(chatBox, m.mindName, m.content, m.usage);
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
@@ -2815,7 +2794,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
     }
     for (const r of responses) {
       if (r.response && !r.response.startsWith('[')) {
-        _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name, mindId: r.mind_id });
+        _queueSessionMessage(sessionId, 'mind', r.response, { mindName: r.mind_name, usage: r.usage });
       }
     }
 
@@ -2828,7 +2807,7 @@ async function _inviteMindsToChat(chatBox, message, bookContext, agentIds, targe
       if (joinedResponded.length) appendJoinNotice(chatBox, joinedResponded);
       for (const r of responses) {
         if (r.response && !r.response.startsWith('[')) {
-          appendMindMsg(chatBox, r.mind_name, r.response, r.mind_id);
+          appendMindMsg(chatBox, r.mind_name, r.response, r.usage);
           if (onMindPage) {
             mindChatHistory.push({ role: 'assistant', content: `[${r.mind_name}]: ${r.response}` });
           }
@@ -3059,7 +3038,7 @@ async function onChatPageShow() {
   if (session?.messages?.length) {
     for (const m of session.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
+        appendMindMsg(chatBox, m.mindName, m.content, m.usage);
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
@@ -6621,7 +6600,7 @@ async function renderMindDetail(mindId) {
     }
     for (const m of existingSession.messages) {
       if (m.role === 'mind') {
-        appendMindMsg(chatBox, m.mindName, m.content, m.mindId);
+        appendMindMsg(chatBox, m.mindName, m.content, m.usage);
         mindChatHistory.push({ role: 'assistant', content: m.content });
       } else if (m.role === 'system-notice') {
         appendJoinNotice(chatBox, m.mindNames || []);
@@ -6655,9 +6634,9 @@ async function renderMindDetail(mindId) {
       const greet = await api('/api/minds/' + mindId + '/greet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       removeLoading();
       if (greet?.response) {
-        appendMindMsg(chatBox, mind.name, greet.response, mind.id);
+        appendMindMsg(chatBox, mind.name, greet.response, greet.usage);
         mindChatHistory.push({ role: 'assistant', content: greet.response });
-        _queueSessionMessage(session.id, 'mind', greet.response, { mindName: mind.name, mindId: mind.id });
+        _queueSessionMessage(session.id, 'mind', greet.response, { mindName: mind.name, usage: greet.usage });
         _saveMindSession(chatBox);
       }
     } catch (e) {
@@ -6757,12 +6736,12 @@ async function sendMindChat(mindId, message) {
       removeLoading();
 
       const mindName = primaryMind?.name || 'Mind';
-      appendMindMsg(chatBox, mindName, data.response, mindId);
+      appendMindMsg(chatBox, mindName, data.response, data.usage);
 
       mindChatHistory.push({ role: 'user', content: message });
       mindChatHistory.push({ role: 'assistant', content: data.response });
 
-      _queueSessionMessage(sentSessionId, 'mind', data.response, { mindName, mindId });
+      _queueSessionMessage(sentSessionId, 'mind', data.response, { mindName, usage: data.usage });
 
       if (!activeMinds.has(mindId) && primaryMind) {
         activeMinds.set(mindId, { id: mindId, name: primaryMind.name });

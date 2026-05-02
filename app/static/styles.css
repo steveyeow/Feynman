@@ -2113,29 +2113,6 @@ html.dark .mind-share-opt:hover { background: rgba(255,255,255,0.08); }
   color: var(--text-secondary);
   line-height: 1.7;
 }
-.mind-msg-actions {
-  margin-top: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.mind-message:hover .mind-msg-actions { opacity: 1; }
-.mind-share-btn {
-  background: none; border: none; cursor: pointer;
-  padding: 2px 6px; border-radius: 4px;
-  color: var(--text-muted);
-  transition: color 0.15s, background 0.15s;
-}
-.mind-share-btn:hover { color: var(--accent); background: var(--bg-hover); }
-.share-toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  padding: 8px 16px; border-radius: 8px;
-  background: var(--bg-card); color: var(--text);
-  box-shadow: var(--shadow-md); font-size: 13px;
-  opacity: 0; transition: opacity 0.2s;
-  z-index: 9999;
-}
-.share-toast.visible { opacity: 1; }
-
 /* Join / system notices */
 .chat-system-notice {
   display: flex;
