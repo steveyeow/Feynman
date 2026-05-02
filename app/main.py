@@ -974,8 +974,23 @@ def api_og_image(agent_id: str):
 
 # ─── Crawlable SSR pages for books and minds ───
 
+_CRAWLER_UA_TOKENS = (
+    "bot", "crawler", "spider", "slurp",
+    "facebookexternalhit", "facebot",
+    "whatsapp", "telegram", "discordbot", "slackbot",
+    "linkedin", "embedly", "preview",
+)
+
+
+def _is_crawler(request: Request) -> bool:
+    """Detect link-preview crawlers so we can skip the JS redirect that
+    otherwise sends them to the SPA root and clobbers our OG tags."""
+    ua = request.headers.get("user-agent", "").lower()
+    return any(t in ua for t in _CRAWLER_UA_TOKENS)
+
+
 @app.get("/book/{agent_id}", response_class=HTMLResponse)
-def book_page(agent_id: str) -> HTMLResponse:
+def book_page(agent_id: str, request: Request) -> HTMLResponse:
     """Server-rendered book landing page with OG tags and JSON-LD for SEO/GEO."""
     from html import escape as html_esc
     from urllib.parse import quote
@@ -1078,7 +1093,7 @@ def book_page(agent_id: str) -> HTMLResponse:
 {f'<p>{desc}</p>' if subtitle_raw else ''}
 {toc_html}
 <p><a href="{html_esc(reader_url)}">Read this book on Feynman</a></p>
-<script>window.location.replace({json.dumps(reader_url)});</script>
+{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
@@ -1110,7 +1125,7 @@ def mind_og_image(mind_id: str):
 
 
 @app.get("/mind/{mind_id}", response_class=HTMLResponse)
-def mind_page(mind_id: str) -> HTMLResponse:
+def mind_page(mind_id: str, request: Request) -> HTMLResponse:
     """Server-rendered mind landing page with OG tags and JSON-LD Person schema."""
     from html import escape as html_esc
 
@@ -1192,7 +1207,7 @@ def mind_page(mind_id: str) -> HTMLResponse:
 {f'<p>{bio}</p>' if bio else ''}
 {works_html}
 <p><a href="{html_esc(reader_url)}">Chat with {name} on Feynman</a></p>
-<script>window.location.replace({json.dumps(reader_url)});</script>
+{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
