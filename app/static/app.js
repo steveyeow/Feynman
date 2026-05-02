@@ -1735,7 +1735,7 @@ function buildBookList() {
       title: a.name,
       author: meta.author || a.source || '',
       isbn: meta.isbn || null,
-      category: meta.category || a.type,
+      category: meta.category || (a.type === 'ai_book' ? '' : a.type),
       description: meta.description || '',
       agentId: a.id,           // all books have agentId
       status: a.status,
@@ -3449,7 +3449,9 @@ async function _restoreWriteBookState(session, chatBox) {
     _writeBookOutline = book.outline;
     if (book.status === 'writing') {
       _startWritingPoll(aiBookId, chatBox);
-    } else if (book.status === 'completed' || book.status === 'cancelled' || book.status === 'failed') {
+    } else if (book.status === 'completed') {
+      _hideBookCanvas();
+    } else if (book.status === 'cancelled' || book.status === 'failed') {
       _showBookCanvas(_renderCanvasWritingProgress(book), book);
     } else if (book.status === 'outlining') {
       _showBookCanvas(_renderCanvasOutline(book.outline, aiBookId));

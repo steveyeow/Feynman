@@ -19,6 +19,7 @@ _OUTLINE_SYSTEM = (
     "Return ONLY a JSON object (no markdown fences) with these keys:\n"
     "- title: string (the book title)\n"
     "- subtitle: string (a short subtitle)\n"
+    "- category: string (one broad subject category, e.g. 'History', 'Biography', 'Science', 'Philosophy', 'Business', 'Technology', 'Health', 'Art', 'Religion', 'Politics', 'Psychology', 'Literature', 'Economics', 'Cooking', 'Travel')\n"
     "- chapters: array of objects, each with:\n"
     "  - number: int\n"
     "  - title: string\n"
@@ -34,7 +35,7 @@ _REFINE_SYSTEM = (
     "The current outline is provided below. The user wants to modify it.\n\n"
     "IMPORTANT: After your conversational response, you MUST include an updated outline as a JSON block. "
     "Wrap the JSON in ```json and ``` markers. The JSON must have the same structure: "
-    "{title, subtitle, chapters: [{number, title, summary, key_points, estimated_words}]}.\n\n"
+    "{title, subtitle, category, chapters: [{number, title, summary, key_points, estimated_words}]}.\n\n"
     "If the user's request doesn't require outline changes, return the outline unchanged. "
     "Always respond in the same language as the user."
 )

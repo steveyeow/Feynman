@@ -2159,6 +2159,7 @@ def api_ai_book_start(payload: AIBookStartRequest, request: Request) -> dict[str
         "creator_name": creator_name or "User",
         "creator_user_id": user_id,
         "description": outline.get("subtitle", ""),
+        "category": (outline.get("category") or "").strip(),
     }
 
     try:
