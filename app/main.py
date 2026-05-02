@@ -1087,7 +1087,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
 <script type="application/ld+json">{jsonld}</script>
-</head><body>
+</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
 <h1>{title}</h1>
 {f'<p>by {html_esc(author_raw)}</p>' if author_raw else ''}
 {f'<p>{desc}</p>' if subtitle_raw else ''}
@@ -1201,7 +1201,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
 <script type="application/ld+json">{jsonld}</script>
-</head><body>
+</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
 <h1>{name}</h1>
 {f'<p>{era} · {domain}</p>' if era else f'<p>{domain}</p>'}
 {f'<p>{bio}</p>' if bio else ''}
