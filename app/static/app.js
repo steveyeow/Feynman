@@ -1642,11 +1642,12 @@ async function api(path, opts = {}) {
   return d;
 }
 
-async function loadAgents() {
+async function loadAgents(bustCache = false) {
   booksLoadState = 'loading';
   _refreshOpenPopovers();
   try {
-    const data = await api('/api/agents');
+    const url = bustCache ? '/api/agents?_t=' + Date.now() : '/api/agents';
+    const data = await api(url);
     agents = Array.isArray(data) ? data : [];
     booksLoadState = 'ready';
   } catch {
@@ -2373,10 +2374,12 @@ async function switchToSession(id) {
   localStorage.setItem('currentSessionId', currentSessionId);
 
   if (session.sessionType === 'book') {
+    renderChatHistory();
     window.location.hash = '#/book/' + session.mindId;
     return;
   }
   if (session.mindId) {
+    renderChatHistory();
     window.location.hash = '#/mind/' + session.mindId;
     return;
   }
@@ -3189,7 +3192,7 @@ async function discoverMore(topics) {
       if (data.usage?.total_tokens) totalTokens += data.usage.total_tokens;
       if (data.books) newCount += data.books.filter(b => b.new).length;
     }
-    await loadAgents();
+    await loadAgents(true);
     if (totalTokens > 0) _searchUsage = { total_tokens: totalTokens, input_tokens: 0, output_tokens: 0 };
     if (newCount > 0) showToast(`Added ${newCount} new book${newCount > 1 ? 's' : ''}`);
     else showToast('These books are already in your library — try a different topic');
@@ -3205,30 +3208,38 @@ let _searchingQuery = null;
 let _pendingSearchQuery = null;
 let _searchDiscoveredIds = new Set();
 let _searchUsage = null;
+let _searchAbortController = null;
 async function autoSearchBook(query) {
   if (_searchingQuery === query) return;
+  if (_searchAbortController) {
+    try { _searchAbortController.abort(); } catch {}
+  }
+  const ac = new AbortController();
+  _searchAbortController = ac;
   _searchingQuery = query;
   if (_pendingSearchQuery === query) _pendingSearchQuery = null;
   try {
     const data = await api('/api/search-book', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ query }),
+      signal: ac.signal,
     });
     if (_searchingQuery !== query) return; // user typed something else
     // Track discovered book IDs so they show even if title doesn't match search text
     (data.books || []).forEach(b => { if (b.id) _searchDiscoveredIds.add(b.id); });
     _searchUsage = data.usage?.total_tokens > 0 ? data.usage : null;
-    await loadAgents();
-    buildBookList();
+    await loadAgents(true);
     _searchingQuery = null;
     renderLibraryGrid();
     return;
   } catch (err) {
+    if (err?.name === 'AbortError') return;
     if (_searchingQuery !== query) return;
     const c = document.getElementById('search-discover-prompt');
     if (c) c.innerHTML = `<p style="color:var(--text-muted)">Could not find "${esc(query)}"</p>`;
   } finally {
     if (_searchingQuery === query) _searchingQuery = null;
+    if (_searchAbortController === ac) _searchAbortController = null;
   }
 }
 
@@ -7220,17 +7231,26 @@ function bindComposerControls() {
   let searchTimer = null;
   document.getElementById('library-search').addEventListener('input', e => {
     librarySearch = e.target.value.trim();
-    _searchDiscoveredIds.clear();
-    _searchUsage = null;
+    // Only clear discovered IDs when input is fully cleared, otherwise keep
+    // previously discovered books visible across keystrokes.
+    if (!librarySearch) {
+      _searchDiscoveredIds.clear();
+      _searchUsage = null;
+    }
     _pendingSearchQuery = null;
     clearTimeout(searchTimer);
+    // Abort any in-flight LLM search — user is still typing, result is stale.
+    if (_searchAbortController) {
+      try { _searchAbortController.abort(); } catch {}
+      _searchAbortController = null;
+    }
     if (librarySearch.length >= 2) {
       // Check if local results are empty
       const q = librarySearch.toLowerCase();
       const hasLocal = allBooks.some(b => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
       if (!hasLocal) {
         _pendingSearchQuery = librarySearch;
-        searchTimer = setTimeout(() => autoSearchBook(librarySearch), 600);
+        searchTimer = setTimeout(() => autoSearchBook(librarySearch), 1200);
       }
     }
     renderLibraryGrid();
