@@ -2352,6 +2352,10 @@ async function createSession(mindId) {
   if (!mindId) {
     document.getElementById('chat-messages').innerHTML = '';
     hideChatRightSidebar();
+    _hideBookCanvas();
+    _writeBookId = null;
+    _writeBookOutline = null;
+    _writeBookAgentId = null;
   }
   renderChatHistory();
   if (getRoute().page === 'chat') _setChatHashForSession(session.id);
@@ -3460,9 +3464,7 @@ async function _restoreWriteBookState(session, chatBox) {
     _writeBookOutline = book.outline;
     if (book.status === 'writing') {
       _startWritingPoll(aiBookId, chatBox);
-    } else if (book.status === 'completed') {
-      _hideBookCanvas();
-    } else if (book.status === 'cancelled' || book.status === 'failed') {
+    } else if (book.status === 'completed' || book.status === 'cancelled' || book.status === 'failed') {
       _showBookCanvas(_renderCanvasWritingProgress(book), book);
     } else if (book.status === 'outlining') {
       _showBookCanvas(_renderCanvasOutline(book.outline, aiBookId));
@@ -4687,6 +4689,10 @@ async function chatWithBookByAgent(agentId) {
   activeMinds.clear();
   _mindsInvitedOnce = false;
   selectedBooks.set(book.id, book);
+  _hideBookCanvas();
+  _writeBookId = null;
+  _writeBookOutline = null;
+  _writeBookAgentId = null;
   window.location.hash = '#/';
 }
 window.chatWithBookByAgent = chatWithBookByAgent;
