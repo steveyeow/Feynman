@@ -2018,7 +2018,7 @@ function showOnboardingBookPicker(topics, _retryCount = 0) {
 }
 
 // ─── Chat messages ───
-function appendMsg(container, role, text, sources, opts, hasMentions, contextMinds) {
+function appendMsg(container, role, text, sources, opts, hasMentions, contextMinds, contextBooks) {
   const raw = String(text ?? '');
   const cleaned = raw.replace(/<div\b[^>]*>|<\/div>/gi, '').trim();
   const el = document.createElement('div');
@@ -2028,6 +2028,7 @@ function appendMsg(container, role, text, sources, opts, hasMentions, contextMin
   if (sources?.length) el.dataset.sources = JSON.stringify(sources);
   if (opts && Object.keys(opts).length) el.dataset.opts = JSON.stringify(opts);
   if (contextMinds?.length) el.dataset.contextMinds = JSON.stringify(contextMinds);
+  if (contextBooks?.length) el.dataset.contextBooks = JSON.stringify(contextBooks);
   const webSrcs = opts?.webSources || [];
   const refs = opts?.references || [];
   const refsByIndex = new Map(refs.map(r => [Number(r.index), r]));
@@ -2071,6 +2072,14 @@ function appendMsg(container, role, text, sources, opts, hasMentions, contextMin
       });
     });
   } else if (role === 'user') {
+    if (contextBooks?.length) {
+      const booksEl = document.createElement('div');
+      booksEl.className = 'msg-context-books';
+      booksEl.innerHTML = contextBooks
+        .map(b => `<span class="book-tag" title="${esc(b.title)}">${esc(b.title)}</span>`)
+        .join('');
+      el.appendChild(booksEl);
+    }
     const textEl = document.createElement('span');
     const contextPrefix = contextMinds?.length
       ? contextMinds.map(m => `<span class="mention-tag">@${esc(m.name)}</span>`).join(' ') + ' '
@@ -2410,8 +2419,9 @@ async function switchToSession(id) {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
         const cm = m.role === 'user' ? m.contextMinds : undefined;
+        const cb = m.role === 'user' ? m.contextBooks : undefined;
         const hasMentions = m.role === 'user' && /(?:^|\s)@\S/.test(m.content || '');
-        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, hasMentions, cm);
+        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, hasMentions, cm, cb);
       }
     }
     renderSelectedChips();
@@ -2557,16 +2567,20 @@ async function sendGlobalChat(message) {
 
   const mentionedNames = parseMentions(message);
   const contextMinds = [...selectedMinds.values()].filter(m => !mentionedNames.includes(m.name));
+  const contextBooks = [...selectedBooks.values()].map(b => ({ id: b.id, title: b.title }));
 
   if (!currentSessionId) await createSession();
   updateSessionTitle(message);
   const sentSessionId = currentSessionId;
   phTrack('chat_sent', { has_books: selectedBooks.size > 0, has_minds: selectedMinds.size > 0, has_mentions: mentionedNames.length > 0 });
 
-  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
+  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds, contextBooks);
   showLoading(chatBox);
 
-  _queueSessionMessage(sentSessionId, 'user', message, contextMinds.length ? { contextMinds: contextMinds.map(m => ({ name: m.name })) } : undefined);
+  const userMeta = {};
+  if (contextMinds.length) userMeta.contextMinds = contextMinds.map(m => ({ name: m.name }));
+  if (contextBooks.length) userMeta.contextBooks = contextBooks;
+  _queueSessionMessage(sentSessionId, 'user', message, Object.keys(userMeta).length ? userMeta : undefined);
 
   _inflightSessionId = sentSessionId;
   const renderGenAtStart = _chatRenderGen;
@@ -3050,8 +3064,9 @@ async function onChatPageShow() {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else {
         const cm = m.role === 'user' ? m.contextMinds : undefined;
+        const cb = m.role === 'user' ? m.contextBooks : undefined;
         const hasMentions = m.role === 'user' && /(?:^|\s)@\S/.test(m.content || '');
-        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, hasMentions, cm);
+        appendMsg(chatBox, m.role, m.content, m.sources, m.opts, hasMentions, cm, cb);
       }
     }
     restoreChatSidebar(session.messages);
@@ -6625,7 +6640,7 @@ async function renderMindDetail(mindId) {
         appendJoinNotice(chatBox, m.mindNames || []);
       } else if (m.role === 'user') {
         const hasMentions = /(?:^|\s)@\S/.test(m.content || '');
-        appendMsg(chatBox, 'user', m.content, null, null, hasMentions, m.contextMinds);
+        appendMsg(chatBox, 'user', m.content, null, null, hasMentions, m.contextMinds, m.contextBooks);
         mindChatHistory.push({ role: 'user', content: m.content });
       } else {
         appendMsg(chatBox, m.role, m.content, m.sources, m.opts);
@@ -6715,15 +6730,19 @@ async function sendMindChat(mindId, message) {
   const input = document.getElementById('mind-chat-input');
   const mentionedNames = parseMentions(message);
   const contextMinds = [...selectedMinds.values()].filter(m => !mentionedNames.includes(m.name));
+  const contextBooks = [...selectedBooks.values()].map(b => ({ id: b.id, title: b.title }));
   // Cancel any in-flight minds invitation from previous message
   _mindsInviteGen++;
   removeMindsLoading();
-  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds);
+  appendMsg(chatBox, 'user', message, null, null, mentionedNames.length > 0, contextMinds, contextBooks);
   if (input) input.value = '';
   showLoading(chatBox);
 
   const sentSessionId = currentSessionId;
-  _queueSessionMessage(sentSessionId, 'user', message, contextMinds.length ? { contextMinds: contextMinds.map(m => ({ name: m.name })) } : undefined);
+  const userMeta = {};
+  if (contextMinds.length) userMeta.contextMinds = contextMinds.map(m => ({ name: m.name }));
+  if (contextBooks.length) userMeta.contextBooks = contextBooks;
+  _queueSessionMessage(sentSessionId, 'user', message, Object.keys(userMeta).length ? userMeta : undefined);
 
   const cleanMessage = mentionedNames.length ? stripMentions(message) : message;
   const primaryMind = allMinds.find(m => m.id === mindId) || activeMinds.get(mindId);
@@ -6796,6 +6815,9 @@ function _saveMindSession(chatBox) {
       const msg = { role, content: el.dataset.raw || el.textContent };
       if (role === 'user' && el.dataset.contextMinds) {
         try { msg.contextMinds = JSON.parse(el.dataset.contextMinds); } catch {}
+      }
+      if (role === 'user' && el.dataset.contextBooks) {
+        try { msg.contextBooks = JSON.parse(el.dataset.contextBooks); } catch {}
       }
       msgs.push(msg);
     }
