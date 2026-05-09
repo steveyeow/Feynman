@@ -3454,13 +3454,25 @@ function _stopWriteBookPolling() {
 
 async function _restoreWriteBookState(session, chatBox) {
   _stopWriteBookPolling();
-  const meta = session?.meta || session?.books?.get?.('_meta') || {};
+  let meta = session?.meta || session?.books?.get?.('_meta') || {};
   if (!(session?.sessionType === 'write_book' || meta.write_book)) {
     if (_writeBookAbort) { _writeBookAbort.abort(); _writeBookAbort = null; }
     _writeBookId = null;
     _writeBookOutline = null;
     _hideBookCanvas();
     return;
+  }
+  // Local meta may be stale (e.g., outline generation persisted ai_book_id to DB
+  // but the in-memory session wasn't refreshed). Refetch when ai_book_id is missing.
+  if (!meta.ai_book_id && session?.id) {
+    try {
+      const fresh = await api(`/api/sessions/${session.id}`);
+      if (fresh?.meta) {
+        meta = fresh.meta;
+        session.meta = meta;
+        if (meta.write_book) session.sessionType = 'write_book';
+      }
+    } catch (e) { console.warn('Failed to refresh session meta:', e); }
   }
   const aiBookId = meta.ai_book_id;
   if (!aiBookId) {
@@ -3506,6 +3518,7 @@ async function startWriteBook() {
     if (session) {
       session.sessionType = 'write_book';
       session.title = 'New book';
+      session.meta = { ...(session.meta || {}), write_book: true };
     }
     try {
       await api(`/api/sessions/${sessionId}`, {
@@ -3915,7 +3928,11 @@ async function _handleWriteBookMessage(message) {
           body: JSON.stringify({ title: data.title, meta: { write_book: true, ai_book_id: data.id, agent_id: data.agent_id } }),
         });
         const s = chatSessions.find(x => x.id === sessionId);
-        if (s) s.title = data.title;
+        if (s) {
+          s.title = data.title;
+          s.sessionType = 'write_book';
+          s.meta = { ...(s.meta || {}), write_book: true, ai_book_id: data.id, agent_id: data.agent_id };
+        }
       } catch (e) { console.warn(e); }
 
       // Only update in-memory state & UI if user is still on this session
