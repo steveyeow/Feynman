@@ -2122,7 +2122,7 @@ function appendMsg(container, role, text, sources, opts, hasMentions, contextMin
           const hasFullText = c.full_text && c.full_text.length > (c.snippet || '').replace(/\.\.\.$/,'').length;
           if (hasFullText) refTextMap.set(String(c.index), { snippet: c.snippet, full: c.full_text });
           const numTag = multi ? `<span class="ref-snippet-num">${c.index}</span>` : '';
-          const expandIcon = hasFullText ? '<span class="ref-expand-icon">&#x25B6;</span>' : '';
+          const expandIcon = hasFullText ? '<svg class="ref-expand-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' : '';
           return `<div class="ref-snippet-row${hasFullText ? ' expandable' : ''}" id="ref-${c.index}" data-refidx="${c.index}">${numTag}<span class="ref-snippet">${esc(c.snippet)}</span>${expandIcon}</div>`;
         }).join('');
         return `<div class="ref-group"><div class="ref-group-header">${numsHtml}<span class="ref-book">${esc(g.book)}</span></div><div class="ref-snippets">${snippetsHtml}</div></div>`;
