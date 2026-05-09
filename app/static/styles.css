@@ -3172,14 +3172,14 @@ html.dark .lp-chat-card {
 .create-book-btn {
   display: flex; align-items: center; gap: 7px;
   padding: 8px 16px; border-radius: 10px; border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
   color: #fff; font: 600 13px/1 'Inter', sans-serif;
   cursor: pointer; white-space: nowrap;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 .create-book-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(102,126,234,0.35);
+  box-shadow: 0 4px 16px rgba(45,55,72,0.30);
 }
 .create-book-btn svg { flex-shrink: 0; }
 @media (max-width: 600px) {
