@@ -370,7 +370,7 @@ function renderLoginPage() {
 
 const FREE_FEATURES = [
   'Chat with any book in your library',
-  'Four-layer answers: text, metadata, web, LLM',
+  'Answers rooted in the book — and beyond, with broader relevant context',
   'Great minds join your first chats',
   'Discover books & topics (3/day)',
   'Upload up to 3 books (PDF / EPUB / TXT / MD)',
@@ -379,7 +379,7 @@ const PRO_FEATURES = [
   'Everything in Free',
   'Upload more books',
   'Discover more books in chat & library',
-  'Write your own book on any topic',
+  'Write the book you need — on-demand, on any topic',
   'Great minds continuously join chats',
   'Invite great minds into your chats',
   'Upload your own minds or from any source',
@@ -3527,7 +3527,7 @@ async function startWriteBook() {
       });
     } catch (e) { console.warn('Failed to update session type:', e); }
 
-    const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or even a book that doesn't exist yet but you wish it did.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
+    const greeting = "I'd love to help you create a book. Tell me what you're interested in — a person, an idea, a skill, or any topic on your mind.\n\nYou can be as specific or broad as you like. For example:\n- *\"A biography of Elon Musk focused on his engineering decisions\"*\n- *\"A beginner's guide to quantum computing in plain language\"*\n- *\"The history of coffee and how it shaped civilization\"*";
     _queueSessionMessage(sessionId, 'assistant', greeting);
     window.location.hash = '#/chat/' + sessionId;
   } finally {
