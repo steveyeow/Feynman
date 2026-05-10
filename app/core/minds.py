@@ -177,7 +177,11 @@ def _find_semantically_near_mind(
         "Dedup: '%s' matched existing '%s' with cosine=%.3f",
         mind_data.get("name"), best_row.get("name"), best_sim,
     )
-    return full or best_row
+    result = full or best_row
+    # Stash the similarity score so callers that care (create_mind_from_content)
+    # can surface it; callers that don't can ignore the underscore key.
+    result["_similarity"] = best_sim
+    return result
 
 
 def backfill_mind_embeddings(batch_size: int = 10) -> int:
@@ -498,6 +502,7 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: b
     near = _find_semantically_near_mind(mind_data, threshold=0.92)
     if near:
         log.info("Skipping create — '%s' is semantically equivalent to existing '%s'", name, near.get("name"))
+        near.pop("_similarity", None)
         return near
 
     mind_id = create_mind(mind_data)
@@ -554,7 +559,7 @@ def create_mind_from_content(
     """
     existing = find_existing_mind_by_keys(name)
     if existing:
-        return existing
+        return {**existing, "_duplicate": True, "_duplicate_reason": "name_match"}
 
     source_text = content
     if source_url and not source_text:
@@ -614,7 +619,13 @@ def create_mind_from_content(
     near = _find_semantically_near_mind(mind_data, threshold=0.92)
     if near:
         log.info("Skipping create — '%s' is semantically equivalent to existing '%s'", name, near.get("name"))
-        return near
+        similarity = near.pop("_similarity", None)
+        return {
+            **near,
+            "_duplicate": True,
+            "_duplicate_reason": "semantic_match",
+            "_similarity": similarity,
+        }
 
     mind_id = create_mind(mind_data)
     mind = get_mind(mind_id)

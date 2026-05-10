@@ -7018,12 +7018,16 @@ function showCreateMindDialog() {
     btn.textContent = 'Connecting...';
     btn.disabled = true;
     try {
-      await api('/api/minds/create-from-content', {
+      const resp = await api('/api/minds/create-from-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, source_url: url, content }),
       });
       overlay.remove();
+      if (resp && resp.duplicate) {
+        showMindDuplicateDialog(resp);
+        return;
+      }
       await loadMinds();
       _cachedGraphData = null;
       if (getRoute().page === 'minds') _renderMindsGraphAsync();
@@ -7034,6 +7038,38 @@ function showCreateMindDialog() {
     }
   };
   overlay.querySelector('#create-mind-submit').addEventListener('click', submit);
+}
+
+function showMindDuplicateDialog(mind) {
+  const reason = mind.duplicate_reason;
+  const sim = mind.similarity;
+  let detail;
+  if (reason === 'name_match') {
+    detail = 'A mind with this name is already in your network.';
+  } else if (reason === 'semantic_match' && typeof sim === 'number') {
+    detail = `This looks like the same person as one already in your network (content similarity ${(sim * 100).toFixed(0)}%).`;
+  } else {
+    detail = 'A matching mind is already in your network.';
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'mind-add-dialog';
+  overlay.innerHTML = `
+    <div class="mind-add-form" style="max-width:420px">
+      <h3>Already in your network</h3>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 6px">${detail}</p>
+      <p style="font-size:14px;color:var(--text);margin:0 0 14px"><strong>${esc(mind.name)}</strong>${mind.era ? ` <span style="color:var(--text-muted);font-weight:400">· ${esc(mind.era)}</span>` : ''}</p>
+      <div class="mind-add-actions" style="margin-top:14px">
+        <button id="dup-mind-cancel">Cancel</button>
+        <button id="dup-mind-open" class="primary-btn">Open it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector('#dup-mind-cancel').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#dup-mind-open').addEventListener('click', () => {
+    overlay.remove();
+    window.location.hash = '#/mind/' + mind.id;
+  });
 }
 
 // Perspectives panel rendering (appended to assistant messages)

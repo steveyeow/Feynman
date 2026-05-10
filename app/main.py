@@ -2581,14 +2581,26 @@ def api_create_mind_from_content(
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Mind creation failed: {exc}")
+    duplicate = mind.pop("_duplicate", False)
+    duplicate_reason = mind.pop("_duplicate_reason", None)
+    similarity = mind.pop("_similarity", None)
+    safe = {k: v for k, v in mind.items() if k != "persona"}
+    if duplicate:
+        # No new mind was created — skip quota debit and learn-agent tasks,
+        # but tell the client so it can guide the user to the existing one.
+        return {
+            **safe,
+            "duplicate": True,
+            "duplicate_reason": duplicate_reason,
+            "similarity": similarity,
+        }
     from .core.db import get_mind_work_ids
     for agent_id in get_mind_work_ids(mind["id"]):
         agent = get_agent(agent_id)
         if agent and agent["status"] == "catalog":
             background_tasks.add_task(_learn_agent, agent_id)
-    safe = {k: v for k, v in mind.items() if k != "persona"}
     _track_usage(request, "custom_minds")
-    return safe
+    return {**safe, "duplicate": False}
 
 
 @app.post("/api/minds/suggest")
