@@ -831,11 +831,17 @@ function renderLandingPage() {
     </div>`;
 
   const _lpCtaHandler = () => {
+    let target;
     if (window.FEYNMAN_PRO) {
-      window.location.hash = currentUser ? '#/' : '#/login';
+      target = currentUser ? '#/' : '#/login';
     } else {
       localStorage.setItem('feynman-landed', '1');
-      window.location.hash = '#/';
+      target = '#/';
+    }
+    if (window.location.hash === target) {
+      navigate();
+    } else {
+      window.location.hash = target;
     }
   };
   document.getElementById('lp-get-started').addEventListener('click', _lpCtaHandler);
