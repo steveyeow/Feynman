@@ -6,6 +6,8 @@ from typing import Any
 
 import numpy as np
 
+from . import config
+from . import db as db_mod
 from .db import add_chunks, get_agent, update_agent_status
 from .providers import pick_provider, ProviderError
 from .questions import generate_questions
@@ -50,8 +52,11 @@ def index_text(agent_id: str, text: str, update_status: bool = True, force: bool
         raise ProviderError("Embedding count mismatch")
 
     records = []
+    pgvec_eligible = True
     for idx, (chunk, emb) in enumerate(zip(chunks, embeddings)):
         vector_bytes, dim, norm = _vector_bytes(emb)
+        if dim != config.EMBED_DIM:
+            pgvec_eligible = False
         records.append(
             {
                 "id": str(uuid.uuid4()),
@@ -60,6 +65,10 @@ def index_text(agent_id: str, text: str, update_status: bool = True, force: bool
                 "vector": vector_bytes,
                 "dim": dim,
                 "norm": norm,
+                # Float list for dual-write to the pgvector halfvec column.
+                # add_chunks() ignores this when the pgvector path is off or
+                # the dim doesn't match EMBED_DIM.
+                "embedding_floats": list(emb),
             }
         )
 
@@ -74,6 +83,11 @@ def index_text(agent_id: str, text: str, update_status: bool = True, force: bool
         "embed_model": getattr(embedder, "embed_model", None),
         "questions": questions,
         "content_hash": content_hash,
+        # Marks this agent's chunks as already populated in the pgvector
+        # halfvec column, so rag.retrieve() can take the SQL ANN path
+        # without an existence-check round-trip. Backfilled agents flip this
+        # to True via scripts/backfill_pgvector.py.
+        "pgvector_ready": bool(pgvec_eligible and db_mod._USE_PG and db_mod._HAS_PGVECTOR),
     }
     if update_status:
         update_agent_status(agent_id, "ready", meta)

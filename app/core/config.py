@@ -60,3 +60,9 @@ NOVITA_EMBED_MODEL = os.getenv("NOVITA_EMBED_MODEL", "qwen/qwen3-embedding-0.6b"
 MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "120"))
 TOP_K = int(os.getenv("TOP_K", "5"))
+
+# pgvector: dimension of the halfvec column used for ANN retrieval.
+# Defaults to 3072 (Gemini gemini-embedding-001). Override if your primary
+# embed provider is OpenAI (1536) or Novita (1024). Chunks whose dim does not
+# match this value stay on the legacy in-Python scoring path.
+EMBED_DIM = int(os.getenv("EMBED_DIM", "3072"))

@@ -31,6 +31,13 @@ DATABASE_URL = _clean_dsn(_RAW_DATABASE_URL)
 
 _USE_PG = bool(DATABASE_URL)
 
+# Set after init_db() runs the pgvector migration. True iff:
+#   1. PostgreSQL is in use, and
+#   2. The `vector` extension is installed, and
+#   3. The `chunks.embedding` halfvec column exists.
+# Read by rag.py to decide between SQL ANN and legacy in-Python scoring.
+_HAS_PGVECTOR = False
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -172,6 +179,34 @@ def init_db() -> None:
                 _execute(conn, "RELEASE SAVEPOINT sp_chunks_search_vec")
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_chunks_search_vec")
+
+            # Migration: add pgvector halfvec column for SQL-side ANN retrieval.
+            # Avoids pulling every chunk's raw vector blob into the app per chat —
+            # the dominant source of Supabase egress. See app/core/rag.py.
+            # Defensive: any failure (no pgvector ext, no halfvec type, dim too
+            # large for ext version) is swallowed; callers fall back to the
+            # legacy in-Python scoring path via _HAS_PGVECTOR=False.
+            global _HAS_PGVECTOR
+            from .config import EMBED_DIM
+            try:
+                _execute(conn, "SAVEPOINT sp_chunks_pgvec")
+                _execute(conn, "CREATE EXTENSION IF NOT EXISTS vector")
+                _execute(conn, f"ALTER TABLE chunks ADD COLUMN embedding halfvec({EMBED_DIM})")
+                _execute(conn, "RELEASE SAVEPOINT sp_chunks_pgvec")
+                _HAS_PGVECTOR = True
+            except Exception as exc:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_chunks_pgvec")
+                # Column may already exist from a prior boot — re-check to
+                # avoid disabling the path on rerun.
+                try:
+                    row = _fetchone(conn,
+                        "SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name = 'chunks' AND column_name = 'embedding'")
+                    _HAS_PGVECTOR = bool(row)
+                    if not _HAS_PGVECTOR:
+                        log.info("pgvector migration skipped: %s", exc)
+                except Exception:
+                    _HAS_PGVECTOR = False
             _execute(conn, """
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
@@ -867,23 +902,69 @@ def _row_to_agent(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _halfvec_literal(values: Iterable[float]) -> str:
+    """Format a list of floats as a pgvector text literal: '[v1,v2,...]'.
+
+    pgvector accepts this form for both `vector` and `halfvec` (it casts to
+    the column type). Half-precision rounding happens server-side, so we
+    don't need to convert here.
+    """
+    return "[" + ",".join(f"{float(v):.6g}" for v in values) + "]"
+
+
 def add_chunks(agent_id: str, chunk_records: Iterable[dict[str, Any]]) -> None:
+    """Insert chunks. Dual-writes to pgvector `embedding` column when available
+    and the chunk's dim matches EMBED_DIM. Off-dim chunks leave embedding NULL
+    and fall back to the legacy in-Python scoring path at retrieval time.
+
+    Each record needs id, chunk_index, text, vector (bytes), dim, norm. May
+    optionally include `embedding_floats` (list[float]) — when present and the
+    pgvector path is live, it's written to the halfvec column. The indexer
+    passes this in so we don't redundantly reparse vector bytes.
+    """
+    from .config import EMBED_DIM
+
+    records = list(chunk_records)
+    write_pgvec = _USE_PG and _HAS_PGVECTOR
+
     with get_conn() as conn:
-        params_list = [
-            (
-                rec["id"],
-                agent_id,
-                rec["chunk_index"],
-                rec["text"],
-                rec["vector"] if not _USE_PG else _pg().Binary(rec["vector"]),
-                rec["dim"],
-                rec["norm"],
-            )
-            for rec in chunk_records
-        ]
-        _executemany(conn, _q(
-            "INSERT INTO chunks (id, agent_id, chunk_index, text, vector, dim, norm) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ), params_list)
+        if write_pgvec:
+            params_list = [
+                (
+                    rec["id"],
+                    agent_id,
+                    rec["chunk_index"],
+                    rec["text"],
+                    _pg().Binary(rec["vector"]),
+                    rec["dim"],
+                    rec["norm"],
+                    _halfvec_literal(rec["embedding_floats"])
+                        if rec.get("embedding_floats") is not None
+                           and rec["dim"] == EMBED_DIM
+                        else None,
+                )
+                for rec in records
+            ]
+            _executemany(conn, _q(
+                "INSERT INTO chunks (id, agent_id, chunk_index, text, vector, dim, norm, embedding) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ), params_list)
+        else:
+            params_list = [
+                (
+                    rec["id"],
+                    agent_id,
+                    rec["chunk_index"],
+                    rec["text"],
+                    rec["vector"] if not _USE_PG else _pg().Binary(rec["vector"]),
+                    rec["dim"],
+                    rec["norm"],
+                )
+                for rec in records
+            ]
+            _executemany(conn, _q(
+                "INSERT INTO chunks (id, agent_id, chunk_index, text, vector, dim, norm) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            ), params_list)
 
 
 def get_chunks(agent_id: str) -> list[dict[str, Any]]:
@@ -910,6 +991,53 @@ def get_chunks_batch(agent_ids: list[str]) -> list[dict[str, Any]]:
         return _fetchall(conn, _q(
             f"SELECT id, agent_id, chunk_index, text, vector, dim, norm FROM chunks WHERE agent_id IN ({placeholders}) ORDER BY agent_id, chunk_index ASC"
         ), tuple(agent_ids))
+
+
+def ann_topk(agent_id: str, query_floats: Iterable[float], top_k: int) -> list[dict[str, Any]]:
+    """SQL-side ANN: return the top-K chunks for an agent, ordered by cosine
+    similarity to query_floats. Returns id/chunk_index/text/score only — no
+    vector bytes cross the wire.
+
+    Requires pgvector + halfvec column populated for this agent's chunks.
+    Caller (rag.py) decides whether to take this path via agent.meta.
+    Raises if pgvector is unavailable; caller must catch and fall back.
+    """
+    if not _USE_PG or not _HAS_PGVECTOR:
+        raise RuntimeError("ann_topk requires pgvector")
+    qvec = _halfvec_literal(query_floats)
+    # `<=>` is the cosine-distance operator in pgvector (0 = identical, 2 =
+    # opposite). We convert to similarity (1 - distance/2 ≈ cosine sim) to
+    # match the legacy in-Python scoring scale.
+    with get_conn() as conn:
+        return _fetchall(conn,
+            """SELECT id, chunk_index, text,
+                      1.0 - (embedding <=> %s::halfvec) / 2.0 AS score
+               FROM chunks
+               WHERE agent_id = %s AND embedding IS NOT NULL
+               ORDER BY embedding <=> %s::halfvec
+               LIMIT %s""",
+            (qvec, agent_id, qvec, top_k))
+
+
+def ann_topk_batch(agent_ids: list[str], query_floats: Iterable[float], top_k: int) -> list[dict[str, Any]]:
+    """SQL-side ANN across multiple agents. Returns id/agent_id/chunk_index/
+    text/score, top-K by cosine similarity. Used by cross-book retrieve.
+    """
+    if not _USE_PG or not _HAS_PGVECTOR:
+        raise RuntimeError("ann_topk_batch requires pgvector")
+    if not agent_ids:
+        return []
+    qvec = _halfvec_literal(query_floats)
+    placeholders = ",".join(["%s"] * len(agent_ids))
+    with get_conn() as conn:
+        return _fetchall(conn,
+            f"""SELECT id, agent_id, chunk_index, text,
+                       1.0 - (embedding <=> %s::halfvec) / 2.0 AS score
+                FROM chunks
+                WHERE agent_id IN ({placeholders}) AND embedding IS NOT NULL
+                ORDER BY embedding <=> %s::halfvec
+                LIMIT %s""",
+            (qvec, *agent_ids, qvec, top_k))
 
 
 def keyword_search_chunks(query: str, agent_ids: list[str] | None = None, limit: int = 30) -> list[dict[str, Any]]:
