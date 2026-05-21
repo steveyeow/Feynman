@@ -50,7 +50,7 @@ from app.core import db as db_mod
 # at import — `init_db()` updates db_mod's globals later but the local name
 # stays stuck on the old False value, so the script would always misreport
 # pgvector as unavailable.
-from app.core.db import _halfvec_literal, _pg, get_conn, init_db
+from app.core.db import _halfvec_literal, _pg, decode_vector_blob, get_conn, init_db
 
 
 log = logging.getLogger("backfill_pgvector")
@@ -79,8 +79,12 @@ def _retry(fn: Callable[[], T], what: str) -> T:
     raise last_err
 
 
-def _bytes_to_floats(blob: bytes, dim: int) -> list[float]:
-    return np.frombuffer(blob, dtype=np.float32, count=dim).tolist()
+def _bytes_to_floats(blob, dim: int) -> list[float]:
+    """Decode a chunk's stored vector to a list of floats. Routes through
+    db.decode_vector_blob which handles both raw float32 bytes (from
+    indexer.py) and the historical JSON-Buffer format some chunks have.
+    """
+    return decode_vector_blob(blob, dim).tolist()
 
 
 def _list_target_agents(only_agent: str | None) -> list[dict]:

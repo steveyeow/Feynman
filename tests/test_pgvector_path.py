@@ -20,7 +20,75 @@ import numpy as np
 import pytest
 
 from app.core import db as db_mod
-from app.core.db import _halfvec_literal, ann_topk, ann_topk_batch
+from app.core.db import _halfvec_literal, ann_topk, ann_topk_batch, decode_vector_blob
+
+
+class TestDecodeVectorBlob:
+    """Production has two storage formats for chunks.vector.
+
+    Format 1: raw float32 little-endian — what indexer.py writes.
+    Format 2: JSON-stringified Node Buffer — '{"type":"Buffer","data":[..]}',
+              inserted historically via a JS path through the Supabase REST API.
+
+    Without the format-2 branch, ~589 agents had a constant first component
+    of 7.92262e+34 (the float32 reading of ASCII '{"ty'), silently
+    corrupting cosine retrieval. RRF + FTS masked the issue in the UI.
+    """
+
+    def test_raw_float32_round_trip(self):
+        original = np.array([0.1, -0.2, 0.3, 0.4], dtype=np.float32)
+        result = decode_vector_blob(original.tobytes(), dim=4)
+        assert result.dtype == np.float32
+        np.testing.assert_allclose(result, original)
+
+    def test_raw_float32_accepts_memoryview(self):
+        original = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+        mv = memoryview(original.tobytes())
+        result = decode_vector_blob(mv, dim=3)
+        np.testing.assert_allclose(result, original)
+
+    def test_json_buffer_format_decodes_correctly(self):
+        import json
+        original = np.array([0.5, -0.5, 1.0, 0.0], dtype=np.float32)
+        raw_bytes = original.tobytes()
+        # Mimic JS Buffer.toJSON(): an object with type=Buffer and data as
+        # an integer array of the byte values.
+        json_buf = json.dumps({"type": "Buffer", "data": list(raw_bytes)})
+        result = decode_vector_blob(json_buf.encode("utf-8"), dim=4)
+        np.testing.assert_allclose(result, original)
+
+    def test_json_buffer_reproduces_the_bug_value(self):
+        """Sanity-check that 7.92262e+34 IS the float32 reading of the
+        ASCII prefix of a JSON Buffer — confirms our diagnosis and that
+        the decoder bypasses it on the JSON branch."""
+        import json
+        # Build a fake JSON Buffer with arbitrary but recognizable data.
+        fake_floats = np.array([1.5, 2.5, 3.5] * 1024, dtype=np.float32)  # dim=3072
+        json_buf = json.dumps({"type": "Buffer", "data": list(fake_floats.tobytes())})
+        json_bytes = json_buf.encode("utf-8")
+
+        # Verify the WRONG interpretation (treating as raw float32) gives
+        # the 7.92262e+34 constant we saw in production.
+        wrong = np.frombuffer(json_bytes[: 3072 * 4], dtype=np.float32, count=3072)
+        assert abs(wrong[0] - 7.92262e34) / 7.92262e34 < 0.01
+
+        # And the decoder gives the right answer.
+        right = decode_vector_blob(json_bytes, dim=3072)
+        np.testing.assert_allclose(right, fake_floats)
+
+    def test_raises_on_unknown_format(self):
+        with pytest.raises(ValueError, match="unknown vector blob"):
+            decode_vector_blob(b"\x00" * 100, dim=4)  # wrong length, no JSON prefix
+
+    def test_raises_on_malformed_json(self):
+        with pytest.raises(ValueError):
+            decode_vector_blob(b'{"type":"NotABuffer"}', dim=4)
+
+    def test_raises_on_json_data_length_mismatch(self):
+        import json
+        bad = json.dumps({"type": "Buffer", "data": [1, 2, 3]})  # 3 bytes, dim=4 expects 16
+        with pytest.raises(ValueError, match="length"):
+            decode_vector_blob(bad.encode("utf-8"), dim=4)
 
 
 class TestHalfvecLiteral:

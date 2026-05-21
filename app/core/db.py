@@ -912,6 +912,54 @@ def _halfvec_literal(values: Iterable[float]) -> str:
     return "[" + ",".join(f"{float(v):.6g}" for v in values) + "]"
 
 
+def decode_vector_blob(blob: Any, dim: int):
+    """Decode a chunks.vector bytea cell into a numpy float32 array.
+
+    Production data has two storage formats:
+
+    1. **Raw float32 little-endian** — what indexer.py writes via numpy
+       ``array.tobytes()``. Length is exactly ``dim * 4`` bytes.
+
+    2. **JSON-serialized Node.js Buffer** —
+       ``{"type":"Buffer","data":[12,34,...]}`` as raw UTF-8 bytes stored
+       in the bytea column. Present in chunks inserted via a historical
+       write path (a JS client that passed ``JSON.stringify(buffer)`` to
+       the Supabase REST API, which stored the JSON text in the bytea
+       column verbatim). Length is ~4-5× larger than format 1.
+
+    Without this decoder, format-2 rows were producing a constant first
+    component of ``7.92262e+34`` (the float32 reading of ASCII bytes
+    ``{"ty``) and garbage subsequent values, silently degrading legacy
+    cosine retrieval to near-random for those chunks. Hybrid FTS masked
+    the issue. Detection is by length first, then magic prefix.
+    """
+    import numpy as np
+
+    raw = bytes(blob) if not isinstance(blob, (bytes, bytearray)) else bytes(blob)
+    expected = dim * 4
+
+    if len(raw) == expected:
+        return np.frombuffer(raw, dtype=np.float32, count=dim)
+
+    if raw[:2] == b'{"':
+        import json as _json
+        try:
+            obj = _json.loads(raw.decode("utf-8"))
+        except Exception as exc:
+            raise ValueError(f"vector blob looks like JSON but failed to parse: {exc}") from exc
+        data = obj.get("data") if isinstance(obj, dict) else None
+        if not isinstance(data, list) or len(data) != expected:
+            raise ValueError(
+                f"JSON Buffer data has length {len(data) if isinstance(data, list) else 'N/A'}, expected {expected}"
+            )
+        return np.frombuffer(bytes(data), dtype=np.float32, count=dim)
+
+    raise ValueError(
+        f"unknown vector blob format: len={len(raw)}, expected {expected}, "
+        f"first 8 bytes={raw[:8]!r}"
+    )
+
+
 def add_chunks(agent_id: str, chunk_records: Iterable[dict[str, Any]]) -> None:
     """Insert chunks. Dual-writes to pgvector `embedding` column when available
     and the chunk's dim matches EMBED_DIM. Off-dim chunks leave embedding NULL

@@ -11,6 +11,7 @@ from . import db as db_mod
 from .db import (
     ann_topk,
     ann_topk_batch,
+    decode_vector_blob,
     get_agent,
     get_chunks,
     get_chunks_batch,
@@ -30,8 +31,15 @@ _EXPAND_MIN_AGENTS = 3
 _ANN_CANDIDATE_MULT = 20
 
 
-def _bytes_to_vector(blob: bytes, dim: int) -> np.ndarray:
-    return np.frombuffer(blob, dtype=np.float32, count=dim)
+def _bytes_to_vector(blob, dim: int) -> np.ndarray:
+    """Decode a stored vector blob into a numpy float32 array.
+
+    Delegates to db.decode_vector_blob, which handles both raw float32 bytes
+    (what indexer.py writes) and the historical JSON-Buffer format some
+    chunks have. Without that branch, legacy retrieval silently returned
+    garbage cosine scores for JSON-format rows.
+    """
+    return decode_vector_blob(blob, dim)
 
 
 def _rrf_fuse(keyword_results: list[dict], vector_results: list[dict]) -> list[dict]:
