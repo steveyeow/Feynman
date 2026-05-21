@@ -36,9 +36,12 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from typing import Iterable
+import time
+from typing import Callable, Iterable, TypeVar
 
 import numpy as np
+
+T = TypeVar("T")
 
 from app.core import config
 from app.core import db as db_mod
@@ -51,6 +54,29 @@ from app.core.db import _halfvec_literal, _pg, get_conn, init_db
 
 
 log = logging.getLogger("backfill_pgvector")
+
+
+def _retry(fn: Callable[[], T], what: str) -> T:
+    """Retry a DB call on OperationalError. The Supabase transaction pooler
+    (port 6543) occasionally closes new connections under sustained load —
+    this is transient and recoverable. Backoff: 2s, 5s, 15s.
+    """
+    delays = [2, 5, 15]
+    last_err: Exception | None = None
+    for attempt, delay in enumerate([0] + delays):
+        if delay:
+            log.warning("retrying %s after %ds (attempt %d/%d)",
+                        what, delay, attempt + 1, len(delays) + 1)
+            time.sleep(delay)
+        try:
+            return fn()
+        except _pg().OperationalError as exc:
+            last_err = exc
+            tail = str(exc).strip().splitlines()
+            log.warning("%s — pooler/connection error: %s", what,
+                        tail[-1] if tail else "OperationalError")
+    assert last_err is not None
+    raise last_err
 
 
 def _bytes_to_floats(blob: bytes, dim: int) -> list[float]:
@@ -212,39 +238,63 @@ def main(argv: list[str] | None = None) -> int:
 
     log.info("Found %d agents needing backfill (EMBED_DIM=%d)", len(agents), config.EMBED_DIM)
 
+    # Verb tense in log lines depends on dry-run. The PG-side filter
+    # WHERE embedding IS NULL makes re-runs idempotent, so retries that
+    # repeat a partially-completed agent are safe.
+    verb_did = "would write" if args.dry_run else "wrote"
+    verb_skip = "would skip" if args.dry_run else "skipped"
+
     totals = {"written": 0, "skipped": 0, "agents_done": 0, "agents_off_dim": 0}
     for i, agent in enumerate(agents, 1):
         aid = agent["id"]
         name = agent["name"][:60]
-        count, dims = _agent_dims(aid)
+        label = f"[{i}/{len(agents)}] {name} ({aid})"
+
+        try:
+            count, dims = _retry(lambda: _agent_dims(aid), f"_agent_dims {aid}")
+        except Exception as exc:
+            log.error("%s — giving up after retries: %s", label, exc)
+            continue
 
         if not count:
-            log.info("[%d/%d] %s (%s) — no chunks, skipping", i, len(agents), name, aid)
+            log.info("%s — no chunks, skipping", label)
             continue
 
         if config.EMBED_DIM not in dims:
             log.warning(
-                "[%d/%d] %s (%s) — all %d chunks off-dim (have %s, need %d); skipping",
-                i, len(agents), name, aid, count, sorted(dims), config.EMBED_DIM,
+                "%s — all %d chunks off-dim (have %s, need %d); skipping",
+                label, count, sorted(dims), config.EMBED_DIM,
             )
             totals["agents_off_dim"] += 1
             continue
 
-        log.info("[%d/%d] %s (%s) — %d chunks, dims=%s", i, len(agents), name, aid, count, sorted(dims))
-        written, skipped = _backfill_agent(aid, args.batch_size, args.dry_run)
-        log.info("  → wrote %d, skipped %d off-dim", written, skipped)
+        log.info("%s — %d chunks, dims=%s", label, count, sorted(dims))
+        try:
+            written, skipped = _retry(
+                lambda: _backfill_agent(aid, args.batch_size, args.dry_run),
+                f"_backfill_agent {aid}",
+            )
+        except Exception as exc:
+            log.error("%s — giving up after retries: %s", label, exc)
+            continue
+
+        log.info("  → %s %d, %s %d off-dim", verb_did, written, verb_skip, skipped)
         totals["written"] += written
         totals["skipped"] += skipped
 
         if written > 0 and not args.dry_run:
-            _mark_ready(aid, agent["meta"])
-            totals["agents_done"] += 1
+            try:
+                _retry(lambda: _mark_ready(aid, agent["meta"]), f"_mark_ready {aid}")
+                totals["agents_done"] += 1
+            except Exception as exc:
+                log.error("%s — could not flip pgvector_ready flag: %s", label, exc)
 
+    suffix = " (DRY RUN)" if args.dry_run else ""
     log.info(
-        "Done. agents_done=%d agents_off_dim=%d rows_written=%d rows_skipped=%d%s",
+        "Done. agents_done=%d agents_off_dim=%d rows_%s=%d rows_skipped=%d%s",
         totals["agents_done"], totals["agents_off_dim"],
-        totals["written"], totals["skipped"],
-        " (DRY RUN)" if args.dry_run else "",
+        "would_write" if args.dry_run else "written",
+        totals["written"], totals["skipped"], suffix,
     )
     return 0
 
