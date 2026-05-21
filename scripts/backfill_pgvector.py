@@ -99,8 +99,32 @@ def _agent_dims(agent_id: str) -> tuple[int, set[int]]:
         return int(row[0]), set(int(d) for d in (row[1] or []))
 
 
+def _count_pending(agent_id: str) -> tuple[int, int]:
+    """Cheap dry-run counter: returns (would_write, would_skip_off_dim) for
+    one agent. COUNT(*) only — does NOT pull vector bytes through the pooler.
+    """
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT "
+            "  COUNT(*) FILTER (WHERE dim = %s) AS would_write, "
+            "  COUNT(*) FILTER (WHERE dim <> %s) AS would_skip "
+            "FROM chunks WHERE agent_id = %s AND embedding IS NULL",
+            (config.EMBED_DIM, config.EMBED_DIM, agent_id),
+        )
+        row = cur.fetchone()
+        return (int(row[0] or 0), int(row[1] or 0))
+
+
 def _backfill_agent(agent_id: str, batch_size: int, dry_run: bool) -> tuple[int, int]:
-    """Backfill one agent. Returns (rows_written, rows_skipped_off_dim)."""
+    """Backfill one agent. Returns (rows_written, rows_skipped_off_dim).
+
+    In dry-run mode we MUST NOT pull `vector` bytes — that defeats the whole
+    point of using --dry-run to preview cost. Use COUNT(*) instead.
+    """
+    if dry_run:
+        return _count_pending(agent_id)
+
     written = 0
     skipped = 0
 
@@ -126,7 +150,7 @@ def _backfill_agent(agent_id: str, batch_size: int, dry_run: bool) -> tuple[int,
             floats = _bytes_to_floats(bytes(row["vector"]), row["dim"])
             updates.append((_halfvec_literal(floats), row["id"]))
 
-        if updates and not dry_run:
+        if updates:
             with get_conn() as conn:
                 cur = conn.cursor()
                 for lit, cid in updates:
