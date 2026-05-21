@@ -42,7 +42,12 @@ import numpy as np
 
 from app.core import config
 from app.core import db as db_mod
-from app.core.db import _USE_PG, _HAS_PGVECTOR, _halfvec_literal, _pg, get_conn, init_db
+# NOTE: `_HAS_PGVECTOR` and `_USE_PG` MUST be read as `db_mod._HAS_PGVECTOR`
+# at call time, not imported directly. `from x import y` binds the name once
+# at import — `init_db()` updates db_mod's globals later but the local name
+# stays stuck on the old False value, so the script would always misreport
+# pgvector as unavailable.
+from app.core.db import _halfvec_literal, _pg, get_conn, init_db
 
 
 log = logging.getLogger("backfill_pgvector")
@@ -170,10 +175,10 @@ def main(argv: list[str] | None = None) -> int:
 
     init_db()  # Ensures pgvector migration has run; flips _HAS_PGVECTOR.
 
-    if not _USE_PG:
+    if not db_mod._USE_PG:
         log.error("Backfill only applies to Postgres deployments; SQLite has no pgvector.")
         return 1
-    if not _HAS_PGVECTOR:
+    if not db_mod._HAS_PGVECTOR:
         log.error("pgvector column is not available. Check Supabase pgvector + halfvec version.")
         return 1
 
