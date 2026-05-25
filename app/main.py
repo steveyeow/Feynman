@@ -1052,13 +1052,24 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     except Exception:
         related_minds = []
 
+    # ── Detect capabilities (Phase 3a) ──────────────────────────────────
+    # Not every book supports every action; e.g. catalog stubs only support
+    # chat. Render the CTA matrix to match — no more blanket "Read" link
+    # for books with 63 words of content.
+    caps = seo_render.detect_capabilities(agent, book)
+    chat_url = f"{base}/#/chat/{id_path}"
+    cta_target_url = reader_url if caps.get("read") or caps.get("preview") else chat_url
+
     # ── Build content sections ──────────────────────────────────────────
     about_html = seo_render.render_book_about(subtitle_raw, author_raw)
     stats_html = seo_render.render_stats(total_words, chapter_count)
     toc_html = seo_render.render_toc(chapters)
-    samples_html = seo_render.render_sample_passages(chunks, count=3, max_chars=500)
-    questions_html = seo_render.render_popular_questions(questions, reader_url)
+    samples_html = seo_render.render_sample_passages(chunks)
+    questions_html = seo_render.render_popular_questions(questions, chat_url)
     minds_html = seo_render.render_minds_for_book(related_minds, base)
+    cta_html = seo_render.render_cta_matrix(
+        caps, entity_id=agent_id, entity_name=title_raw, base=base
+    )
 
     # ── Build JSON-LD blocks ────────────────────────────────────────────
     book_ld = seo_render.jsonld_script(seo_render.book_jsonld(
@@ -1085,11 +1096,23 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
             (q, deflect) for q in questions if q
         ]))
 
-    body_style = '' if _is_crawler(request) else ' style="opacity:0"'
+    # ── Decide who sees the landing page vs gets redirected ─────────────
+    # Crawlers: always see the landing page (no redirect, body visible).
+    # In-product clicks (Referer = our origin): redirect to the SPA action
+    #   so the existing UX is unchanged — they expect to land in reader/chat.
+    # Everyone else (Google, share links, direct visits, missing referer):
+    #   stay on the landing page so they see what the URL actually offers
+    #   instead of being dropped into an empty reader.
+    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    show_landing = (
+        _is_crawler(request)
+        or not seo_render.is_internal_referer(referer, base)
+    )
+    body_style = '' if show_landing else ' style="opacity:0"'
     redirect_script = (
         ''
-        if _is_crawler(request)
-        else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
+        if show_landing
+        else f'<script>window.location.replace({json.dumps(cta_target_url)});</script>'
     )
     author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
     author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
@@ -1130,7 +1153,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {toc_html}
 {questions_html}
 {minds_html}
-<p class="cta"><a href="{html_esc(reader_url)}">Read and chat with this book on Feynman →</a></p>
+{cta_html}
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
@@ -1257,10 +1280,18 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
         (name_raw, canonical),
     ]))
 
-    body_style = '' if _is_crawler(request) else ' style="opacity:0"'
+    # Same referer-aware gate as book_page — external visitors see the
+    # landing page (with bio + works + cross-links to books), internal
+    # clicks continue straight to the mind chat as before.
+    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    show_landing = (
+        _is_crawler(request)
+        or not seo_render.is_internal_referer(referer, base)
+    )
+    body_style = '' if show_landing else ' style="opacity:0"'
     redirect_script = (
         ''
-        if _is_crawler(request)
+        if show_landing
         else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
     )
     if era_raw and domain_raw:

@@ -491,6 +491,149 @@ def render_related_minds(minds: list[dict[str, Any]], site_url: str) -> str:
     )
 
 
+# ─── Capability detection + CTA matrix (Phase 3a) ───────────────────
+#
+# Not every "book" in our catalog supports every action. Specifically:
+#   * AI-written books with full chapters → read + chat + preview
+#   * Uploads / URL imports with substantial chunks → read + chat
+#   * Catalog stubs (discovered titles with no fetched content) → chat only
+#   * Books mid-write or partially indexed → preview + chat (not read)
+#
+# Before this code, every /book/{id} blindly redirected to /#/read/{id}.
+# Catalog books rendered an empty reader, users bounced, Google noticed.
+# These helpers feed the capability-aware CTA matrix on the landing page.
+
+# Below this word count, "Read this book" is misleading — that much text
+# is really only useful as a preview or as RAG fuel for chat. 500 words is
+# roughly two pages of a real book; pages with less are stubs.
+_READ_MIN_WORDS = 500
+
+
+def detect_capabilities(agent: dict[str, Any] | None, book: dict[str, Any] | None) -> dict[str, bool]:
+    """Decide which CTAs this entity legitimately supports.
+
+    Inputs:
+      * agent — the row from `agents` (always required; the landing page
+        wouldn't have been hit without it).
+      * book — the row from `ai_books` for the agent, or None if this isn't
+        an AI-written book.
+
+    Returns a dict with three bools: ``read``, ``preview``, ``chat``. The
+    caller turns these into rendered buttons via ``render_cta_matrix``.
+    """
+    if not agent:
+        return {"read": False, "preview": False, "chat": False}
+    status = (agent.get("status") or "").lower()
+    if status in ("failed", "cancelled", "error"):
+        return {"read": False, "preview": False, "chat": False}
+
+    total_words = 0
+    chapter_count = 0
+    book_status = ""
+    if book:
+        total_words = int(book.get("total_words") or 0)
+        book_status = (book.get("status") or "").lower()
+        outline = book.get("outline")
+        if isinstance(outline, dict):
+            chapter_count = len(outline.get("chapters") or [])
+
+    agent_type = (agent.get("type") or "").lower()
+
+    # Read: has enough body text AND the body is structured enough to read
+    # straight through. Uploads/URLs without chapter structure can still be
+    # "read" because their chunks reassemble into linear prose.
+    can_read = total_words >= _READ_MIN_WORDS and (
+        chapter_count > 0 or agent_type in ("upload", "url")
+    )
+
+    # Preview: there's *something* to look at but it's not a full read.
+    # Books mid-write count as preview-able even if chapter structure is
+    # incomplete — the partial outline is itself useful.
+    can_preview = (
+        (0 < total_words < _READ_MIN_WORDS)
+        or (book_status == "writing" and chapter_count > 0)
+    )
+    # If we can read, we can preview (read implies preview). Keep them
+    # mutually distinct in the rendered CTA though — see render_cta_matrix.
+
+    # Chat: virtually always available. Catalog stubs chat via RAG over the
+    # title + web-fetched sources + LLM knowledge. Only fully-failed entities
+    # are chat-incapable.
+    can_chat = True
+
+    return {"read": can_read, "preview": can_preview, "chat": can_chat}
+
+
+def render_cta_matrix(
+    caps: dict[str, bool],
+    *,
+    entity_id: str,
+    entity_name: str,
+    base: str,
+) -> str:
+    """Render the action buttons matching detected capabilities.
+
+    Buttons land users on the SPA hash routes that actually work for this
+    entity. All actions for one book share the same on-page section so the
+    user sees one row of clear choices instead of a misleading single CTA.
+
+    When ``read`` is available we don't render a separate Preview button —
+    "Read" subsumes preview, and showing both creates decision friction.
+    """
+    if not (caps.get("read") or caps.get("preview") or caps.get("chat")):
+        return ""
+
+    buttons: list[str] = []
+    name = _esc(entity_name or "this book")
+    eid = _esc(entity_id)
+
+    if caps.get("read"):
+        buttons.append(
+            f'<a class="cta-btn cta-read" href="{_esc(base)}/#/read/{eid}">'
+            f'Read {name}</a>'
+        )
+    elif caps.get("preview"):
+        # Preview surfaces the same reader URL — the reader UI decides what
+        # to show based on what content exists. The CTA wording manages
+        # expectation: "Preview" implies partial.
+        buttons.append(
+            f'<a class="cta-btn cta-preview" href="{_esc(base)}/#/read/{eid}">'
+            f'Preview {name}</a>'
+        )
+
+    if caps.get("chat"):
+        buttons.append(
+            f'<a class="cta-btn cta-chat" href="{_esc(base)}/#/chat/{eid}">'
+            f'Chat about {name}</a>'
+        )
+
+    return f'<p class="cta-row">{" ".join(buttons)}</p>'
+
+
+# ─── Referer-based redirect gating ────────────────────────────────────
+#
+# In-product clicks (Referer: feynman.wiki/…) preserve the old "redirect
+# straight to reader" flow so the product UX is unchanged. Search results,
+# share links, and direct visits (no Referer, or Referer from another
+# origin) get the landing page and decide for themselves what to do —
+# fixing the "Google sends user to empty reader → user bounces" bug.
+
+def is_internal_referer(referer: str, site_url: str) -> bool:
+    """True if the request came from our own site. Used to decide whether
+    to JS-redirect humans straight to the SPA action (preserving in-product
+    flow) or to stop on the landing page (preserving search/share UX).
+
+    Missing referer is treated as external. The cost of false-negative
+    (an in-product visitor accidentally landing) is small — they click
+    one button. The cost of false-positive (an external visitor getting
+    redirected to an empty reader) is the SEO bounce-rate bug we're fixing."""
+    if not referer or not site_url:
+        return False
+    site_host = site_url.rstrip("/").split("://", 1)[-1].split("/", 1)[0].lower()
+    referer_host = referer.split("://", 1)[-1].split("/", 1)[0].lower()
+    return bool(site_host) and referer_host == site_host
+
+
 # ─── Word/structure counters (used by tests to enforce density floors) ─
 
 _TAG_RE = re.compile(r"<[^>]+>")

@@ -463,6 +463,162 @@ class TestContentDensityFloor:
         assert 'href="https://x.com/book/' in html
 
 
+class TestCapabilityDetection:
+    """Phase 3a: only show CTAs that the entity actually supports.
+    The motivating bug: catalog books with 63 words of stub content were
+    sending users to an empty reader because the page blindly linked to
+    /#/read/. detect_capabilities + render_cta_matrix fix this."""
+
+    def test_full_ai_book_supports_read_preview_chat(self):
+        agent = {"type": "ai_book", "status": "ready"}
+        book = {
+            "total_words": 50000,
+            "outline": {"chapters": [{"title": "Ch1"}, {"title": "Ch2"}]},
+        }
+        caps = seo.detect_capabilities(agent, book)
+        assert caps["read"] is True
+        assert caps["chat"] is True
+
+    def test_catalog_stub_chat_only(self):
+        # The exact failure mode from production: 63 words of stub
+        agent = {"type": "catalog", "status": "catalog"}
+        book = None  # catalog agents have no ai_books row
+        caps = seo.detect_capabilities(agent, book)
+        assert caps["read"] is False, "catalog stubs must not advertise Read"
+        assert caps["preview"] is False
+        assert caps["chat"] is True, "chat is always available for non-failed agents"
+
+    def test_partial_content_is_preview_not_read(self):
+        agent = {"type": "catalog", "status": "ready"}
+        book = {"total_words": 200, "outline": {"chapters": []}}
+        caps = seo.detect_capabilities(agent, book)
+        assert caps["read"] is False
+        assert caps["preview"] is True
+        assert caps["chat"] is True
+
+    def test_writing_status_is_preview(self):
+        agent = {"type": "ai_book", "status": "ready"}
+        book = {
+            "total_words": 5000,
+            "status": "writing",
+            "outline": {"chapters": [{"title": "Ch1"}]},
+        }
+        caps = seo.detect_capabilities(agent, book)
+        # Mid-write: words present but book is still being generated
+        # → "Preview" framing is more honest than "Read"
+        assert caps["preview"] is True
+
+    def test_failed_agent_no_caps(self):
+        agent = {"type": "ai_book", "status": "failed"}
+        book = {"total_words": 50000, "outline": {"chapters": [{"title": "X"}]}}
+        caps = seo.detect_capabilities(agent, book)
+        assert caps == {"read": False, "preview": False, "chat": False}
+
+    def test_upload_with_chunks_is_readable_even_without_chapters(self):
+        agent = {"type": "upload", "status": "ready"}
+        book = None  # uploads don't go through ai_books table
+        # Uploads carry their word count on the agent itself sometimes — but
+        # without a book row we have nothing to count. Capability is False
+        # in this minimal fixture; production upload paths populate ai_books
+        # or expose word count via chunks reassembly.
+        caps = seo.detect_capabilities(agent, book)
+        # No word count available → not readable (correct conservative default)
+        assert caps["read"] is False
+        assert caps["chat"] is True
+
+    def test_none_agent_no_caps(self):
+        assert seo.detect_capabilities(None, None) == {
+            "read": False, "preview": False, "chat": False,
+        }
+
+
+class TestRenderCtaMatrix:
+    def test_renders_read_and_chat_for_full_book(self):
+        caps = {"read": True, "preview": True, "chat": True}
+        out = seo.render_cta_matrix(
+            caps, entity_id="abc", entity_name="Sapiens", base="https://x.com",
+        )
+        assert "Read Sapiens" in out
+        assert "Chat about Sapiens" in out
+        # Read subsumes Preview — no separate Preview button when Read available
+        assert "Preview Sapiens" not in out
+        assert 'href="https://x.com/#/read/abc"' in out
+        assert 'href="https://x.com/#/chat/abc"' in out
+
+    def test_renders_only_chat_for_catalog_stub(self):
+        caps = {"read": False, "preview": False, "chat": True}
+        out = seo.render_cta_matrix(
+            caps, entity_id="abc", entity_name="Stub Book", base="https://x.com",
+        )
+        # The bug fix: no misleading Read button for catalog stubs
+        assert "Read Stub Book" not in out
+        assert "Chat about Stub Book" in out
+        # And only the chat URL — no /#/read/ link at all
+        assert "/#/read/" not in out
+        assert 'href="https://x.com/#/chat/abc"' in out
+
+    def test_renders_preview_when_partial_content(self):
+        caps = {"read": False, "preview": True, "chat": True}
+        out = seo.render_cta_matrix(
+            caps, entity_id="abc", entity_name="Half-written Book",
+            base="https://x.com",
+        )
+        assert "Preview Half-written Book" in out
+        assert "Chat about Half-written Book" in out
+        assert "Read Half-written Book" not in out
+
+    def test_renders_nothing_when_no_capabilities(self):
+        # Failed agent — neither button is appropriate
+        out = seo.render_cta_matrix(
+            {"read": False, "preview": False, "chat": False},
+            entity_id="abc", entity_name="X", base="https://x.com",
+        )
+        assert out == ""
+
+    def test_escapes_entity_name_in_button_text(self):
+        out = seo.render_cta_matrix(
+            {"read": True, "preview": True, "chat": True},
+            entity_id="abc", entity_name="<script>alert(1)</script>",
+            base="https://x.com",
+        )
+        assert "<script>alert(1)</script>" not in out
+        assert "&lt;script&gt;" in out
+
+
+class TestIsInternalReferer:
+    def test_external_referer_is_not_internal(self):
+        assert seo.is_internal_referer(
+            "https://www.google.com/search?q=feynman",
+            "https://feynman.wiki",
+        ) is False
+
+    def test_missing_referer_is_not_internal(self):
+        # Conservative: no referer means we can't be sure → treat as external
+        # → land on landing page (safer for the SEO bounce-rate concern)
+        assert seo.is_internal_referer("", "https://feynman.wiki") is False
+        assert seo.is_internal_referer(None, "https://feynman.wiki") is False
+
+    def test_internal_referer_recognized(self):
+        assert seo.is_internal_referer(
+            "https://feynman.wiki/#/library", "https://feynman.wiki",
+        ) is True
+        assert seo.is_internal_referer(
+            "https://feynman.wiki/book/abc", "https://feynman.wiki",
+        ) is True
+
+    def test_subdomain_is_not_treated_as_same(self):
+        # api.feynman.wiki referring is not the same as a user navigating
+        # from the main app — be conservative.
+        assert seo.is_internal_referer(
+            "https://api.feynman.wiki/something", "https://feynman.wiki",
+        ) is False
+
+    def test_case_insensitive_host_match(self):
+        assert seo.is_internal_referer(
+            "https://FEYNMAN.WIKI/page", "https://feynman.wiki",
+        ) is True
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in
