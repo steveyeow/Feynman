@@ -345,21 +345,37 @@ def render_sample_passages(chunks: list[dict[str, Any]], count: int = 3, max_cha
     return f'<section><h2>From the book</h2>{"".join(items)}</section>'
 
 
-def render_popular_questions(questions: list[str], chat_url: str) -> str:
+def render_popular_questions(
+    questions: list[str],
+    fallback_url: str,
+    *,
+    book_id: str = "",
+    site_url: str = "",
+) -> str:
     """Render the auto-generated study questions as a visible FAQ-style
-    list. Companion FAQPage JSON-LD is emitted separately via faq_jsonld."""
+    list. Companion FAQPage JSON-LD is emitted separately via faq_jsonld.
+
+    When ``book_id`` and ``site_url`` are provided, each question links to
+    its own compound /book/{id}/q/{slug} page (the SEO play — every
+    question becomes a discoverable long-tail URL). Otherwise all
+    questions link to ``fallback_url`` (typically the book's chat URL).
+    """
     if not questions:
         return ""
-    items = "".join(
-        f'<li><a href="{_esc(chat_url)}">{_esc(q)}</a></li>'
-        for q in questions
-        if q
-    )
-    if not items:
+    items_html: list[str] = []
+    for q in questions:
+        if not q:
+            continue
+        if book_id and site_url:
+            href = f"{site_url}/book/{book_id}/q/{slugify(q)}"
+        else:
+            href = fallback_url
+        items_html.append(f'<li><a href="{_esc(href)}">{_esc(q)}</a></li>')
+    if not items_html:
         return ""
     return (
         '<section><h2>Popular questions readers ask</h2>'
-        f'<ul class="popular-questions">{items}</ul></section>'
+        f'<ul class="popular-questions">{"".join(items_html)}</ul></section>'
     )
 
 
@@ -489,6 +505,324 @@ def render_related_minds(minds: list[dict[str, Any]], site_url: str) -> str:
         '<section><h2>Related minds</h2>'
         f'<ul class="related-minds">{items}</ul></section>'
     )
+
+
+# ─── Mind-on-topic compound-page helpers (Phase 4B) ──────────────────
+#
+# /mind/{mind_id}/on/{topic_slug} renders an imagined-perspective essay
+# of how this mind would think about this topic. Relevance is pre-filtered
+# in qa.is_mind_topic_relevant — non-relevant pairs 404 rather than
+# generate slop. Each rendered page is labelled as imagined dialogue to
+# avoid misrepresenting historical figures.
+
+
+def render_mind_on_topic_essay(essay: str, mind_name: str, topic: str) -> str:
+    """Render the imagined essay with an explicit disclosure label."""
+    if not essay:
+        return ""
+    paragraphs = [p.strip() for p in essay.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
+    body = "".join(f"<p>{_esc(p)}</p>" for p in paragraphs)
+    return (
+        '<section class="mind-essay">'
+        f'<h2>How {_esc(mind_name)} might approach {_esc(topic)}</h2>'
+        f'{body}'
+        '<p class="essay-attribution"><small>Imagined perspective — '
+        f'an AI synthesis grounded in {_esc(mind_name)}\'s recorded ideas '
+        'and methods, not a quote.</small></p>'
+        '</section>'
+    )
+
+
+def mind_essay_jsonld(
+    *,
+    mind_name: str,
+    topic: str,
+    essay: str,
+    url: str,
+    mind_url: str,
+    image: str = "",
+) -> dict[str, Any]:
+    """Schema.org/Article. We mark the author as an Organization (Feynman)
+    rather than the mind itself — the essay is an imagined perspective
+    we authored, not something the mind actually wrote. Including the
+    mind as the about-entity preserves topical clarity."""
+    out: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": f"How {mind_name} might approach {topic}",
+        "description": (essay[:200].rsplit(" ", 1)[0] + "…") if len(essay) > 200 else essay,
+        "url": url,
+        "author": {"@type": "Organization", "name": "Feynman", "url": mind_url.split("/mind/")[0]},
+        "about": {"@type": "Person", "name": mind_name, "url": mind_url},
+        "publisher": {
+            "@type": "Organization",
+            "name": "Feynman",
+            "url": mind_url.split("/mind/")[0],
+        },
+    }
+    if image:
+        out["image"] = image
+    return out
+
+
+# ─── Book Q&A compound-page helpers (Phase 4A) ───────────────────────
+#
+# Each indexed book has up to 5 popular questions in the `questions`
+# table. We expose each as its own URL `/book/{id}/q/{slug}`. The slug
+# is derived from the question text via slugify, so URLs are stable as
+# long as the question text doesn't change.
+
+def find_question_by_slug(questions: list[str], slug: str) -> str | None:
+    """Match a URL slug back to the original question text. Linear scan —
+    questions per book is bounded to ~5, no need for an index."""
+    if not questions or not slug:
+        return None
+    target = slug.strip().lower()
+    for q in questions:
+        if slugify(q) == target:
+            return q
+    return None
+
+
+def render_qa_answer(answer: str) -> str:
+    """Render the synthesized LLM answer as a labelled section. We label
+    it explicitly because the answer is AI-generated grounded synthesis —
+    transparency about authorship is required by Google's helpful-content
+    guidance and avoids misleading citations downstream."""
+    if not answer:
+        return ""
+    # Preserve paragraph breaks the LLM emitted; escape everything else.
+    paragraphs = [p.strip() for p in answer.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
+    body = "".join(f"<p>{_esc(p)}</p>" for p in paragraphs)
+    return (
+        '<section class="qa-answer"><h2>Synthesized answer</h2>'
+        f'{body}'
+        '<p class="qa-attribution"><small>Synthesized from the book passages '
+        'below. Chat with the book on Feynman for follow-up.</small></p>'
+        '</section>'
+    )
+
+
+def render_qa_passages(passages: list[dict[str, Any]], max_chars: int = 600) -> str:
+    """Render the supporting RAG passages with chapter attribution.
+    Even when LLM synthesis fails or is disabled, this section alone
+    gives the page real content — Google sees ~5 substantial blockquotes
+    of original book text grouped under the question."""
+    if not passages:
+        return ""
+    items = []
+    for p in passages:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > max_chars:
+            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+        attr = ""
+        idx = p.get("chunk_index")
+        if idx is not None:
+            attr = f'<footer><small>Passage [{int(idx) + 1}]</small></footer>'
+        items.append(f"<blockquote>{_esc(text)}{attr}</blockquote>")
+    if not items:
+        return ""
+    return (
+        '<section class="qa-passages"><h2>From the book</h2>'
+        f'{"".join(items)}</section>'
+    )
+
+
+def render_sibling_questions(
+    siblings: list[str],
+    book_id: str,
+    site_url: str,
+    current_question: str = "",
+) -> str:
+    """Cross-link to the book's other Q&A pages. Skip the current
+    question (would be a self-link)."""
+    if not siblings:
+        return ""
+    items = []
+    current_slug = slugify(current_question) if current_question else ""
+    for q in siblings:
+        if not q:
+            continue
+        slug = slugify(q)
+        if slug == current_slug:
+            continue
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(book_id)}/q/{_esc(slug)}">'
+            f'{_esc(q)}</a></li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>More questions about this book</h2>'
+        f'<ul class="sibling-questions">{"".join(items)}</ul></section>'
+    )
+
+
+def qa_page_jsonld(
+    *,
+    question: str,
+    answer: str,
+    url: str,
+    book_title: str,
+    book_url: str,
+) -> dict[str, Any]:
+    """Schema.org/QAPage with acceptedAnswer. Google supports this rich
+    result; LLMs use it as a clean enumerable signal.
+
+    If we don't have an LLM-synthesized answer yet, we still emit the
+    schema with a deflection answer pointing to the chat — better than
+    omitting the schema entirely (which would forfeit the rich-result
+    eligibility) and Google accepts non-empty deflection text."""
+    answer_text = (answer or "").strip()
+    if not answer_text:
+        answer_text = (
+            f"Open Feynman to chat with the book \"{book_title}\" and explore "
+            f"the answer in depth: {book_url}"
+        )
+    return {
+        "@context": "https://schema.org",
+        "@type": "QAPage",
+        "mainEntity": {
+            "@type": "Question",
+            "name": question,
+            "url": url,
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": answer_text,
+                "url": url,
+            },
+        },
+    }
+
+
+# ─── Topic slug / lookup helpers (Phase 4C — topic hub pages) ────────
+#
+# Topics are a fixed list (`TOPIC_TAGS` in app/core/catalog.py). They're
+# referenced by name everywhere internally but exposed externally as
+# kebab-case slugs in URLs (/topic/computer-science). These helpers do
+# the bidirectional mapping so handlers don't have to repeat the logic.
+
+def build_topic_slug_index(topic_tags: list[str]) -> dict[str, str]:
+    """Returns {slug: original_topic_name} so URL handlers can resolve
+    /topic/{slug} back to the canonical name to use for DB lookups."""
+    return {slugify(t): t for t in topic_tags if t}
+
+
+def topic_slug(topic: str) -> str:
+    """Slug for a given topic name. Stable across runs (slugify is
+    deterministic) so URLs don't change."""
+    return slugify(topic)
+
+
+# ─── Topic hub page renderer (Phase 4C) ──────────────────────────────
+
+def render_topic_books(books: list[dict[str, Any]], site_url: str) -> str:
+    """List the books tagged with this topic. Each is a cross-link to
+    /book/{id} so the topic hub becomes an entry-point page that pushes
+    PageRank down to entity pages."""
+    if not books:
+        return ""
+    items = []
+    for b in books:
+        if not b.get("id") or not b.get("name"):
+            continue
+        author = f' — {_esc(b["author"])}' if b.get("author") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(b["id"])}">{_esc(b["name"])}</a>{author}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Books in this topic</h2>'
+        f'<ul class="topic-books">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_minds(minds: list[dict[str, Any]], site_url: str) -> str:
+    if not minds:
+        return ""
+    items = []
+    for m in minds:
+        if not m.get("id") or not m.get("name"):
+            continue
+        era = f' — {_esc(m["era"])}' if m.get("era") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(m["name"])}</a>{era}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Great minds on this topic</h2>'
+        f'<ul class="topic-minds">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_intro(topic: str, book_count: int, mind_count: int) -> str:
+    """Top-of-page intro paragraph. Generated from counts, not LLM —
+    Google rewards concise factual lead paragraphs that match the H1."""
+    if not topic:
+        return ""
+    parts = []
+    if book_count > 0:
+        parts.append(f"{book_count} {'book' if book_count == 1 else 'books'}")
+    if mind_count > 0:
+        parts.append(f"{mind_count} great {'mind' if mind_count == 1 else 'minds'}")
+    if not parts:
+        intro = (
+            f"Explore {_esc(topic)} on Feynman — chat with the best books "
+            f"and great thinkers shaping this field."
+        )
+    else:
+        and_clause = " and ".join(parts)
+        intro = (
+            f"{and_clause} on {_esc(topic)} curated for chat and exploration "
+            f"on Feynman — read the canon, ask the questions you actually have, "
+            f"and discuss with the thinkers who shaped the field."
+        )
+    return f'<p class="topic-intro">{intro}</p>'
+
+
+def collection_jsonld(
+    *,
+    name: str,
+    description: str,
+    url: str,
+    items: list[dict[str, str]],
+    site_url: str,
+) -> dict[str, Any]:
+    """Schema.org/CollectionPage with embedded ItemList — the right shape
+    for a topic hub. ``items`` is a list of {name, url} dicts."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": name,
+        "description": description,
+        "url": url,
+        "isPartOf": {
+            "@type": "WebSite",
+            "name": "Feynman",
+            "url": site_url,
+        },
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(items),
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": i + 1,
+                    "url": item["url"],
+                    "name": item["name"],
+                }
+                for i, item in enumerate(items)
+            ],
+        },
+    }
 
 
 # ─── Capability detection + CTA matrix (Phase 3a) ───────────────────

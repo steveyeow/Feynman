@@ -619,6 +619,254 @@ class TestIsInternalReferer:
         ) is True
 
 
+class TestPhase4QAHelpers:
+    """Phase 4A: /book/{id}/q/{slug} compound pages."""
+
+    def test_find_question_by_slug_exact(self):
+        qs = ["What is X?", "Why Y?", "How Z?"]
+        assert seo.find_question_by_slug(qs, "what-is-x") == "What is X?"
+        assert seo.find_question_by_slug(qs, "why-y") == "Why Y?"
+
+    def test_find_question_by_slug_case_insensitive(self):
+        qs = ["What is X?"]
+        assert seo.find_question_by_slug(qs, "WHAT-IS-X") == "What is X?"
+
+    def test_find_question_by_slug_no_match(self):
+        assert seo.find_question_by_slug(["A?"], "missing") is None
+        assert seo.find_question_by_slug([], "any") is None
+        assert seo.find_question_by_slug(["A?"], "") is None
+
+    def test_render_qa_answer_preserves_paragraphs(self):
+        out = seo.render_qa_answer("First para.\n\nSecond para.")
+        assert out.count("<p>") == 2
+        assert "First para." in out
+        assert "Second para." in out
+
+    def test_render_qa_answer_includes_attribution(self):
+        # Transparency about AI synthesis is required by helpful-content guidance
+        out = seo.render_qa_answer("Some answer.")
+        assert "Synthesized" in out or "synthesized" in out.lower()
+
+    def test_render_qa_answer_empty(self):
+        assert seo.render_qa_answer("") == ""
+        assert seo.render_qa_answer("   ") == ""
+
+    def test_render_qa_passages_attributes_chunks(self):
+        out = seo.render_qa_passages([
+            {"chunk_index": 0, "text": "Passage one."},
+            {"chunk_index": 5, "text": "Passage six."},
+        ])
+        # 1-indexed display for humans
+        assert "Passage [1]" in out
+        assert "Passage [6]" in out
+
+    def test_render_qa_passages_escapes_html(self):
+        out = seo.render_qa_passages([{"chunk_index": 0, "text": "<script>x</script>"}])
+        assert "<script>x</script>" not in out
+        assert "&lt;script&gt;" in out
+
+    def test_render_sibling_questions_skips_self(self):
+        out = seo.render_sibling_questions(
+            ["What is X?", "Why Y?", "How Z?"],
+            book_id="abc", site_url="https://x.com",
+            current_question="Why Y?",
+        )
+        # Current question must not appear as a sibling self-link
+        assert "Why Y?" not in out
+        assert "What is X?" in out and "How Z?" in out
+
+    def test_render_sibling_questions_uses_compound_urls(self):
+        out = seo.render_sibling_questions(
+            ["What is X?"], book_id="abc", site_url="https://x.com",
+        )
+        assert 'href="https://x.com/book/abc/q/what-is-x"' in out
+
+    def test_qa_page_jsonld_uses_real_answer_when_present(self):
+        ld = seo.qa_page_jsonld(
+            question="What is X?", answer="X is the unknown.",
+            url="https://x.com/q", book_title="Book", book_url="https://x.com/b",
+        )
+        assert ld["@type"] == "QAPage"
+        assert ld["mainEntity"]["acceptedAnswer"]["text"] == "X is the unknown."
+
+    def test_qa_page_jsonld_deflects_when_answer_missing(self):
+        # Empty answer must still produce a non-empty acceptedAnswer for
+        # Google's QAPage schema to be accepted
+        ld = seo.qa_page_jsonld(
+            question="What is X?", answer="",
+            url="https://x.com/q", book_title="Book", book_url="https://x.com/b",
+        )
+        text = ld["mainEntity"]["acceptedAnswer"]["text"]
+        assert text  # non-empty deflection
+        assert "Book" in text  # mentions the book by title
+
+
+class TestPhase4MindOnTopic:
+    """Phase 4B: /mind/{id}/on/{topic} compound pages."""
+
+    def _marx(self) -> dict:
+        return {
+            "id": "m1", "name": "Karl Marx",
+            "domain": "Political Economy, Philosophy",
+            "bio_summary": "German philosopher and political economist.",
+            "thinking_style": "Materialist dialectics.",
+            "persona": "Analyzes through class struggle.",
+            "typical_phrases": ["Workers of the world, unite!"],
+        }
+
+    def test_relevance_match_on_substring(self):
+        from app.core import qa
+        marx = self._marx()
+        assert qa.is_mind_topic_relevant(marx, "Economics") is True  # 'Econom' in 'Political Economy'
+        assert qa.is_mind_topic_relevant(marx, "Philosophy") is True
+
+    def test_relevance_rejects_unrelated_topic(self):
+        from app.core import qa
+        marx = self._marx()
+        assert qa.is_mind_topic_relevant(marx, "Computer Science") is False
+        assert qa.is_mind_topic_relevant(marx, "Biology") is False
+
+    def test_relevance_ignores_noise_tokens(self):
+        from app.core import qa
+        # "Art & Design" should not match purely on "&" or "of"
+        mind = {"name": "X", "domain": "Mathematics, Physics"}
+        assert qa.is_mind_topic_relevant(mind, "Art & Design") is False
+
+    def test_relevance_handles_missing_data(self):
+        from app.core import qa
+        assert qa.is_mind_topic_relevant(None, "X") is False
+        assert qa.is_mind_topic_relevant({}, "X") is False
+        assert qa.is_mind_topic_relevant({"domain": ""}, "X") is False
+        assert qa.is_mind_topic_relevant({"domain": "Economics"}, "") is False
+
+    def test_relevance_multiword_topic(self):
+        from app.core import qa
+        mind = {"name": "X", "domain": "Political Economy, Philosophy"}
+        # Multi-word topic — substring match on full string
+        assert qa.is_mind_topic_relevant(mind, "Political Science") is True  # 'Political' in domain
+
+    def test_render_mind_essay_labels_as_imagined(self):
+        # Hard requirement: never present LLM output as the mind's actual words
+        out = seo.render_mind_on_topic_essay(
+            "First paragraph.\n\nSecond paragraph.",
+            "Karl Marx", "Economics",
+        )
+        assert "Imagined" in out or "imagined" in out.lower()
+        assert "Karl Marx" in out
+        # Counts both <p> and <p class="…"> — the attribution paragraph
+        # has a class so it shows up as "<p " in raw HTML.
+        assert out.count("<p") >= 3  # 2 body paragraphs + 1 attribution
+
+    def test_render_mind_essay_empty_returns_empty(self):
+        assert seo.render_mind_on_topic_essay("", "X", "Y") == ""
+
+    def test_mind_essay_jsonld_marks_about_entity(self):
+        ld = seo.mind_essay_jsonld(
+            mind_name="Karl Marx", topic="Economics",
+            essay="An essay.",
+            url="https://x.com/m/1/on/economics",
+            mind_url="https://x.com/mind/1",
+        )
+        assert ld["@type"] == "Article"
+        assert ld["about"]["@type"] == "Person"
+        assert ld["about"]["name"] == "Karl Marx"
+        # Author is Feynman (the synthesizer), not Marx — accurate attribution
+        assert ld["author"]["@type"] == "Organization"
+        assert ld["author"]["name"] == "Feynman"
+
+
+class TestPhase4TopicHub:
+    """Phase 4C: /topic/{slug} pages."""
+
+    def test_build_topic_slug_index(self):
+        tags = ["Computer Science", "Economics", "Self-Development"]
+        idx = seo.build_topic_slug_index(tags)
+        assert idx["computer-science"] == "Computer Science"
+        assert idx["economics"] == "Economics"
+        assert idx["self-development"] == "Self-Development"
+
+    def test_topic_slug_kebab(self):
+        assert seo.topic_slug("Business & Strategy") == "business-strategy"
+        assert seo.topic_slug("Self-Development") == "self-development"
+
+    def test_render_topic_books_cross_links(self):
+        out = seo.render_topic_books(
+            [{"id": "b1", "name": "Sapiens", "author": "Yuval Harari"}],
+            "https://x.com",
+        )
+        assert 'href="https://x.com/book/b1"' in out
+        assert "Sapiens" in out
+        assert "Yuval Harari" in out
+
+    def test_render_topic_minds_cross_links(self):
+        out = seo.render_topic_minds(
+            [{"id": "m1", "name": "Marx", "era": "19th Century"}],
+            "https://x.com",
+        )
+        assert 'href="https://x.com/mind/m1"' in out
+        assert "Marx" in out
+        assert "19th Century" in out
+
+    def test_render_topic_intro_with_counts(self):
+        out = seo.render_topic_intro("Economics", 12, 5)
+        assert "12 books" in out
+        assert "5 great minds" in out
+        assert "Economics" in out
+
+    def test_render_topic_intro_singular(self):
+        out = seo.render_topic_intro("Economics", 1, 1)
+        assert "1 book" in out and "1 great mind" in out
+        assert "1 books" not in out and "1 great minds" not in out
+
+    def test_render_topic_intro_zero_counts(self):
+        # No content yet, but still emit a meaningful intro
+        out = seo.render_topic_intro("Economics", 0, 0)
+        assert "Economics" in out
+        assert out  # not empty
+
+    def test_collection_jsonld_structure(self):
+        ld = seo.collection_jsonld(
+            name="Economics on Feynman",
+            description="...",
+            url="https://x.com/topic/economics",
+            items=[
+                {"name": "Sapiens", "url": "https://x.com/book/b1"},
+                {"name": "Marx", "url": "https://x.com/mind/m1"},
+            ],
+            site_url="https://x.com",
+        )
+        assert ld["@type"] == "CollectionPage"
+        assert ld["mainEntity"]["@type"] == "ItemList"
+        assert ld["mainEntity"]["numberOfItems"] == 2
+        # 1-indexed positions
+        assert ld["mainEntity"]["itemListElement"][0]["position"] == 1
+
+
+class TestPopularQuestionsCompoundUrls:
+    """Phase 4A integration: popular questions on the book page should
+    link to each question's own /book/{id}/q/{slug} URL, not all to
+    the same chat URL."""
+
+    def test_links_to_compound_url_when_book_id_provided(self):
+        out = seo.render_popular_questions(
+            ["What is X?", "Why Y?"],
+            fallback_url="https://x.com/#/chat/abc",
+            book_id="abc",
+            site_url="https://x.com",
+        )
+        assert 'href="https://x.com/book/abc/q/what-is-x"' in out
+        assert 'href="https://x.com/book/abc/q/why-y"' in out
+        # Fallback URL should not appear
+        assert "/#/chat/abc" not in out
+
+    def test_falls_back_to_chat_url_without_book_id(self):
+        # Backward compatibility for any caller not using compound URLs
+        out = seo.render_popular_questions(
+            ["What is X?"], "https://x.com/#/chat/abc",
+        )
+        assert 'href="https://x.com/#/chat/abc"' in out
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in

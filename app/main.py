@@ -43,11 +43,14 @@ from .core.db import (
     init_db,
     list_agents,
     list_chat_sessions,
+    list_books_by_topic,
     list_books_for_mind,
     list_messages,
     list_minds,
+    list_minds_by_topic,
     list_minds_for_agent,
     list_questions,
+    list_questions_batch,
     list_related_minds,
     list_session_messages,
     list_user_interest_profile,
@@ -71,6 +74,7 @@ from .core.indexer import index_text
 from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, pick_provider
 from .core.rag import build_context, retrieve, retrieve_cross_book
 from .core import seo as seo_render
+from .core import qa as qa_module
 from .core.minds import (
     SEED_MINDS,
     create_mind_from_content,
@@ -692,23 +696,75 @@ def sitemap_xml():
     # through the Supabase pooler. We cap them with a defensive limit
     # AND wrap the whole response in a TTL cache.
     try:
-        for agent in list_agents(limit=5000):
-            if agent.get("status") != "ready":
-                continue
+        ready_agents = [
+            a for a in list_agents(limit=5000)
+            if a.get("status") == "ready"
+        ]
+        # Batch-fetch questions for all ready agents in a single query —
+        # the previous loop pattern would issue N round-trips inside the
+        # sitemap render hot path.
+        questions_by_agent = list_questions_batch([a["id"] for a in ready_agents])
+        for agent in ready_agents:
+            agent_id = agent["id"]
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
             urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent["id"]}</loc>
+    <loc>{_SITE_URL}/book/{agent_id}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>{priority}</priority>
   </url>
 """
-        for mind in list_minds(limit=5000):
+            # Phase 4A — compound Q&A URLs. One per popular question per
+            # book. Slightly lower priority than the parent page; weekly
+            # changefreq because answers may be regenerated.
+            for q in questions_by_agent.get(agent_id, []):
+                qslug = seo_render.slugify(q)
+                if not qslug:
+                    continue
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/book/{agent_id}/q/{qslug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+"""
+        all_minds = list_minds(limit=5000)
+        for mind in all_minds:
             urls += f"""  <url>
     <loc>{_SITE_URL}/mind/{mind["id"]}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+"""
+        # Phase 4B — mind-on-topic compound URLs. Only emit pairs that
+        # pass the relevance filter so we don't list /mind/X/on/Y for
+        # combos that the route would 404 anyway.
+        for mind in all_minds:
+            for topic in TOPIC_TAGS:
+                if not qa_module.is_mind_topic_relevant(mind, topic):
+                    continue
+                tslug = seo_render.topic_slug(topic)
+                if not tslug:
+                    continue
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["id"]}/on/{tslug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+"""
+        # Topic hub pages — 15 fixed URLs from TOPIC_TAGS. Cheap to include
+        # and they're the upper layer of the topic→entity link graph.
+        for topic in TOPIC_TAGS:
+            slug = seo_render.topic_slug(topic)
+            if not slug:
+                continue
+            urls += f"""  <url>
+    <loc>{_SITE_URL}/topic/{slug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
 """
     except Exception:
@@ -1065,7 +1121,11 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     stats_html = seo_render.render_stats(total_words, chapter_count)
     toc_html = seo_render.render_toc(chapters)
     samples_html = seo_render.render_sample_passages(chunks)
-    questions_html = seo_render.render_popular_questions(questions, chat_url)
+    # Each question links to its own /book/{id}/q/{slug} compound page —
+    # turns one entity URL into 6 indexable URLs (book + 5 Q&A).
+    questions_html = seo_render.render_popular_questions(
+        questions, chat_url, book_id=agent_id, site_url=base,
+    )
     minds_html = seo_render.render_minds_for_book(related_minds, base)
     cta_html = seo_render.render_cta_matrix(
         caps, entity_id=agent_id, entity_name=title_raw, base=base
@@ -1346,6 +1406,380 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+# ─── Phase 4A — Book Q&A compound pages ─────────────────────────────
+#
+# /book/{agent_id}/q/{slug} renders one indexable URL per popular
+# question per book. 5 questions per indexed book × hundreds of books
+# = thousands of new long-tail entry points. Each page is:
+#   * Grounded in RAG-retrieved passages from the parent book
+#   * Optionally enriched with an LLM-synthesized answer (cacheable,
+#     kill-switched by ENABLE_QA_LLM env var)
+#   * Wrapped in QAPage schema for Google rich-result eligibility
+#
+# Caching strategy: answers are slow to generate (RAG + LLM round trip).
+# We cache the rendered HTML by (agent_id, slug) so the first crawler
+# pays the cost and every subsequent hit is free. The Vercel edge
+# Cache-Control header gives us a second tier outside the function.
+
+_QA_PAGE_CACHE_TTL = 86400  # 24h — answers don't change unless we
+                            # explicitly re-run the question/answer flow
+
+
+@app.get("/book/{agent_id}/q/{question_slug}", response_class=HTMLResponse)
+def book_question_page(agent_id: str, question_slug: str, request: Request) -> HTMLResponse:
+    """Per-question compound page for a book. See module-level comment."""
+    from html import escape as html_esc
+
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    try:
+        questions = list_questions(agent_id) or []
+    except Exception:
+        questions = []
+    question = seo_render.find_question_by_slug(questions, question_slug)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found for this book")
+
+    cache_key = f"qa_page:{agent_id}:{question_slug}"
+    cached = _cache_get(cache_key, _QA_PAGE_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    book = get_ai_book_by_agent(agent_id)
+    title_raw = book["title"] if book and book.get("title") else agent.get("name", "Untitled")
+    title = html_esc(title_raw)
+    base = _SITE_URL
+    book_url = f"{base}/book/{agent_id}"
+    canonical = f"{base}/book/{agent_id}/q/{question_slug}"
+
+    # ── Generate answer (lazy, in-process cached) ──────────────────────
+    qa_result = qa_module.generate_grounded_answer(
+        agent_id, question, book_title=title_raw,
+    )
+    answer = qa_result.get("answer", "")
+    passages = qa_result.get("passages", [])
+
+    # ── Render sections ────────────────────────────────────────────────
+    answer_html = seo_render.render_qa_answer(answer)
+    passages_html = seo_render.render_qa_passages(passages)
+    siblings_html = seo_render.render_sibling_questions(
+        questions, agent_id, base, current_question=question,
+    )
+
+    qa_ld = seo_render.jsonld_script(seo_render.qa_page_jsonld(
+        question=question,
+        answer=answer,
+        url=canonical,
+        book_title=title_raw,
+        book_url=book_url,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Books", f"{base}/#/library"),
+        (title_raw, book_url),
+        ("Q&A", canonical),
+    ]))
+
+    page_title_raw = f"{question} — {title_raw}"
+    if len(page_title_raw) > 120:
+        page_title_raw = page_title_raw[:117].rsplit(" ", 1)[0] + "..."
+    page_title = html_esc(page_title_raw)
+    desc_raw = answer[:180].strip() if answer else (
+        f"Discuss \"{question}\" with the book \"{title_raw}\" on Feynman."
+    )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    og_image_url = f"{base}/book/{agent_id}/og.png?v={config.OG_IMAGE_CACHE_VERSION}"
+    chat_url = f"{base}/#/chat/{agent_id}"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{html_esc(question)}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{html_esc(question)}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
+{qa_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="qa-back"><a href="{book_url}">← {title}</a></nav>
+<h1>{html_esc(question)}</h1>
+{answer_html}
+{passages_html}
+{siblings_html}
+<p class="cta"><a href="{html_esc(chat_url)}">Chat about this question →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 4B — Mind-on-topic compound pages ────────────────────────
+#
+# /mind/{mind_id}/on/{topic_slug} renders an imagined-perspective essay
+# of how this mind would approach this topic. Relevance is enforced —
+# non-matching pairs 404 to avoid programmatic spam (e.g. "Confucius on
+# Computer Science"). Essays are LLM-generated, labelled as imagined,
+# and grounded in the mind's persona/thinking_style/typical_phrases.
+
+_MIND_ESSAY_CACHE_TTL = 86400
+
+
+@app.get("/mind/{mind_id}/on/{topic_slug}", response_class=HTMLResponse)
+def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLResponse:
+    """Per-(mind, topic) compound page. See module-level comment."""
+    from html import escape as html_esc
+
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    topic = _resolve_topic_slug(topic_slug)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not qa_module.is_mind_topic_relevant(mind, topic):
+        # Relevance gate — pair isn't plausible enough to merit an essay.
+        # 404 keeps Google from indexing programmatic combinations.
+        raise HTTPException(status_code=404, detail="Topic not relevant to this mind")
+
+    cache_key = f"mind_essay:{mind_id}:{topic_slug}"
+    cached = _cache_get(cache_key, _MIND_ESSAY_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    name_raw = mind.get("name", "Unknown")
+    name = html_esc(name_raw)
+    base = _SITE_URL
+    mind_url = f"{base}/mind/{mind_id}"
+    canonical = f"{base}/mind/{mind_id}/on/{topic_slug}"
+    chat_url = f"{base}/#/mind/{mind_id}"
+
+    essay_result = qa_module.generate_mind_on_topic_essay(mind, topic)
+    essay = essay_result.get("essay", "")
+    if not essay:
+        # Generation failed (LLM disabled, provider error, or empty
+        # response). Don't render a blank page — 404 so we don't pollute
+        # the index with empty essays.
+        raise HTTPException(status_code=404, detail="Essay unavailable")
+
+    page_title_raw = f"How {name_raw} would approach {topic} — Feynman"
+    if len(page_title_raw) > 120:
+        page_title_raw = page_title_raw[:117].rsplit(" ", 1)[0] + "..."
+    page_title = html_esc(page_title_raw)
+    desc_raw = essay[:180].strip().replace("\n", " ")
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    og_image_url = f"{base}/mind/{mind_id}/og.png"
+
+    essay_html = seo_render.render_mind_on_topic_essay(essay, name_raw, topic)
+    article_ld = seo_render.jsonld_script(seo_render.mind_essay_jsonld(
+        mind_name=name_raw, topic=topic, essay=essay,
+        url=canonical, mind_url=mind_url, image=og_image_url,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Great Minds", f"{base}/#/minds"),
+        (name_raw, mind_url),
+        (topic, canonical),
+    ]))
+    topic_hub_url = f"{base}/topic/{topic_slug}"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{html_esc(f'How {name_raw} would approach {topic}')}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{html_esc(f'How {name_raw} would approach {topic}')}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
+{article_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="essay-back"><a href="{mind_url}">← {name}</a></nav>
+<h1>How {name} would approach {html_esc(topic)}</h1>
+{essay_html}
+<p class="related-links">
+  Read more: <a href="{mind_url}">About {name}</a> ·
+  <a href="{topic_hub_url}">{html_esc(topic)} on Feynman</a>
+</p>
+<p class="cta"><a href="{html_esc(chat_url)}">Chat with {name} →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 4C — Topic hub pages ─────────────────────────────────────
+#
+# /topic/{slug} aggregates books and minds tagged with one of the 15
+# TOPIC_TAGS. Pure aggregation — no LLM calls. Each page becomes:
+#   * a new indexable URL (sitemap)
+#   * an internal-PageRank conduit pushing authority to entity pages
+#   * a canonical destination for queries like "best Economics books"
+#
+# Cache aggressively: topic membership only changes when a new catalog
+# book is discovered, which is rare. 1 hour TTL is plenty fresh.
+
+_TOPIC_PAGE_CACHE_TTL = 3600
+
+
+def _resolve_topic_slug(slug: str) -> str | None:
+    """Find the canonical topic name for a URL slug. None if no match."""
+    index = seo_render.build_topic_slug_index(TOPIC_TAGS)
+    return index.get(slug.lower())
+
+
+@app.get("/topic/{slug}", response_class=HTMLResponse)
+def topic_page(slug: str, request: Request) -> HTMLResponse:
+    """Server-rendered topic hub. Lists all books + minds tagged with this
+    topic with cross-links — both for users and for the crawler graph.
+    """
+    from html import escape as html_esc
+
+    topic = _resolve_topic_slug(slug)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    cache_key = f"topic_page:{slug}"
+    cached = _cache_get(cache_key, _TOPIC_PAGE_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        books = list_books_by_topic(topic, limit=30)
+    except Exception:
+        books = []
+    try:
+        minds = list_minds_by_topic(topic, limit=12)
+    except Exception:
+        minds = []
+
+    base = _SITE_URL
+    canonical = f"{base}/topic/{slug}"
+    title = html_esc(f"{topic} on Feynman")
+    desc_raw = (
+        f"Chat with the best {topic} books and great minds on Feynman. "
+        f"{len(books)} curated {('book' if len(books) == 1 else 'books')}, "
+        f"{len(minds)} {('thinker' if len(minds) == 1 else 'thinkers')}."
+    )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+
+    intro_html = seo_render.render_topic_intro(topic, len(books), len(minds))
+    books_html = seo_render.render_topic_books(books, base)
+    minds_html = seo_render.render_topic_minds(minds, base)
+
+    # Collection schema with embedded ItemList (book entries first, then
+    # minds). LLMs use this to enumerate "what's in this topic" cleanly.
+    items: list[dict[str, str]] = []
+    for b in books[:30]:
+        if b.get("id") and b.get("name"):
+            items.append({"name": b["name"], "url": f"{base}/book/{b['id']}"})
+    for m in minds[:12]:
+        if m.get("id") and m.get("name"):
+            items.append({"name": m["name"], "url": f"{base}/mind/{m['id']}"})
+
+    collection_ld = seo_render.jsonld_script(seo_render.collection_jsonld(
+        name=f"{topic} on Feynman",
+        description=desc_raw,
+        url=canonical,
+        items=items,
+        site_url=base,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Topics", f"{base}/#/library"),
+        (topic, canonical),
+    ]))
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+{collection_ld}
+{breadcrumb_ld}
+</head><body>
+<h1>{html_esc(topic)}</h1>
+{intro_html}
+{books_html}
+{minds_html}
+<p class="cta"><a href="{base}/#/library">Explore the full Feynman library →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
 
 
 @app.get("/api/public/book/{agent_id}/read")

@@ -1533,6 +1533,79 @@ def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
         return out
 
 
+def list_questions_batch(agent_ids: list[str]) -> dict[str, list[str]]:
+    """Fetch the question texts for many agents in one query — used by
+    sitemap rendering, which would otherwise issue N round-trips.
+
+    Returns {agent_id: [question_text, ...]}. Agents with no questions
+    are omitted from the result, so callers can `.get(id, [])` safely.
+    """
+    if not agent_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(agent_ids))
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            f"""SELECT agent_id, text FROM questions
+                WHERE agent_id IN ({placeholders})
+                ORDER BY agent_id, created_at ASC"""
+        ), tuple(agent_ids))
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["agent_id"], []).append(r["text"])
+    return out
+
+
+def list_books_by_topic(topic: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Books tagged with a given topic via ``meta.category`` (set by
+    ``create_catalog_agent`` during topic-driven discovery).
+
+    Implementation note: agents.meta is JSON-stringified text, and we have
+    no JSON-aware index on it. We could push the predicate down with
+    ``json_extract`` / ``jsonb->>'category'`` but the corpus is small
+    (~hundreds) and the call site is cached by the page handler with a
+    long TTL, so an in-Python filter is fast enough and portable across
+    SQLite/Postgres without dialect branching.
+    """
+    if not topic:
+        return []
+    out = []
+    for agent in list_agents(limit=2000):
+        if agent.get("status") not in ("ready", "catalog"):
+            continue
+        meta = agent.get("meta") or {}
+        if not isinstance(meta, dict):
+            continue
+        if (meta.get("category") or "").strip().lower() == topic.strip().lower():
+            out.append({
+                "id": agent["id"],
+                "name": agent.get("name", ""),
+                "type": agent.get("type", ""),
+                "author": meta.get("author", ""),
+            })
+            if len(out) >= limit:
+                break
+    return out
+
+
+def list_minds_by_topic(topic: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Minds whose ``domain`` (comma-separated) contains the given topic
+    as a substring. ``domain`` was designed for human-readable tag
+    display; matching is intentionally loose so 'Economics' picks up
+    'Economics, Moral Philosophy' too.
+    """
+    if not topic:
+        return []
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, name, era, domain
+               FROM minds
+               WHERE domain LIKE ?
+               ORDER BY chat_count DESC, name ASC
+               LIMIT ?"""
+        ), (f"%{topic}%", limit))
+        return [dict(r) for r in rows]
+
+
 def list_related_minds(mind_id: str, domain: str, limit: int = 6) -> list[dict[str, Any]]:
     """Other minds sharing at least one domain tag with this mind. Domain is
     a comma-separated string in the schema, so we match by substring on any
