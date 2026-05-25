@@ -1482,6 +1482,77 @@ def get_mind_work_ids(mind_id: str) -> list[str]:
         return [r["agent_id"] for r in rows]
 
 
+# ─── SEO/landing-page helpers (cheap read-only queries used by SSR) ───
+#
+# These power the per-entity landing pages (/book/{id}, /mind/{id}). They are
+# called on every crawler/share visit, so they must stay O(small) and avoid
+# vector blob egress. All queries are bounded by an explicit LIMIT.
+
+def list_minds_for_agent(agent_id: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Minds whose work corpus includes this book — used to render the
+    "Discussed by Great Minds" section on /book/{id} and drive internal
+    PageRank from book pages → mind pages."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT m.id, m.name, m.era, m.domain
+               FROM mind_works mw
+               JOIN minds m ON m.id = mw.mind_id
+               WHERE mw.agent_id = ?
+               ORDER BY m.name ASC
+               LIMIT ?"""
+        ), (agent_id, limit))
+        return [dict(r) for r in rows]
+
+
+def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Books in this mind's corpus, with enough fields to render link text
+    on /mind/{id}. Filters to ready agents only — drafts shouldn't appear
+    on a public landing page."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT a.id, a.name, a.type, a.meta
+               FROM mind_works mw
+               JOIN agents a ON a.id = mw.agent_id
+               WHERE mw.mind_id = ? AND a.status = 'ready'
+               ORDER BY a.name ASC
+               LIMIT ?"""
+        ), (mind_id, limit))
+        out = []
+        for r in rows:
+            meta_raw = r.get("meta") if isinstance(r, dict) else r["meta"]
+            try:
+                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+            except Exception:
+                meta = {}
+            out.append({
+                "id": r["id"],
+                "name": r["name"],
+                "type": r["type"],
+                "author": meta.get("author", ""),
+            })
+        return out
+
+
+def list_related_minds(mind_id: str, domain: str, limit: int = 6) -> list[dict[str, Any]]:
+    """Other minds sharing at least one domain tag with this mind. Domain is
+    a comma-separated string in the schema, so we match by substring on any
+    token. Excludes the mind itself."""
+    if not domain:
+        return []
+    primary = domain.split(",")[0].strip()
+    if not primary:
+        return []
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, name, era, domain
+               FROM minds
+               WHERE id <> ? AND domain LIKE ?
+               ORDER BY chat_count DESC, name ASC
+               LIMIT ?"""
+        ), (mind_id, f"%{primary}%", limit))
+        return [dict(r) for r in rows]
+
+
 # ─── Mind memories ───
 
 def add_mind_memory(mind_id: str, summary: str, topic: str = "", user_id: str | None = None) -> None:

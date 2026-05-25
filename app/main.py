@@ -43,9 +43,12 @@ from .core.db import (
     init_db,
     list_agents,
     list_chat_sessions,
+    list_books_for_mind,
     list_messages,
     list_minds,
+    list_minds_for_agent,
     list_questions,
+    list_related_minds,
     list_session_messages,
     list_user_interest_profile,
     list_votes,
@@ -67,6 +70,7 @@ from .core.db import (
 from .core.indexer import index_text
 from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, pick_provider
 from .core.rag import build_context, retrieve, retrieve_cross_book
+from .core import seo as seo_render
 from .core.minds import (
     SEED_MINDS,
     create_mind_from_content,
@@ -991,7 +995,14 @@ def _is_crawler(request: Request) -> bool:
 
 @app.get("/book/{agent_id}", response_class=HTMLResponse)
 def book_page(agent_id: str, request: Request) -> HTMLResponse:
-    """Server-rendered book landing page with OG tags and JSON-LD for SEO/GEO."""
+    """Server-rendered book landing page.
+
+    Content composition lives in ``app/core/seo.py`` — this handler is just
+    the glue that loads data, builds sections, and assembles the document.
+    Every enrichment query is wrapped in try/except so a failed Supabase
+    call or a missing-index book degrades to the old shell page rather than
+    crashing the whole SSR.
+    """
     from html import escape as html_esc
     from urllib.parse import quote
 
@@ -1000,11 +1011,12 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Book not found")
 
     book = get_ai_book_by_agent(agent_id) if agent else None
-    title = html_esc(book["title"] if book and book.get("title") else agent.get("name", "Untitled"))
-    meta = agent.get("meta") or {}
+    title_raw = book["title"] if book and book.get("title") else agent.get("name", "Untitled")
+    title = html_esc(title_raw)
     outline = book.get("outline") if book else None
     subtitle_raw = outline.get("subtitle", "") if isinstance(outline, dict) else ""
-    chapter_count = len(outline.get("chapters", [])) if isinstance(outline, dict) else 0
+    chapters = outline.get("chapters", []) if isinstance(outline, dict) else []
+    chapter_count = len(chapters)
     author_raw = _resolve_og_author(agent, book)
     total_words = book.get("total_words", 0) if book else 0
 
@@ -1025,42 +1037,62 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     reader_url = f"{base}/#/read/{id_path}"
     v = config.OG_IMAGE_CACHE_VERSION
     og_image_url = f"{base}/book/{id_path}/og.png?v={v}"
-    reader_js = json.dumps(reader_url)
 
-    chapters_json = "[]"
-    toc_html = ""
-    if book and isinstance(outline, dict):
-        chapters = outline.get("chapters", [])
-        toc_items = "".join(f"<li>{html_esc(ch.get('title', ''))}</li>" for ch in chapters)
-        toc_html = f"<h2>Table of Contents</h2><ol>{toc_items}</ol>" if toc_items else ""
-        chapters_json = json.dumps([
-            {"@type": "Chapter", "name": ch.get("title", ""), "position": i + 1}
-            for i, ch in enumerate(chapters)
-        ])
+    # ── Load enrichment data (all cheap; no LLM/embedding at SSR time) ──
+    try:
+        chunks = get_chunks_text_only(agent_id)
+    except Exception:
+        chunks = []
+    try:
+        questions = list_questions(agent_id) or []
+    except Exception:
+        questions = []
+    try:
+        related_minds = list_minds_for_agent(agent_id)
+    except Exception:
+        related_minds = []
 
-    jsonld = json.dumps({
-        "@context": "https://schema.org",
-        "@type": "Book",
-        "name": book["title"] if book and book.get("title") else agent.get("name", "Untitled"),
-        "description": subtitle_raw or desc,
-        "author": {"@type": "Person", "name": author_raw} if author_raw else None,
-        "url": canonical,
-        "image": og_image_url,
-        "numberOfPages": chapter_count or None,
-        "wordCount": total_words or None,
-        "hasPart": json.loads(chapters_json) if chapters_json != "[]" else None,
-        "publisher": {"@type": "Organization", "name": "Feynman", "url": base},
-    }, ensure_ascii=False)
+    # ── Build content sections ──────────────────────────────────────────
+    about_html = seo_render.render_book_about(subtitle_raw, author_raw)
+    stats_html = seo_render.render_stats(total_words, chapter_count)
+    toc_html = seo_render.render_toc(chapters)
+    samples_html = seo_render.render_sample_passages(chunks, count=3, max_chars=500)
+    questions_html = seo_render.render_popular_questions(questions, reader_url)
+    minds_html = seo_render.render_minds_for_book(related_minds, base)
 
-    read_time = max(1, (total_words or 0) // 250)
-    stats_parts = []
-    if total_words:
-        stats_parts.append(f"{total_words:,} words")
-    if read_time:
-        stats_parts.append(f"~{read_time} min read")
-    if chapter_count:
-        stats_parts.append(f"{chapter_count} chapters")
-    stats_html = " · ".join(stats_parts)
+    # ── Build JSON-LD blocks ────────────────────────────────────────────
+    book_ld = seo_render.jsonld_script(seo_render.book_jsonld(
+        title=title_raw,
+        description=subtitle_raw or desc_raw,
+        author=author_raw,
+        url=canonical,
+        image=og_image_url,
+        word_count=total_words or None,
+        chapters=chapters or None,
+        site_url=base,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Books", f"{base}/#/library"),
+        (title_raw, canonical),
+    ]))
+    faq_ld = ""
+    if questions:
+        # Deflection answer — non-empty is required by Google's FAQPage spec.
+        # Real answer surfaces inside the chat experience, not here.
+        deflect = f"Open Feynman to chat with this book and explore the answer in depth: {reader_url}"
+        faq_ld = seo_render.jsonld_script(seo_render.faq_jsonld([
+            (q, deflect) for q in questions if q
+        ]))
+
+    body_style = '' if _is_crawler(request) else ' style="opacity:0"'
+    redirect_script = (
+        ''
+        if _is_crawler(request)
+        else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
+    )
+    author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
+    author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1078,7 +1110,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
-{f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''}
+{author_meta}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@steve_yeow">
 <meta name="twitter:creator" content="@steve_yeow">
@@ -1086,14 +1118,20 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
-<script type="application/ld+json">{jsonld}</script>
-</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
+{book_ld}
+{breadcrumb_ld}
+{faq_ld}
+</head><body{body_style}>
 <h1>{title}</h1>
-{f'<p>by {html_esc(author_raw)}</p>' if author_raw else ''}
-{f'<p>{desc}</p>' if subtitle_raw else ''}
+{author_html}
+{about_html}
+{stats_html}
+{samples_html}
 {toc_html}
-<p><a href="{html_esc(reader_url)}">Read this book on Feynman</a></p>
-{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
+{questions_html}
+{minds_html}
+<p class="cta"><a href="{html_esc(reader_url)}">Read and chat with this book on Feynman →</a></p>
+{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
@@ -1126,54 +1164,115 @@ def mind_og_image(mind_id: str):
 
 @app.get("/mind/{mind_id}", response_class=HTMLResponse)
 def mind_page(mind_id: str, request: Request) -> HTMLResponse:
-    """Server-rendered mind landing page with OG tags and JSON-LD Person schema."""
+    """Server-rendered mind landing page.
+
+    Content composition lives in ``app/core/seo.py``. We render every mind
+    column the schema exposes — bio, thinking_style, typical_phrases,
+    persona excerpt, works, plus cross-links to books and related minds —
+    so each page meets the content-density bar required to rank and to be
+    cited by LLMs.
+    """
     from html import escape as html_esc
 
     mind = get_mind(mind_id)
     if not mind:
         raise HTTPException(status_code=404, detail="Mind not found")
 
-    name = html_esc(mind.get("name", "Unknown"))
-    era = html_esc(mind.get("era", ""))
-    domain = html_esc(mind.get("domain", ""))
-    bio = html_esc(mind.get("bio_summary", ""))
+    name_raw = mind.get("name", "Unknown")
+    name = html_esc(name_raw)
+    era_raw = mind.get("era", "")
+    era = html_esc(era_raw)
+    domain_raw = mind.get("domain", "")
+    domain = html_esc(domain_raw)
+    bio_raw = mind.get("bio_summary", "")
     works_raw = mind.get("works") or []
     works_list = works_raw if isinstance(works_raw, list) else []
+    thinking_style = mind.get("thinking_style", "") or ""
+    phrases_raw = mind.get("typical_phrases") or []
+    phrases = phrases_raw if isinstance(phrases_raw, list) else []
+    persona = mind.get("persona", "") or ""
 
-    desc_raw = mind.get("bio_summary", "") or f"{mind.get('name', 'Unknown')} — {mind.get('domain', '')} thinker on Feynman"
+    desc_raw = bio_raw or f"{name_raw} — {domain_raw} thinker on Feynman"
     if len(desc_raw) > 200:
         desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
     desc = html_esc(desc_raw)
-    name_parts = mind.get("name", "").strip().split()
+    name_parts = name_raw.strip().split()
     first_name = html_esc(name_parts[0]) if name_parts else ""
     last_name = html_esc(" ".join(name_parts[1:])) if len(name_parts) > 1 else ""
-    og_image_alt = html_esc(f"Portrait of {mind.get('name', 'great mind')} on Feynman")
+    og_image_alt = html_esc(f"Portrait of {name_raw} on Feynman")
     base = _SITE_URL
     canonical = f"{base}/mind/{mind_id}"
     og_image_url = f"{base}/mind/{mind_id}/og.png"
     reader_url = f"{base}/#/mind/{mind_id}"
-    reader_js = json.dumps(reader_url)
 
-    works_html = ""
-    if works_list:
-        items = "".join(f"<li>{html_esc(w)}</li>" for w in works_list[:20])
-        works_html = f"<h2>Notable Works</h2><ul>{items}</ul>"
+    # ── Load enrichment data ────────────────────────────────────────────
+    try:
+        linked_books = list_books_for_mind(mind_id)
+    except Exception:
+        linked_books = []
+    try:
+        related = list_related_minds(mind_id, domain_raw)
+    except Exception:
+        related = []
 
-    jsonld = json.dumps({
-        "@context": "https://schema.org",
-        "@type": "Person",
-        "name": mind.get("name", "Unknown"),
-        "description": mind.get("bio_summary", ""),
-        "knowsAbout": mind.get("domain", ""),
-        "url": canonical,
-        "image": og_image_url,
-        "sameAs": [],
-    }, ensure_ascii=False)
+    # "Books in library" surfaces the extras that Notable Works doesn't already
+    # list — avoid double-rendering the same title in both sections.
+    works_titles = {(w or "").lower() for w in works_list if w}
+    extra_books = []
+    for b in linked_books:
+        bname = (b.get("name") or "").lower()
+        if not bname:
+            continue
+        if bname in works_titles:
+            continue
+        if any(bname in wt or wt in bname for wt in works_titles):
+            continue
+        extra_books.append(b)
 
-    chat_count = mind.get("chat_count", 0)
-    domains_list = [d.strip() for d in domain.split(",") if d.strip()] if domain else []
-    domains_tags = "".join(f'<span class="domain-tag">{html_esc(d)}</span>' for d in domains_list)
-    domains_html = f'<div class="domains">{domains_tags}</div>' if domains_list else ""
+    # ── Build content sections ──────────────────────────────────────────
+    bio_html = seo_render.render_mind_bio(bio_raw)
+    thinking_html = seo_render.render_mind_thinking_style(thinking_style)
+    phrases_html = seo_render.render_mind_phrases(phrases)
+    persona_html = seo_render.render_mind_persona_excerpt(persona)
+    works_html = seo_render.render_mind_works(works_list, linked_books, base)
+    extra_books_html = seo_render.render_books_for_mind(extra_books, base)
+    related_html = seo_render.render_related_minds(related, base)
+
+    # ── JSON-LD ─────────────────────────────────────────────────────────
+    # sameAs telling Google's Knowledge Graph "this is THE Karl Marx" is
+    # the single biggest entity-identity signal we can send. Curated list
+    # lives in seo.FAMOUS_MIND_SAMEAS; unmatched names get None and the
+    # schema validator skips the field.
+    person_ld = seo_render.jsonld_script(seo_render.person_jsonld(
+        name=name_raw,
+        description=bio_raw,
+        domain=domain_raw,
+        url=canonical,
+        image=og_image_url,
+        same_as=seo_render.lookup_same_as(name_raw),
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Great Minds", f"{base}/#/minds"),
+        (name_raw, canonical),
+    ]))
+
+    body_style = '' if _is_crawler(request) else ' style="opacity:0"'
+    redirect_script = (
+        ''
+        if _is_crawler(request)
+        else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
+    )
+    if era_raw and domain_raw:
+        era_domain_html = f'<p class="mind-meta">{era} · {domain}</p>'
+    elif era_raw:
+        era_domain_html = f'<p class="mind-meta">{era}</p>'
+    elif domain_raw:
+        era_domain_html = f'<p class="mind-meta">{domain}</p>'
+    else:
+        era_domain_html = ''
+    profile_first = f'<meta property="profile:first_name" content="{first_name}">' if first_name else ''
+    profile_last = f'<meta property="profile:last_name" content="{last_name}">' if last_name else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1191,8 +1290,8 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
-{f'<meta property="profile:first_name" content="{first_name}">' if first_name else ''}
-{f'<meta property="profile:last_name" content="{last_name}">' if last_name else ''}
+{profile_first}
+{profile_last}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@steve_yeow">
 <meta name="twitter:creator" content="@steve_yeow">
@@ -1200,14 +1299,20 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
-<script type="application/ld+json">{jsonld}</script>
-</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
+{person_ld}
+{breadcrumb_ld}
+</head><body{body_style}>
 <h1>{name}</h1>
-{f'<p>{era} · {domain}</p>' if era else f'<p>{domain}</p>'}
-{f'<p>{bio}</p>' if bio else ''}
+{era_domain_html}
+{bio_html}
+{thinking_html}
+{phrases_html}
+{persona_html}
 {works_html}
-<p><a href="{html_esc(reader_url)}">Chat with {name} on Feynman</a></p>
-{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
+{extra_books_html}
+{related_html}
+<p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
+{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
