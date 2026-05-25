@@ -1,0 +1,1047 @@
+"""SEO/GEO rendering helpers for per-entity landing pages.
+
+Centralizes the content-composition and structured-data work that used to live
+inline in main.py's book_page / mind_page handlers. Keeping it here means:
+
+  * Handlers stay small and focused on routing/caching/auth.
+  * Tests can exercise the rendered content without spinning up FastAPI.
+  * Future Phase 3+ work (URL slugs, compound /q/ and /on/ pages) reuses
+    the same composition primitives instead of growing a second copy.
+
+Design rules:
+  * Every helper takes already-loaded data and returns escaped HTML or
+    JSON-serializable dicts. No DB calls, no LLM calls, no I/O.
+  * All user-controllable strings are html-escaped at the boundary.
+  * Sections gracefully return "" when their input is empty — callers can
+    join the list without worrying about gaps.
+"""
+from __future__ import annotations
+
+import json
+import re
+from html import escape as _esc
+from typing import Any, Iterable
+
+
+# ─── Slug generation (Phase 3 prep — used now for compound URL anchors,
+#     promoted to canonical URLs once the redirect path is built) ─────
+
+_SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+_SLUG_TRIM = re.compile(r"^-+|-+$")
+
+
+def slugify(text: str, max_len: int = 80) -> str:
+    """Convert a title or name into a URL-safe kebab-case slug. Deterministic
+    and ASCII-only — non-Latin scripts collapse to dashes, which is acceptable
+    because the canonical URL still carries a UUID suffix for disambiguation.
+
+    Examples:
+        "How to Win Friends and Influence People" -> "how-to-win-friends-and-influence-people"
+        "Karl Marx"                                -> "karl-marx"
+        ""                                         -> "untitled"
+    """
+    if not text:
+        return "untitled"
+    s = text.lower().strip()
+    # Drop diacritics by best-effort ASCII fold (without pulling in unicodedata
+    # for one call site we keep it simple — non-ASCII just becomes dashes)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = _SLUG_NON_ALNUM.sub("-", s)
+    s = _SLUG_TRIM.sub("", s)
+    if not s:
+        return "untitled"
+    if len(s) > max_len:
+        s = s[:max_len].rsplit("-", 1)[0] or s[:max_len]
+    return s
+
+
+# ─── JSON-LD schema builders ──────────────────────────────────────────
+
+def breadcrumb_jsonld(items: list[tuple[str, str]]) -> dict[str, Any]:
+    """BreadcrumbList schema. `items` is [(name, absolute_url), ...] in
+    crumb order (root first, current page last)."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": i + 1,
+                "name": name,
+                "item": url,
+            }
+            for i, (name, url) in enumerate(items)
+        ],
+    }
+
+
+def faq_jsonld(qa_pairs: list[tuple[str, str]]) -> dict[str, Any]:
+    """FAQPage schema. `qa_pairs` is [(question, answer), ...].
+
+    Google requires real answer text — empty answers (which we use as
+    placeholders linking to chat) are still acceptable per spec as long
+    as the answer string is non-empty. We always include a deflection
+    answer that nudges to chat with the book."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": q,
+                "acceptedAnswer": {"@type": "Answer", "text": a},
+            }
+            for q, a in qa_pairs
+        ],
+    }
+
+
+def book_jsonld(
+    *,
+    title: str,
+    description: str,
+    author: str,
+    url: str,
+    image: str,
+    word_count: int | None,
+    chapters: list[dict[str, Any]] | None,
+    site_url: str,
+) -> dict[str, Any]:
+    """Schema.org/Book — corrected to omit `numberOfPages` (we don't have
+    physical pages; previous code mis-mapped chapter count here). Chapter
+    structure goes in `hasPart` where it belongs."""
+    out: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "Book",
+        "name": title,
+        "description": description,
+        "url": url,
+        "image": image,
+        "publisher": {"@type": "Organization", "name": "Feynman", "url": site_url},
+    }
+    if author:
+        out["author"] = {"@type": "Person", "name": author}
+    if word_count:
+        out["wordCount"] = word_count
+    if chapters:
+        out["hasPart"] = [
+            {"@type": "Chapter", "name": c.get("title", ""), "position": i + 1}
+            for i, c in enumerate(chapters)
+        ]
+    return out
+
+
+# Hardcoded Wikipedia/Wikidata URLs for the most-trafficked named minds.
+# Populating `sameAs` is the single biggest signal we can send Google's
+# Knowledge Graph that "our Karl Marx page is THE Karl Marx" — without it
+# the page floats as an entity-of-unknown-identity. Curated by hand because
+# heuristic name→Wikipedia lookup occasionally picks the wrong "John Smith".
+#
+# Add a row here as a mind crosses our top-traffic threshold; the lookup
+# is case-insensitive by mind name. The full schema also accepts Wikidata
+# (https://www.wikidata.org/wiki/Q…) and we include both where possible
+# because Wikidata is the LLM-friendly canonical identifier.
+FAMOUS_MIND_SAMEAS: dict[str, list[str]] = {
+    "karl marx": [
+        "https://en.wikipedia.org/wiki/Karl_Marx",
+        "https://www.wikidata.org/wiki/Q9061",
+    ],
+    "friedrich engels": [
+        "https://en.wikipedia.org/wiki/Friedrich_Engels",
+        "https://www.wikidata.org/wiki/Q33760",
+    ],
+    "adam smith": [
+        "https://en.wikipedia.org/wiki/Adam_Smith",
+        "https://www.wikidata.org/wiki/Q9381",
+    ],
+    "john maynard keynes": [
+        "https://en.wikipedia.org/wiki/John_Maynard_Keynes",
+        "https://www.wikidata.org/wiki/Q9317",
+    ],
+    "richard feynman": [
+        "https://en.wikipedia.org/wiki/Richard_Feynman",
+        "https://www.wikidata.org/wiki/Q39246",
+    ],
+    "albert einstein": [
+        "https://en.wikipedia.org/wiki/Albert_Einstein",
+        "https://www.wikidata.org/wiki/Q937",
+    ],
+    "isaac newton": [
+        "https://en.wikipedia.org/wiki/Isaac_Newton",
+        "https://www.wikidata.org/wiki/Q935",
+    ],
+    "charles darwin": [
+        "https://en.wikipedia.org/wiki/Charles_Darwin",
+        "https://www.wikidata.org/wiki/Q1035",
+    ],
+    "sigmund freud": [
+        "https://en.wikipedia.org/wiki/Sigmund_Freud",
+        "https://www.wikidata.org/wiki/Q9215",
+    ],
+    "carl jung": [
+        "https://en.wikipedia.org/wiki/Carl_Jung",
+        "https://www.wikidata.org/wiki/Q41532",
+    ],
+    "friedrich nietzsche": [
+        "https://en.wikipedia.org/wiki/Friedrich_Nietzsche",
+        "https://www.wikidata.org/wiki/Q1141",
+    ],
+    "aristotle": [
+        "https://en.wikipedia.org/wiki/Aristotle",
+        "https://www.wikidata.org/wiki/Q868",
+    ],
+    "plato": [
+        "https://en.wikipedia.org/wiki/Plato",
+        "https://www.wikidata.org/wiki/Q859",
+    ],
+    "socrates": [
+        "https://en.wikipedia.org/wiki/Socrates",
+        "https://www.wikidata.org/wiki/Q913",
+    ],
+    "confucius": [
+        "https://en.wikipedia.org/wiki/Confucius",
+        "https://www.wikidata.org/wiki/Q4604",
+    ],
+    "immanuel kant": [
+        "https://en.wikipedia.org/wiki/Immanuel_Kant",
+        "https://www.wikidata.org/wiki/Q9312",
+    ],
+    "g.w.f. hegel": [
+        "https://en.wikipedia.org/wiki/Georg_Wilhelm_Friedrich_Hegel",
+        "https://www.wikidata.org/wiki/Q9235",
+    ],
+    "warren buffett": [
+        "https://en.wikipedia.org/wiki/Warren_Buffett",
+        "https://www.wikidata.org/wiki/Q47213",
+    ],
+    "charlie munger": [
+        "https://en.wikipedia.org/wiki/Charlie_Munger",
+        "https://www.wikidata.org/wiki/Q1066368",
+    ],
+    "peter drucker": [
+        "https://en.wikipedia.org/wiki/Peter_Drucker",
+        "https://www.wikidata.org/wiki/Q57139",
+    ],
+    "carl sagan": [
+        "https://en.wikipedia.org/wiki/Carl_Sagan",
+        "https://www.wikidata.org/wiki/Q34943",
+    ],
+    "stephen hawking": [
+        "https://en.wikipedia.org/wiki/Stephen_Hawking",
+        "https://www.wikidata.org/wiki/Q17714",
+    ],
+    "marie curie": [
+        "https://en.wikipedia.org/wiki/Marie_Curie",
+        "https://www.wikidata.org/wiki/Q7186",
+    ],
+    "nikola tesla": [
+        "https://en.wikipedia.org/wiki/Nikola_Tesla",
+        "https://www.wikidata.org/wiki/Q9036",
+    ],
+}
+
+
+def lookup_same_as(mind_name: str) -> list[str] | None:
+    """Return curated authoritative URLs for a famous mind, or None."""
+    if not mind_name:
+        return None
+    return FAMOUS_MIND_SAMEAS.get(mind_name.strip().lower())
+
+
+def person_jsonld(
+    *,
+    name: str,
+    description: str,
+    domain: str,
+    url: str,
+    image: str,
+    same_as: list[str] | None = None,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": name,
+        "description": description,
+        "url": url,
+        "image": image,
+    }
+    if domain:
+        out["knowsAbout"] = [d.strip() for d in domain.split(",") if d.strip()] or domain
+    if same_as:
+        out["sameAs"] = same_as
+    return out
+
+
+def jsonld_script(payload: dict[str, Any]) -> str:
+    """Wrap a JSON-LD dict into a <script> tag, dropping null leaves so
+    schema validators don't choke on `numberOfPages: null` etc."""
+    cleaned = _drop_nulls(payload)
+    return f'<script type="application/ld+json">{json.dumps(cleaned, ensure_ascii=False)}</script>'
+
+
+def _drop_nulls(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _drop_nulls(v) for k, v in obj.items() if v not in (None, "", [])}
+    if isinstance(obj, list):
+        return [_drop_nulls(x) for x in obj]
+    return obj
+
+
+# ─── Book page section builders ───────────────────────────────────────
+
+def render_book_about(subtitle: str, author: str) -> str:
+    """Top-of-page 1-2 sentence summary. The subtitle (from outline) is the
+    best signal we have for what the book is *about* in the author's own
+    framing."""
+    if not subtitle and not author:
+        return ""
+    parts = []
+    if subtitle:
+        parts.append(f'<p class="book-about">{_esc(subtitle)}</p>')
+    return "\n".join(parts)
+
+
+def render_stats(total_words: int, chapter_count: int) -> str:
+    if not total_words and not chapter_count:
+        return ""
+    bits = []
+    if total_words:
+        bits.append(f"{total_words:,} words")
+        bits.append(f"~{max(1, total_words // 250)} min read")
+    if chapter_count:
+        bits.append(f"{chapter_count} chapters")
+    return f'<p class="book-stats">{" · ".join(_esc(b) for b in bits)}</p>'
+
+
+def render_toc(chapters: list[dict[str, Any]]) -> str:
+    if not chapters:
+        return ""
+    items = "".join(f"<li>{_esc(c.get('title', ''))}</li>" for c in chapters if c.get("title"))
+    if not items:
+        return ""
+    return f'<section><h2>Table of Contents</h2><ol class="toc">{items}</ol></section>'
+
+
+def render_sample_passages(chunks: list[dict[str, Any]], count: int = 3, max_chars: int = 800) -> str:
+    """Render the first `count` chunks verbatim as "What this book covers".
+
+    These are real content from the book — Google rewards original text, and
+    LLMs get something concrete to cite. Default ``max_chars=800`` gives ~130
+    words per blockquote × 3 ≈ 400 words of unique on-page text, which is the
+    bulk of the SEO weight on a book page."""
+    if not chunks:
+        return ""
+    samples = chunks[:count]
+    items = []
+    for c in samples:
+        text = (c.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > max_chars:
+            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+        items.append(f"<blockquote>{_esc(text)}</blockquote>")
+    if not items:
+        return ""
+    return f'<section><h2>From the book</h2>{"".join(items)}</section>'
+
+
+def render_popular_questions(
+    questions: list[str],
+    fallback_url: str,
+    *,
+    book_id: str = "",
+    site_url: str = "",
+) -> str:
+    """Render the auto-generated study questions as a visible FAQ-style
+    list. Companion FAQPage JSON-LD is emitted separately via faq_jsonld.
+
+    When ``book_id`` and ``site_url`` are provided, each question links to
+    its own compound /book/{id}/q/{slug} page (the SEO play — every
+    question becomes a discoverable long-tail URL). Otherwise all
+    questions link to ``fallback_url`` (typically the book's chat URL).
+    """
+    if not questions:
+        return ""
+    items_html: list[str] = []
+    for q in questions:
+        if not q:
+            continue
+        if book_id and site_url:
+            href = f"{site_url}/book/{book_id}/q/{slugify(q)}"
+        else:
+            href = fallback_url
+        items_html.append(f'<li><a href="{_esc(href)}">{_esc(q)}</a></li>')
+    if not items_html:
+        return ""
+    return (
+        '<section><h2>Popular questions readers ask</h2>'
+        f'<ul class="popular-questions">{"".join(items_html)}</ul></section>'
+    )
+
+
+def render_related_books(books: list[dict[str, Any]], site_url: str) -> str:
+    """Other books readers may want next. Same-topic and same-author
+    matches surfaced together. Phase 5 — closes the book↔book half of
+    the internal linking graph."""
+    if not books:
+        return ""
+    items = []
+    for b in books:
+        if not b.get("id") or not b.get("name"):
+            continue
+        author = f' — {_esc(b["author"])}' if b.get("author") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(b["id"])}">{_esc(b["name"])}</a>{author}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Related books</h2>'
+        f'<ul class="related-books">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_link_back(topic: str, site_url: str) -> str:
+    """A single "← back to topic" link on entity pages whose meta.category
+    matches one of the canonical topics. Closes the book→topic-hub edge,
+    pushing PageRank up the tree."""
+    if not topic:
+        return ""
+    slug = slugify(topic)
+    if not slug:
+        return ""
+    return (
+        f'<p class="topic-link-back">More on '
+        f'<a href="{_esc(site_url)}/topic/{slug}">{_esc(topic)}</a></p>'
+    )
+
+
+def render_topic_links_for_mind(matching_topics: list[str], site_url: str) -> str:
+    """Render a row of links to relevant topic hubs from a mind's page.
+    ``matching_topics`` is a pre-filtered list — caller decides which
+    topics this mind belongs to (typically via qa.is_mind_topic_relevant).
+    """
+    if not matching_topics:
+        return ""
+    items = []
+    for t in matching_topics[:5]:
+        slug = slugify(t)
+        if not slug:
+            continue
+        items.append(
+            f'<a href="{_esc(site_url)}/topic/{slug}">{_esc(t)}</a>'
+        )
+    if not items:
+        return ""
+    return (
+        '<p class="topic-links">Explore the topics this mind discusses: '
+        f'{" · ".join(items)}</p>'
+    )
+
+
+def render_minds_for_book(minds: list[dict[str, Any]], site_url: str) -> str:
+    """Cross-links from /book/{id} → /mind/{id}. The single biggest
+    internal-link source we have."""
+    if not minds:
+        return ""
+    items = "".join(
+        f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(m.get("name", ""))}</a>'
+        f'{(" — " + _esc(m["domain"])) if m.get("domain") else ""}</li>'
+        for m in minds
+    )
+    return (
+        '<section><h2>Great minds who discuss this book</h2>'
+        f'<ul class="related-minds">{items}</ul></section>'
+    )
+
+
+# ─── Mind page section builders ───────────────────────────────────────
+
+def render_mind_bio(bio: str) -> str:
+    if not bio:
+        return ""
+    return f'<section><h2>About</h2><p>{_esc(bio)}</p></section>'
+
+
+def render_mind_thinking_style(thinking_style: str) -> str:
+    if not thinking_style:
+        return ""
+    return (
+        f'<section><h2>How they think</h2>'
+        f'<p>{_esc(thinking_style)}</p></section>'
+    )
+
+
+def render_mind_phrases(phrases: list[str], limit: int = 6) -> str:
+    """Render typical_phrases as a quote-card list. These are GEO gold —
+    LLMs love distinctive, attributable short text."""
+    if not phrases:
+        return ""
+    items = "".join(
+        f'<li><q>{_esc(p)}</q></li>' for p in phrases[:limit] if p
+    )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Characteristic phrases</h2>'
+        f'<ul class="characteristic-phrases">{items}</ul></section>'
+    )
+
+
+def render_mind_persona_excerpt(persona: str, max_chars: int = 900) -> str:
+    """Render a condensed snippet of the persona as 'Core approach'. The
+    full persona is often 1500+ chars of system-prompt-style description
+    not suited to public display, so we take an excerpt. 900 chars ≈ 150
+    words — substantial enough to register as real content, short enough
+    to read in 30 seconds."""
+    if not persona:
+        return ""
+    p = persona.strip()
+    if len(p) > max_chars:
+        p = p[:max_chars].rsplit(" ", 1)[0] + "…"
+    return (
+        '<section><h2>Core approach</h2>'
+        f'<p>{_esc(p)}</p></section>'
+    )
+
+
+def render_mind_works(works: list[str], linked_books: list[dict[str, Any]], site_url: str) -> str:
+    """Notable Works — link to /book/{id} where mind_works maps the title to
+    one of our agents, otherwise plain text. Matching is by case-insensitive
+    title substring to handle minor variations (subtitles, edition suffixes)."""
+    if not works:
+        return ""
+    link_index = {
+        (b.get("name") or "").lower(): b["id"]
+        for b in (linked_books or [])
+        if b.get("id")
+    }
+    items = []
+    for w in works[:20]:
+        if not w:
+            continue
+        wl = w.lower()
+        match_id = link_index.get(wl)
+        if not match_id:
+            for n, bid in link_index.items():
+                if n and (n in wl or wl in n):
+                    match_id = bid
+                    break
+        if match_id:
+            items.append(f'<li><a href="{_esc(site_url)}/book/{_esc(match_id)}">{_esc(w)}</a></li>')
+        else:
+            items.append(f'<li>{_esc(w)}</li>')
+    if not items:
+        return ""
+    return f'<section><h2>Notable works</h2><ul class="works">{"".join(items)}</ul></section>'
+
+
+def render_books_for_mind(books: list[dict[str, Any]], site_url: str) -> str:
+    """Cross-links to books in this mind's corpus that aren't already covered
+    by Notable Works (the works list comes from the mind persona; mind_works
+    can include additional reference material). Skipped if empty."""
+    if not books:
+        return ""
+    items = "".join(
+        f'<li><a href="{_esc(site_url)}/book/{_esc(b["id"])}">{_esc(b.get("name", ""))}</a>'
+        f'{(" — by " + _esc(b["author"])) if b.get("author") else ""}</li>'
+        for b in books
+    )
+    return (
+        '<section><h2>Books in this mind\'s library</h2>'
+        f'<ul class="related-books">{items}</ul></section>'
+    )
+
+
+def render_related_minds(minds: list[dict[str, Any]], site_url: str) -> str:
+    if not minds:
+        return ""
+    items = "".join(
+        f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(m.get("name", ""))}</a>'
+        f'{(" — " + _esc(m["era"])) if m.get("era") else ""}</li>'
+        for m in minds
+    )
+    return (
+        '<section><h2>Related minds</h2>'
+        f'<ul class="related-minds">{items}</ul></section>'
+    )
+
+
+# ─── Mind-on-topic compound-page helpers (Phase 4B) ──────────────────
+#
+# /mind/{mind_id}/on/{topic_slug} renders an imagined-perspective essay
+# of how this mind would think about this topic. Relevance is pre-filtered
+# in qa.is_mind_topic_relevant — non-relevant pairs 404 rather than
+# generate slop. Each rendered page is labelled as imagined dialogue to
+# avoid misrepresenting historical figures.
+
+
+def render_mind_on_topic_essay(essay: str, mind_name: str, topic: str) -> str:
+    """Render the imagined essay with an explicit disclosure label."""
+    if not essay:
+        return ""
+    paragraphs = [p.strip() for p in essay.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
+    body = "".join(f"<p>{_esc(p)}</p>" for p in paragraphs)
+    return (
+        '<section class="mind-essay">'
+        f'<h2>How {_esc(mind_name)} might approach {_esc(topic)}</h2>'
+        f'{body}'
+        '<p class="essay-attribution"><small>Imagined perspective — '
+        f'an AI synthesis grounded in {_esc(mind_name)}\'s recorded ideas '
+        'and methods, not a quote.</small></p>'
+        '</section>'
+    )
+
+
+def mind_essay_jsonld(
+    *,
+    mind_name: str,
+    topic: str,
+    essay: str,
+    url: str,
+    mind_url: str,
+    image: str = "",
+) -> dict[str, Any]:
+    """Schema.org/Article. We mark the author as an Organization (Feynman)
+    rather than the mind itself — the essay is an imagined perspective
+    we authored, not something the mind actually wrote. Including the
+    mind as the about-entity preserves topical clarity."""
+    out: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": f"How {mind_name} might approach {topic}",
+        "description": (essay[:200].rsplit(" ", 1)[0] + "…") if len(essay) > 200 else essay,
+        "url": url,
+        "author": {"@type": "Organization", "name": "Feynman", "url": mind_url.split("/mind/")[0]},
+        "about": {"@type": "Person", "name": mind_name, "url": mind_url},
+        "publisher": {
+            "@type": "Organization",
+            "name": "Feynman",
+            "url": mind_url.split("/mind/")[0],
+        },
+    }
+    if image:
+        out["image"] = image
+    return out
+
+
+# ─── Book Q&A compound-page helpers (Phase 4A) ───────────────────────
+#
+# Each indexed book has up to 5 popular questions in the `questions`
+# table. We expose each as its own URL `/book/{id}/q/{slug}`. The slug
+# is derived from the question text via slugify, so URLs are stable as
+# long as the question text doesn't change.
+
+def find_question_by_slug(questions: list[str], slug: str) -> str | None:
+    """Match a URL slug back to the original question text. Linear scan —
+    questions per book is bounded to ~5, no need for an index."""
+    if not questions or not slug:
+        return None
+    target = slug.strip().lower()
+    for q in questions:
+        if slugify(q) == target:
+            return q
+    return None
+
+
+def render_qa_answer(answer: str) -> str:
+    """Render the synthesized LLM answer as a labelled section. We label
+    it explicitly because the answer is AI-generated grounded synthesis —
+    transparency about authorship is required by Google's helpful-content
+    guidance and avoids misleading citations downstream."""
+    if not answer:
+        return ""
+    # Preserve paragraph breaks the LLM emitted; escape everything else.
+    paragraphs = [p.strip() for p in answer.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
+    body = "".join(f"<p>{_esc(p)}</p>" for p in paragraphs)
+    return (
+        '<section class="qa-answer"><h2>Synthesized answer</h2>'
+        f'{body}'
+        '<p class="qa-attribution"><small>Synthesized from the book passages '
+        'below. Chat with the book on Feynman for follow-up.</small></p>'
+        '</section>'
+    )
+
+
+def render_qa_passages(passages: list[dict[str, Any]], max_chars: int = 600) -> str:
+    """Render the supporting RAG passages with chapter attribution.
+    Even when LLM synthesis fails or is disabled, this section alone
+    gives the page real content — Google sees ~5 substantial blockquotes
+    of original book text grouped under the question."""
+    if not passages:
+        return ""
+    items = []
+    for p in passages:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > max_chars:
+            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+        attr = ""
+        idx = p.get("chunk_index")
+        if idx is not None:
+            attr = f'<footer><small>Passage [{int(idx) + 1}]</small></footer>'
+        items.append(f"<blockquote>{_esc(text)}{attr}</blockquote>")
+    if not items:
+        return ""
+    return (
+        '<section class="qa-passages"><h2>From the book</h2>'
+        f'{"".join(items)}</section>'
+    )
+
+
+def render_sibling_questions(
+    siblings: list[str],
+    book_id: str,
+    site_url: str,
+    current_question: str = "",
+) -> str:
+    """Cross-link to the book's other Q&A pages. Skip the current
+    question (would be a self-link)."""
+    if not siblings:
+        return ""
+    items = []
+    current_slug = slugify(current_question) if current_question else ""
+    for q in siblings:
+        if not q:
+            continue
+        slug = slugify(q)
+        if slug == current_slug:
+            continue
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(book_id)}/q/{_esc(slug)}">'
+            f'{_esc(q)}</a></li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>More questions about this book</h2>'
+        f'<ul class="sibling-questions">{"".join(items)}</ul></section>'
+    )
+
+
+def qa_page_jsonld(
+    *,
+    question: str,
+    answer: str,
+    url: str,
+    book_title: str,
+    book_url: str,
+) -> dict[str, Any]:
+    """Schema.org/QAPage with acceptedAnswer. Google supports this rich
+    result; LLMs use it as a clean enumerable signal.
+
+    If we don't have an LLM-synthesized answer yet, we still emit the
+    schema with a deflection answer pointing to the chat — better than
+    omitting the schema entirely (which would forfeit the rich-result
+    eligibility) and Google accepts non-empty deflection text."""
+    answer_text = (answer or "").strip()
+    if not answer_text:
+        answer_text = (
+            f"Open Feynman to chat with the book \"{book_title}\" and explore "
+            f"the answer in depth: {book_url}"
+        )
+    return {
+        "@context": "https://schema.org",
+        "@type": "QAPage",
+        "mainEntity": {
+            "@type": "Question",
+            "name": question,
+            "url": url,
+            "acceptedAnswer": {
+                "@type": "Answer",
+                "text": answer_text,
+                "url": url,
+            },
+        },
+    }
+
+
+# ─── Topic slug / lookup helpers (Phase 4C — topic hub pages) ────────
+#
+# Topics are a fixed list (`TOPIC_TAGS` in app/core/catalog.py). They're
+# referenced by name everywhere internally but exposed externally as
+# kebab-case slugs in URLs (/topic/computer-science). These helpers do
+# the bidirectional mapping so handlers don't have to repeat the logic.
+
+def build_topic_slug_index(topic_tags: list[str]) -> dict[str, str]:
+    """Returns {slug: original_topic_name} so URL handlers can resolve
+    /topic/{slug} back to the canonical name to use for DB lookups."""
+    return {slugify(t): t for t in topic_tags if t}
+
+
+def topic_slug(topic: str) -> str:
+    """Slug for a given topic name. Stable across runs (slugify is
+    deterministic) so URLs don't change."""
+    return slugify(topic)
+
+
+# ─── Topic hub page renderer (Phase 4C) ──────────────────────────────
+
+def render_topic_books(books: list[dict[str, Any]], site_url: str) -> str:
+    """List the books tagged with this topic. Each is a cross-link to
+    /book/{id} so the topic hub becomes an entry-point page that pushes
+    PageRank down to entity pages."""
+    if not books:
+        return ""
+    items = []
+    for b in books:
+        if not b.get("id") or not b.get("name"):
+            continue
+        author = f' — {_esc(b["author"])}' if b.get("author") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(b["id"])}">{_esc(b["name"])}</a>{author}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Books in this topic</h2>'
+        f'<ul class="topic-books">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_minds(minds: list[dict[str, Any]], site_url: str) -> str:
+    if not minds:
+        return ""
+    items = []
+    for m in minds:
+        if not m.get("id") or not m.get("name"):
+            continue
+        era = f' — {_esc(m["era"])}' if m.get("era") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(m["name"])}</a>{era}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Great minds on this topic</h2>'
+        f'<ul class="topic-minds">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_intro(topic: str, book_count: int, mind_count: int) -> str:
+    """Top-of-page intro paragraph. Generated from counts, not LLM —
+    Google rewards concise factual lead paragraphs that match the H1."""
+    if not topic:
+        return ""
+    parts = []
+    if book_count > 0:
+        parts.append(f"{book_count} {'book' if book_count == 1 else 'books'}")
+    if mind_count > 0:
+        parts.append(f"{mind_count} great {'mind' if mind_count == 1 else 'minds'}")
+    if not parts:
+        intro = (
+            f"Explore {_esc(topic)} on Feynman — chat with the best books "
+            f"and great thinkers shaping this field."
+        )
+    else:
+        and_clause = " and ".join(parts)
+        intro = (
+            f"{and_clause} on {_esc(topic)} curated for chat and exploration "
+            f"on Feynman — read the canon, ask the questions you actually have, "
+            f"and discuss with the thinkers who shaped the field."
+        )
+    return f'<p class="topic-intro">{intro}</p>'
+
+
+def collection_jsonld(
+    *,
+    name: str,
+    description: str,
+    url: str,
+    items: list[dict[str, str]],
+    site_url: str,
+) -> dict[str, Any]:
+    """Schema.org/CollectionPage with embedded ItemList — the right shape
+    for a topic hub. ``items`` is a list of {name, url} dicts."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": name,
+        "description": description,
+        "url": url,
+        "isPartOf": {
+            "@type": "WebSite",
+            "name": "Feynman",
+            "url": site_url,
+        },
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(items),
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": i + 1,
+                    "url": item["url"],
+                    "name": item["name"],
+                }
+                for i, item in enumerate(items)
+            ],
+        },
+    }
+
+
+# ─── Capability detection + CTA matrix (Phase 3a) ───────────────────
+#
+# Not every "book" in our catalog supports every action. Specifically:
+#   * AI-written books with full chapters → read + chat + preview
+#   * Uploads / URL imports with substantial chunks → read + chat
+#   * Catalog stubs (discovered titles with no fetched content) → chat only
+#   * Books mid-write or partially indexed → preview + chat (not read)
+#
+# Before this code, every /book/{id} blindly redirected to /#/read/{id}.
+# Catalog books rendered an empty reader, users bounced, Google noticed.
+# These helpers feed the capability-aware CTA matrix on the landing page.
+
+# Below this word count, "Read this book" is misleading — that much text
+# is really only useful as a preview or as RAG fuel for chat. 500 words is
+# roughly two pages of a real book; pages with less are stubs.
+_READ_MIN_WORDS = 500
+
+
+def detect_capabilities(agent: dict[str, Any] | None, book: dict[str, Any] | None) -> dict[str, bool]:
+    """Decide which CTAs this entity legitimately supports.
+
+    Inputs:
+      * agent — the row from `agents` (always required; the landing page
+        wouldn't have been hit without it).
+      * book — the row from `ai_books` for the agent, or None if this isn't
+        an AI-written book.
+
+    Returns a dict with three bools: ``read``, ``preview``, ``chat``. The
+    caller turns these into rendered buttons via ``render_cta_matrix``.
+    """
+    if not agent:
+        return {"read": False, "preview": False, "chat": False}
+    status = (agent.get("status") or "").lower()
+    if status in ("failed", "cancelled", "error"):
+        return {"read": False, "preview": False, "chat": False}
+
+    total_words = 0
+    chapter_count = 0
+    book_status = ""
+    if book:
+        total_words = int(book.get("total_words") or 0)
+        book_status = (book.get("status") or "").lower()
+        outline = book.get("outline")
+        if isinstance(outline, dict):
+            chapter_count = len(outline.get("chapters") or [])
+
+    agent_type = (agent.get("type") or "").lower()
+
+    # Read: has enough body text AND the body is structured enough to read
+    # straight through. Uploads/URLs without chapter structure can still be
+    # "read" because their chunks reassemble into linear prose.
+    can_read = total_words >= _READ_MIN_WORDS and (
+        chapter_count > 0 or agent_type in ("upload", "url")
+    )
+
+    # Preview: there's *something* to look at but it's not a full read.
+    # Books mid-write count as preview-able even if chapter structure is
+    # incomplete — the partial outline is itself useful.
+    can_preview = (
+        (0 < total_words < _READ_MIN_WORDS)
+        or (book_status == "writing" and chapter_count > 0)
+    )
+    # If we can read, we can preview (read implies preview). Keep them
+    # mutually distinct in the rendered CTA though — see render_cta_matrix.
+
+    # Chat: virtually always available. Catalog stubs chat via RAG over the
+    # title + web-fetched sources + LLM knowledge. Only fully-failed entities
+    # are chat-incapable.
+    can_chat = True
+
+    return {"read": can_read, "preview": can_preview, "chat": can_chat}
+
+
+def render_cta_matrix(
+    caps: dict[str, bool],
+    *,
+    entity_id: str,
+    entity_name: str,
+    base: str,
+) -> str:
+    """Render the action buttons matching detected capabilities.
+
+    Buttons land users on the SPA hash routes that actually work for this
+    entity. All actions for one book share the same on-page section so the
+    user sees one row of clear choices instead of a misleading single CTA.
+
+    When ``read`` is available we don't render a separate Preview button —
+    "Read" subsumes preview, and showing both creates decision friction.
+    """
+    if not (caps.get("read") or caps.get("preview") or caps.get("chat")):
+        return ""
+
+    buttons: list[str] = []
+    name = _esc(entity_name or "this book")
+    eid = _esc(entity_id)
+
+    if caps.get("read"):
+        buttons.append(
+            f'<a class="cta-btn cta-read" href="{_esc(base)}/#/read/{eid}">'
+            f'Read {name}</a>'
+        )
+    elif caps.get("preview"):
+        # Preview surfaces the same reader URL — the reader UI decides what
+        # to show based on what content exists. The CTA wording manages
+        # expectation: "Preview" implies partial.
+        buttons.append(
+            f'<a class="cta-btn cta-preview" href="{_esc(base)}/#/read/{eid}">'
+            f'Preview {name}</a>'
+        )
+
+    if caps.get("chat"):
+        buttons.append(
+            f'<a class="cta-btn cta-chat" href="{_esc(base)}/#/chat/{eid}">'
+            f'Chat about {name}</a>'
+        )
+
+    return f'<p class="cta-row">{" ".join(buttons)}</p>'
+
+
+# ─── Referer-based redirect gating ────────────────────────────────────
+#
+# In-product clicks (Referer: feynman.wiki/…) preserve the old "redirect
+# straight to reader" flow so the product UX is unchanged. Search results,
+# share links, and direct visits (no Referer, or Referer from another
+# origin) get the landing page and decide for themselves what to do —
+# fixing the "Google sends user to empty reader → user bounces" bug.
+
+def is_internal_referer(referer: str, site_url: str) -> bool:
+    """True if the request came from our own site. Used to decide whether
+    to JS-redirect humans straight to the SPA action (preserving in-product
+    flow) or to stop on the landing page (preserving search/share UX).
+
+    Missing referer is treated as external. The cost of false-negative
+    (an in-product visitor accidentally landing) is small — they click
+    one button. The cost of false-positive (an external visitor getting
+    redirected to an empty reader) is the SEO bounce-rate bug we're fixing."""
+    if not referer or not site_url:
+        return False
+    site_host = site_url.rstrip("/").split("://", 1)[-1].split("/", 1)[0].lower()
+    referer_host = referer.split("://", 1)[-1].split("/", 1)[0].lower()
+    return bool(site_host) and referer_host == site_host
+
+
+# ─── Word/structure counters (used by tests to enforce density floors) ─
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_SCRIPT_RE = re.compile(r"<script[^>]*>.*?</script>", re.S | re.I)
+_STYLE_RE = re.compile(r"<style[^>]*>.*?</style>", re.S | re.I)
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def visible_word_count(html: str) -> int:
+    """Count visible words in an HTML document — the same metric our SEO
+    diagnostic uses. Strips scripts, styles, and tags. Useful for tests
+    that assert a content-density floor."""
+    stripped = _SCRIPT_RE.sub("", html)
+    stripped = _STYLE_RE.sub("", stripped)
+    text = _TAG_RE.sub(" ", stripped)
+    text = _WHITESPACE_RE.sub(" ", text).strip()
+    return len(text.split()) if text else 0

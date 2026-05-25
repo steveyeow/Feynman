@@ -384,6 +384,29 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_chat_sessions_uid")
 
+            # Migration: UGC / public-discussions columns on chat_sessions.
+            # All additive + defaulted to the most private value so existing
+            # rows keep their privacy. The whole feature surface is gated
+            # in main.py by ENABLE_PUBLIC_DISCUSSIONS (default False), so
+            # adding these columns does NOT expose any conversation until
+            # both (a) a user opts in via the /share API AND (b) the env
+            # flag is flipped.
+            for col, col_type, default in [
+                ("public_status", "TEXT", "'private'"),
+                ("public_handle", "TEXT", "NULL"),
+                ("public_title", "TEXT", "NULL"),
+                ("consent_at", "TIMESTAMPTZ", "NULL"),
+                ("approved_at", "TIMESTAMPTZ", "NULL"),
+                ("approved_by", "TEXT", "NULL"),
+            ]:
+                try:
+                    _execute(conn, f"SAVEPOINT sp_cs_{col}")
+                    null_clause = "" if default == "NULL" else f" NOT NULL DEFAULT {default}"
+                    _execute(conn, f"ALTER TABLE chat_sessions ADD COLUMN {col} {col_type}{null_clause}")
+                    _execute(conn, f"RELEASE SAVEPOINT sp_cs_{col}")
+                except Exception:
+                    _execute(conn, f"ROLLBACK TO SAVEPOINT sp_cs_{col}")
+
             # ── Now safe to create indexes on migrated columns ──
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_agents_user ON agents(user_id)")
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(agent_id, user_id)")
@@ -752,6 +775,22 @@ def init_db() -> None:
                 _execute(conn, "DELETE FROM chat_sessions WHERE user_id IS NULL")
             except Exception:
                 pass  # column already exists
+
+            # Migration: UGC / public-discussions columns. Mirrors the PG
+            # branch above. See that comment for the privacy + feature-flag
+            # safety story.
+            for col_sql in [
+                "ALTER TABLE chat_sessions ADD COLUMN public_status TEXT NOT NULL DEFAULT 'private'",
+                "ALTER TABLE chat_sessions ADD COLUMN public_handle TEXT",
+                "ALTER TABLE chat_sessions ADD COLUMN public_title TEXT",
+                "ALTER TABLE chat_sessions ADD COLUMN consent_at TEXT",
+                "ALTER TABLE chat_sessions ADD COLUMN approved_at TEXT",
+                "ALTER TABLE chat_sessions ADD COLUMN approved_by TEXT",
+            ]:
+                try:
+                    _execute(conn, col_sql)
+                except Exception:
+                    pass  # column already exists
 
             # Migration: add user_id to messages table
             try:
@@ -1480,6 +1519,398 @@ def get_mind_work_ids(mind_id: str) -> list[str]:
             "SELECT agent_id FROM mind_works WHERE mind_id = ?"
         ), (mind_id,))
         return [r["agent_id"] for r in rows]
+
+
+# ─── SEO/landing-page helpers (cheap read-only queries used by SSR) ───
+#
+# These power the per-entity landing pages (/book/{id}, /mind/{id}). They are
+# called on every crawler/share visit, so they must stay O(small) and avoid
+# vector blob egress. All queries are bounded by an explicit LIMIT.
+
+def list_minds_for_agent(agent_id: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Minds whose work corpus includes this book — used to render the
+    "Discussed by Great Minds" section on /book/{id} and drive internal
+    PageRank from book pages → mind pages."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT m.id, m.name, m.era, m.domain
+               FROM mind_works mw
+               JOIN minds m ON m.id = mw.mind_id
+               WHERE mw.agent_id = ?
+               ORDER BY m.name ASC
+               LIMIT ?"""
+        ), (agent_id, limit))
+        return [dict(r) for r in rows]
+
+
+def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Books in this mind's corpus, with enough fields to render link text
+    on /mind/{id}. Filters to ready agents only — drafts shouldn't appear
+    on a public landing page."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT a.id, a.name, a.type, a.meta
+               FROM mind_works mw
+               JOIN agents a ON a.id = mw.agent_id
+               WHERE mw.mind_id = ? AND a.status = 'ready'
+               ORDER BY a.name ASC
+               LIMIT ?"""
+        ), (mind_id, limit))
+        out = []
+        for r in rows:
+            meta_raw = r.get("meta") if isinstance(r, dict) else r["meta"]
+            try:
+                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else (meta_raw or {})
+            except Exception:
+                meta = {}
+            out.append({
+                "id": r["id"],
+                "name": r["name"],
+                "type": r["type"],
+                "author": meta.get("author", ""),
+            })
+        return out
+
+
+def list_questions_batch(agent_ids: list[str]) -> dict[str, list[str]]:
+    """Fetch the question texts for many agents in one query — used by
+    sitemap rendering, which would otherwise issue N round-trips.
+
+    Returns {agent_id: [question_text, ...]}. Agents with no questions
+    are omitted from the result, so callers can `.get(id, [])` safely.
+    """
+    if not agent_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(agent_ids))
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            f"""SELECT agent_id, text FROM questions
+                WHERE agent_id IN ({placeholders})
+                ORDER BY agent_id, created_at ASC"""
+        ), tuple(agent_ids))
+    out: dict[str, list[str]] = {}
+    for r in rows:
+        out.setdefault(r["agent_id"], []).append(r["text"])
+    return out
+
+
+def list_books_by_topic(topic: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Books tagged with a given topic via ``meta.category`` (set by
+    ``create_catalog_agent`` during topic-driven discovery).
+
+    Implementation note: agents.meta is JSON-stringified text, and we have
+    no JSON-aware index on it. We could push the predicate down with
+    ``json_extract`` / ``jsonb->>'category'`` but the corpus is small
+    (~hundreds) and the call site is cached by the page handler with a
+    long TTL, so an in-Python filter is fast enough and portable across
+    SQLite/Postgres without dialect branching.
+    """
+    if not topic:
+        return []
+    out = []
+    for agent in list_agents(limit=2000):
+        if agent.get("status") not in ("ready", "catalog"):
+            continue
+        meta = agent.get("meta") or {}
+        if not isinstance(meta, dict):
+            continue
+        if (meta.get("category") or "").strip().lower() == topic.strip().lower():
+            out.append({
+                "id": agent["id"],
+                "name": agent.get("name", ""),
+                "type": agent.get("type", ""),
+                "author": meta.get("author", ""),
+            })
+            if len(out) >= limit:
+                break
+    return out
+
+
+# ─── UGC / public-discussion queries (Phase 6) ───────────────────────
+#
+# All read helpers filter on `public_status = 'approved'` — they cannot
+# return private or pending sessions even if a caller forgets to check
+# the feature flag. The write helpers enforce session ownership for
+# user-initiated state changes and only an admin caller (verified by
+# the route handler) should hit `approve_chat_session_public`.
+
+def get_chat_session_with_public_status(session_id: str) -> dict[str, Any] | None:
+    """Fetch a chat session including the UGC columns. Used by the
+    moderation API and ownership checks. Returns None if the session
+    doesn't exist."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            """SELECT id, user_id, title, session_type, mind_id,
+                      public_status, public_handle, public_title,
+                      consent_at, approved_at, approved_by,
+                      updated_at, created_at
+               FROM chat_sessions WHERE id = ?"""
+        ), (session_id,))
+        if not row:
+            return None
+        return dict(row)
+
+
+def request_chat_session_share(
+    session_id: str, user_id: str, handle: str | None = None,
+) -> dict[str, Any] | None:
+    """User opts in to making this session public. Sets status to
+    'opted_in' (awaiting moderation) and stamps consent_at. Returns the
+    updated session row, or None if the session doesn't exist / user
+    doesn't own it / withdrawn-by-admin (rejected can't re-share).
+    """
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("user_id") != user_id:
+        return None
+    # Rejected sessions can't re-share — admin already declined. User
+    # can still chat in them; they just can't be public.
+    if sess.get("public_status") == "rejected":
+        return None
+    with get_conn() as conn:
+        _execute(conn, _q(
+            """UPDATE chat_sessions
+               SET public_status = 'opted_in',
+                   public_handle = ?,
+                   consent_at = ?
+               WHERE id = ? AND user_id = ?"""
+        ), (handle, _utcnow(), session_id, user_id))
+    return get_chat_session_with_public_status(session_id)
+
+
+def withdraw_chat_session_share(
+    session_id: str, user_id: str,
+) -> dict[str, Any] | None:
+    """User withdraws consent — flips status to 'withdrawn'. Works at
+    any prior status (opted_in or already approved). Returns updated
+    row or None if not found / not owned."""
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("user_id") != user_id:
+        return None
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "UPDATE chat_sessions SET public_status = 'withdrawn' WHERE id = ? AND user_id = ?"
+        ), (session_id, user_id))
+    return get_chat_session_with_public_status(session_id)
+
+
+def approve_chat_session_public(
+    session_id: str, admin_user_id: str, public_title: str | None = None,
+) -> dict[str, Any] | None:
+    """Admin approves an opted-in session for public display. Caller
+    must have verified admin status (route handler responsibility).
+    Sets status to 'approved' and stamps approval audit fields."""
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess:
+        return None
+    # Only opted-in sessions can be approved. Won't accidentally
+    # re-approve a withdrawn or rejected session.
+    if sess.get("public_status") != "opted_in":
+        return None
+    with get_conn() as conn:
+        _execute(conn, _q(
+            """UPDATE chat_sessions
+               SET public_status = 'approved',
+                   approved_at = ?,
+                   approved_by = ?,
+                   public_title = COALESCE(?, public_title)
+               WHERE id = ?"""
+        ), (_utcnow(), admin_user_id, public_title, session_id))
+    return get_chat_session_with_public_status(session_id)
+
+
+def reject_chat_session_public(
+    session_id: str, admin_user_id: str,
+) -> dict[str, Any] | None:
+    """Admin rejects an opted-in session. Status -> 'rejected'."""
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("public_status") != "opted_in":
+        return None
+    with get_conn() as conn:
+        _execute(conn, _q(
+            """UPDATE chat_sessions
+               SET public_status = 'rejected',
+                   approved_at = ?,
+                   approved_by = ?
+               WHERE id = ?"""
+        ), (_utcnow(), admin_user_id, session_id))
+    return get_chat_session_with_public_status(session_id)
+
+
+def list_public_sessions_for_agent(
+    agent_id: str, limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Approved public chat sessions for a book (session_type='book',
+    `mind_id` column stores the agent id in this schema overload).
+    Ordered by approval recency."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, user_id, title, public_handle, public_title,
+                      approved_at, created_at
+               FROM chat_sessions
+               WHERE session_type = 'book'
+                 AND mind_id = ?
+                 AND public_status = 'approved'
+               ORDER BY approved_at DESC, created_at DESC
+               LIMIT ?"""
+        ), (agent_id, limit))
+        return [dict(r) for r in rows]
+
+
+def list_public_sessions_for_mind(
+    mind_id: str, limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Approved public chat sessions for a mind. Uses the canonical
+    session_type='chat' + mind_id binding."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, user_id, title, public_handle, public_title,
+                      approved_at, created_at
+               FROM chat_sessions
+               WHERE session_type IN ('chat', 'mind')
+                 AND mind_id = ?
+                 AND public_status = 'approved'
+               ORDER BY approved_at DESC, created_at DESC
+               LIMIT ?"""
+        ), (mind_id, limit))
+        return [dict(r) for r in rows]
+
+
+def list_messages_for_public_session(
+    session_id: str, limit: int = 12,
+) -> list[dict[str, Any]]:
+    """Read messages for public display. SAFETY-CRITICAL:
+    only returns rows if the session's public_status is 'approved'.
+    Caller (the /discussions page renderer) must still PII-scrub the
+    text before display — this function does not scrub, only gates."""
+    with get_conn() as conn:
+        # Single round-trip: gate on approved status by joining the
+        # parent session row.
+        rows = _fetchall(conn, _q(
+            """SELECT sm.id, sm.role, sm.content, sm.created_at
+               FROM session_messages sm
+               JOIN chat_sessions cs ON cs.id = sm.session_id
+               WHERE sm.session_id = ?
+                 AND cs.public_status = 'approved'
+               ORDER BY sm.created_at ASC
+               LIMIT ?"""
+        ), (session_id, limit))
+        return [dict(r) for r in rows]
+
+
+def count_pending_public_sessions() -> int:
+    """How many sessions are awaiting moderation. Used by admin endpoints
+    and dashboards (the moderation queue size)."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT COUNT(*) AS n FROM chat_sessions WHERE public_status = 'opted_in'"
+        ))
+        return int(row["n"]) if row else 0
+
+
+def list_related_books(
+    exclude_agent_id: str,
+    topic: str = "",
+    author: str = "",
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    """Books related to one we're already rendering. Prefers same-topic,
+    then same-author, excluding the source book itself. Used for the
+    "Related Books" section on /book/{id} (Phase 5 — closes the
+    book↔book half of the internal linking graph).
+
+    Same in-Python filter pattern as list_books_by_topic — corpus is
+    small, queries are cached at the page handler level."""
+    if not exclude_agent_id:
+        return []
+    topic_lower = topic.strip().lower() if topic else ""
+    author_lower = author.strip().lower() if author else ""
+
+    # Two passes: topic matches first (higher relevance), then author
+    # matches that we haven't already picked. Stable ordering by name
+    # to keep the rendered list deterministic between cache misses.
+    seen: set[str] = {exclude_agent_id}
+    out: list[dict[str, Any]] = []
+
+    def _push(agent: dict[str, Any]) -> None:
+        if agent["id"] in seen:
+            return
+        meta = agent.get("meta") or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        out.append({
+            "id": agent["id"],
+            "name": agent.get("name", ""),
+            "type": agent.get("type", ""),
+            "author": meta.get("author", ""),
+        })
+        seen.add(agent["id"])
+
+    all_agents = list_agents(limit=2000)
+
+    if topic_lower:
+        for a in all_agents:
+            if len(out) >= limit:
+                break
+            if a.get("status") not in ("ready", "catalog"):
+                continue
+            meta = a.get("meta") or {}
+            if not isinstance(meta, dict):
+                continue
+            if (meta.get("category") or "").strip().lower() == topic_lower:
+                _push(a)
+
+    if author_lower and len(out) < limit:
+        for a in all_agents:
+            if len(out) >= limit:
+                break
+            if a.get("status") not in ("ready", "catalog"):
+                continue
+            meta = a.get("meta") or {}
+            if not isinstance(meta, dict):
+                continue
+            if (meta.get("author") or "").strip().lower() == author_lower:
+                _push(a)
+
+    return out
+
+
+def list_minds_by_topic(topic: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Minds whose ``domain`` (comma-separated) contains the given topic
+    as a substring. ``domain`` was designed for human-readable tag
+    display; matching is intentionally loose so 'Economics' picks up
+    'Economics, Moral Philosophy' too.
+    """
+    if not topic:
+        return []
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, name, era, domain
+               FROM minds
+               WHERE domain LIKE ?
+               ORDER BY chat_count DESC, name ASC
+               LIMIT ?"""
+        ), (f"%{topic}%", limit))
+        return [dict(r) for r in rows]
+
+
+def list_related_minds(mind_id: str, domain: str, limit: int = 6) -> list[dict[str, Any]]:
+    """Other minds sharing at least one domain tag with this mind. Domain is
+    a comma-separated string in the schema, so we match by substring on any
+    token. Excludes the mind itself."""
+    if not domain:
+        return []
+    primary = domain.split(",")[0].strip()
+    if not primary:
+        return []
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            """SELECT id, name, era, domain
+               FROM minds
+               WHERE id <> ? AND domain LIKE ?
+               ORDER BY chat_count DESC, name ASC
+               LIMIT ?"""
+        ), (mind_id, f"%{primary}%", limit))
+        return [dict(r) for r in rows]
 
 
 # ─── Mind memories ───

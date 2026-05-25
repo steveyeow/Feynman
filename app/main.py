@@ -43,9 +43,25 @@ from .core.db import (
     init_db,
     list_agents,
     list_chat_sessions,
+    approve_chat_session_public,
+    count_pending_public_sessions,
+    get_chat_session_with_public_status,
+    list_books_by_topic,
+    list_books_for_mind,
     list_messages,
+    list_messages_for_public_session,
     list_minds,
+    list_minds_by_topic,
+    list_minds_for_agent,
+    list_public_sessions_for_agent,
+    list_public_sessions_for_mind,
     list_questions,
+    list_questions_batch,
+    list_related_books,
+    list_related_minds,
+    reject_chat_session_public,
+    request_chat_session_share,
+    withdraw_chat_session_share,
     list_session_messages,
     list_user_interest_profile,
     list_votes,
@@ -67,6 +83,9 @@ from .core.db import (
 from .core.indexer import index_text
 from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, pick_provider
 from .core.rag import build_context, retrieve, retrieve_cross_book
+from .core import seo as seo_render
+from .core import qa as qa_module
+from .core import ugc as ugc_module
 from .core.minds import (
     SEED_MINDS,
     create_mind_from_content,
@@ -688,23 +707,96 @@ def sitemap_xml():
     # through the Supabase pooler. We cap them with a defensive limit
     # AND wrap the whole response in a TTL cache.
     try:
-        for agent in list_agents(limit=5000):
-            if agent.get("status") != "ready":
-                continue
+        ready_agents = [
+            a for a in list_agents(limit=5000)
+            if a.get("status") == "ready"
+        ]
+        # Batch-fetch questions for all ready agents in a single query —
+        # the previous loop pattern would issue N round-trips inside the
+        # sitemap render hot path.
+        questions_by_agent = list_questions_batch([a["id"] for a in ready_agents])
+        for agent in ready_agents:
+            agent_id = agent["id"]
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
             urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent["id"]}</loc>
+    <loc>{_SITE_URL}/book/{agent_id}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>{priority}</priority>
   </url>
 """
-        for mind in list_minds(limit=5000):
+            # Phase 4A — compound Q&A URLs. One per popular question per
+            # book. Slightly lower priority than the parent page; weekly
+            # changefreq because answers may be regenerated.
+            for q in questions_by_agent.get(agent_id, []):
+                qslug = seo_render.slugify(q)
+                if not qslug:
+                    continue
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/book/{agent_id}/q/{qslug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+"""
+        all_minds = list_minds(limit=5000)
+        for mind in all_minds:
             urls += f"""  <url>
     <loc>{_SITE_URL}/mind/{mind["id"]}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+"""
+        # Phase 4B — mind-on-topic compound URLs. Only emit pairs that
+        # pass the relevance filter so we don't list /mind/X/on/Y for
+        # combos that the route would 404 anyway.
+        for mind in all_minds:
+            for topic in TOPIC_TAGS:
+                if not qa_module.is_mind_topic_relevant(mind, topic):
+                    continue
+                tslug = seo_render.topic_slug(topic)
+                if not tslug:
+                    continue
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["id"]}/on/{tslug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+"""
+        # Topic hub pages — 15 fixed URLs from TOPIC_TAGS. Cheap to include
+        # and they're the upper layer of the topic→entity link graph.
+        for topic in TOPIC_TAGS:
+            slug = seo_render.topic_slug(topic)
+            if not slug:
+                continue
+            urls += f"""  <url>
+    <loc>{_SITE_URL}/topic/{slug}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+"""
+        # Phase 6 — public discussion pages. Only included when the
+        # feature flag is on, so the sitemap stays consistent with the
+        # actual route surface. Flip ENABLE_PUBLIC_DISCUSSIONS to surface
+        # these to Google.
+        if ugc_module.is_enabled():
+            for agent in ready_agents:
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/book/{agent["id"]}/discussions</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>
+"""
+            for mind in all_minds:
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["id"]}/discussions</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
   </url>
 """
     except Exception:
@@ -991,7 +1083,14 @@ def _is_crawler(request: Request) -> bool:
 
 @app.get("/book/{agent_id}", response_class=HTMLResponse)
 def book_page(agent_id: str, request: Request) -> HTMLResponse:
-    """Server-rendered book landing page with OG tags and JSON-LD for SEO/GEO."""
+    """Server-rendered book landing page.
+
+    Content composition lives in ``app/core/seo.py`` — this handler is just
+    the glue that loads data, builds sections, and assembles the document.
+    Every enrichment query is wrapped in try/except so a failed Supabase
+    call or a missing-index book degrades to the old shell page rather than
+    crashing the whole SSR.
+    """
     from html import escape as html_esc
     from urllib.parse import quote
 
@@ -1000,11 +1099,12 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Book not found")
 
     book = get_ai_book_by_agent(agent_id) if agent else None
-    title = html_esc(book["title"] if book and book.get("title") else agent.get("name", "Untitled"))
-    meta = agent.get("meta") or {}
+    title_raw = book["title"] if book and book.get("title") else agent.get("name", "Untitled")
+    title = html_esc(title_raw)
     outline = book.get("outline") if book else None
     subtitle_raw = outline.get("subtitle", "") if isinstance(outline, dict) else ""
-    chapter_count = len(outline.get("chapters", [])) if isinstance(outline, dict) else 0
+    chapters = outline.get("chapters", []) if isinstance(outline, dict) else []
+    chapter_count = len(chapters)
     author_raw = _resolve_og_author(agent, book)
     total_words = book.get("total_words", 0) if book else 0
 
@@ -1025,42 +1125,101 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     reader_url = f"{base}/#/read/{id_path}"
     v = config.OG_IMAGE_CACHE_VERSION
     og_image_url = f"{base}/book/{id_path}/og.png?v={v}"
-    reader_js = json.dumps(reader_url)
 
-    chapters_json = "[]"
-    toc_html = ""
-    if book and isinstance(outline, dict):
-        chapters = outline.get("chapters", [])
-        toc_items = "".join(f"<li>{html_esc(ch.get('title', ''))}</li>" for ch in chapters)
-        toc_html = f"<h2>Table of Contents</h2><ol>{toc_items}</ol>" if toc_items else ""
-        chapters_json = json.dumps([
-            {"@type": "Chapter", "name": ch.get("title", ""), "position": i + 1}
-            for i, ch in enumerate(chapters)
-        ])
+    # ── Load enrichment data (all cheap; no LLM/embedding at SSR time) ──
+    try:
+        chunks = get_chunks_text_only(agent_id)
+    except Exception:
+        chunks = []
+    try:
+        questions = list_questions(agent_id) or []
+    except Exception:
+        questions = []
+    try:
+        related_minds = list_minds_for_agent(agent_id)
+    except Exception:
+        related_minds = []
+    # Phase 5 — related books surfaced from same-topic + same-author cohort
+    agent_meta = agent.get("meta") or {}
+    book_topic = (agent_meta.get("category") or "").strip()
+    book_author = author_raw or (agent_meta.get("author") or "")
+    try:
+        related_books = list_related_books(
+            agent_id, topic=book_topic, author=book_author, limit=6,
+        )
+    except Exception:
+        related_books = []
 
-    jsonld = json.dumps({
-        "@context": "https://schema.org",
-        "@type": "Book",
-        "name": book["title"] if book and book.get("title") else agent.get("name", "Untitled"),
-        "description": subtitle_raw or desc,
-        "author": {"@type": "Person", "name": author_raw} if author_raw else None,
-        "url": canonical,
-        "image": og_image_url,
-        "numberOfPages": chapter_count or None,
-        "wordCount": total_words or None,
-        "hasPart": json.loads(chapters_json) if chapters_json != "[]" else None,
-        "publisher": {"@type": "Organization", "name": "Feynman", "url": base},
-    }, ensure_ascii=False)
+    # ── Detect capabilities (Phase 3a) ──────────────────────────────────
+    # Not every book supports every action; e.g. catalog stubs only support
+    # chat. Render the CTA matrix to match — no more blanket "Read" link
+    # for books with 63 words of content.
+    caps = seo_render.detect_capabilities(agent, book)
+    chat_url = f"{base}/#/chat/{id_path}"
+    cta_target_url = reader_url if caps.get("read") or caps.get("preview") else chat_url
 
-    read_time = max(1, (total_words or 0) // 250)
-    stats_parts = []
-    if total_words:
-        stats_parts.append(f"{total_words:,} words")
-    if read_time:
-        stats_parts.append(f"~{read_time} min read")
-    if chapter_count:
-        stats_parts.append(f"{chapter_count} chapters")
-    stats_html = " · ".join(stats_parts)
+    # ── Build content sections ──────────────────────────────────────────
+    about_html = seo_render.render_book_about(subtitle_raw, author_raw)
+    stats_html = seo_render.render_stats(total_words, chapter_count)
+    toc_html = seo_render.render_toc(chapters)
+    samples_html = seo_render.render_sample_passages(chunks)
+    # Each question links to its own /book/{id}/q/{slug} compound page —
+    # turns one entity URL into 6 indexable URLs (book + 5 Q&A).
+    questions_html = seo_render.render_popular_questions(
+        questions, chat_url, book_id=agent_id, site_url=base,
+    )
+    minds_html = seo_render.render_minds_for_book(related_minds, base)
+    related_books_html = seo_render.render_related_books(related_books, base)
+    topic_link_html = seo_render.render_topic_link_back(book_topic, base) if book_topic else ""
+    cta_html = seo_render.render_cta_matrix(
+        caps, entity_id=agent_id, entity_name=title_raw, base=base
+    )
+
+    # ── Build JSON-LD blocks ────────────────────────────────────────────
+    book_ld = seo_render.jsonld_script(seo_render.book_jsonld(
+        title=title_raw,
+        description=subtitle_raw or desc_raw,
+        author=author_raw,
+        url=canonical,
+        image=og_image_url,
+        word_count=total_words or None,
+        chapters=chapters or None,
+        site_url=base,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Books", f"{base}/#/library"),
+        (title_raw, canonical),
+    ]))
+    faq_ld = ""
+    if questions:
+        # Deflection answer — non-empty is required by Google's FAQPage spec.
+        # Real answer surfaces inside the chat experience, not here.
+        deflect = f"Open Feynman to chat with this book and explore the answer in depth: {reader_url}"
+        faq_ld = seo_render.jsonld_script(seo_render.faq_jsonld([
+            (q, deflect) for q in questions if q
+        ]))
+
+    # ── Decide who sees the landing page vs gets redirected ─────────────
+    # Crawlers: always see the landing page (no redirect, body visible).
+    # In-product clicks (Referer = our origin): redirect to the SPA action
+    #   so the existing UX is unchanged — they expect to land in reader/chat.
+    # Everyone else (Google, share links, direct visits, missing referer):
+    #   stay on the landing page so they see what the URL actually offers
+    #   instead of being dropped into an empty reader.
+    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    show_landing = (
+        _is_crawler(request)
+        or not seo_render.is_internal_referer(referer, base)
+    )
+    body_style = '' if show_landing else ' style="opacity:0"'
+    redirect_script = (
+        ''
+        if show_landing
+        else f'<script>window.location.replace({json.dumps(cta_target_url)});</script>'
+    )
+    author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
+    author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1078,7 +1237,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
-{f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''}
+{author_meta}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@steve_yeow">
 <meta name="twitter:creator" content="@steve_yeow">
@@ -1086,14 +1245,22 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
-<script type="application/ld+json">{jsonld}</script>
-</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
+{book_ld}
+{breadcrumb_ld}
+{faq_ld}
+</head><body{body_style}>
 <h1>{title}</h1>
-{f'<p>by {html_esc(author_raw)}</p>' if author_raw else ''}
-{f'<p>{desc}</p>' if subtitle_raw else ''}
+{author_html}
+{about_html}
+{stats_html}
+{samples_html}
 {toc_html}
-<p><a href="{html_esc(reader_url)}">Read this book on Feynman</a></p>
-{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
+{questions_html}
+{minds_html}
+{related_books_html}
+{topic_link_html}
+{cta_html}
+{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
@@ -1126,54 +1293,131 @@ def mind_og_image(mind_id: str):
 
 @app.get("/mind/{mind_id}", response_class=HTMLResponse)
 def mind_page(mind_id: str, request: Request) -> HTMLResponse:
-    """Server-rendered mind landing page with OG tags and JSON-LD Person schema."""
+    """Server-rendered mind landing page.
+
+    Content composition lives in ``app/core/seo.py``. We render every mind
+    column the schema exposes — bio, thinking_style, typical_phrases,
+    persona excerpt, works, plus cross-links to books and related minds —
+    so each page meets the content-density bar required to rank and to be
+    cited by LLMs.
+    """
     from html import escape as html_esc
 
     mind = get_mind(mind_id)
     if not mind:
         raise HTTPException(status_code=404, detail="Mind not found")
 
-    name = html_esc(mind.get("name", "Unknown"))
-    era = html_esc(mind.get("era", ""))
-    domain = html_esc(mind.get("domain", ""))
-    bio = html_esc(mind.get("bio_summary", ""))
+    name_raw = mind.get("name", "Unknown")
+    name = html_esc(name_raw)
+    era_raw = mind.get("era", "")
+    era = html_esc(era_raw)
+    domain_raw = mind.get("domain", "")
+    domain = html_esc(domain_raw)
+    bio_raw = mind.get("bio_summary", "")
     works_raw = mind.get("works") or []
     works_list = works_raw if isinstance(works_raw, list) else []
+    thinking_style = mind.get("thinking_style", "") or ""
+    phrases_raw = mind.get("typical_phrases") or []
+    phrases = phrases_raw if isinstance(phrases_raw, list) else []
+    persona = mind.get("persona", "") or ""
 
-    desc_raw = mind.get("bio_summary", "") or f"{mind.get('name', 'Unknown')} — {mind.get('domain', '')} thinker on Feynman"
+    desc_raw = bio_raw or f"{name_raw} — {domain_raw} thinker on Feynman"
     if len(desc_raw) > 200:
         desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
     desc = html_esc(desc_raw)
-    name_parts = mind.get("name", "").strip().split()
+    name_parts = name_raw.strip().split()
     first_name = html_esc(name_parts[0]) if name_parts else ""
     last_name = html_esc(" ".join(name_parts[1:])) if len(name_parts) > 1 else ""
-    og_image_alt = html_esc(f"Portrait of {mind.get('name', 'great mind')} on Feynman")
+    og_image_alt = html_esc(f"Portrait of {name_raw} on Feynman")
     base = _SITE_URL
     canonical = f"{base}/mind/{mind_id}"
     og_image_url = f"{base}/mind/{mind_id}/og.png"
     reader_url = f"{base}/#/mind/{mind_id}"
-    reader_js = json.dumps(reader_url)
 
-    works_html = ""
-    if works_list:
-        items = "".join(f"<li>{html_esc(w)}</li>" for w in works_list[:20])
-        works_html = f"<h2>Notable Works</h2><ul>{items}</ul>"
+    # ── Load enrichment data ────────────────────────────────────────────
+    try:
+        linked_books = list_books_for_mind(mind_id)
+    except Exception:
+        linked_books = []
+    try:
+        related = list_related_minds(mind_id, domain_raw)
+    except Exception:
+        related = []
+    # Phase 5 — surface topic-hub links for any TOPIC_TAG this mind is
+    # relevant to. Reuses the same morphological matcher Phase 4B uses
+    # to gate /mind/{id}/on/{topic} compound pages, so the two link sets
+    # stay consistent.
+    matching_topics = [
+        t for t in TOPIC_TAGS if qa_module.is_mind_topic_relevant(mind, t)
+    ]
 
-    jsonld = json.dumps({
-        "@context": "https://schema.org",
-        "@type": "Person",
-        "name": mind.get("name", "Unknown"),
-        "description": mind.get("bio_summary", ""),
-        "knowsAbout": mind.get("domain", ""),
-        "url": canonical,
-        "image": og_image_url,
-        "sameAs": [],
-    }, ensure_ascii=False)
+    # "Books in library" surfaces the extras that Notable Works doesn't already
+    # list — avoid double-rendering the same title in both sections.
+    works_titles = {(w or "").lower() for w in works_list if w}
+    extra_books = []
+    for b in linked_books:
+        bname = (b.get("name") or "").lower()
+        if not bname:
+            continue
+        if bname in works_titles:
+            continue
+        if any(bname in wt or wt in bname for wt in works_titles):
+            continue
+        extra_books.append(b)
 
-    chat_count = mind.get("chat_count", 0)
-    domains_list = [d.strip() for d in domain.split(",") if d.strip()] if domain else []
-    domains_tags = "".join(f'<span class="domain-tag">{html_esc(d)}</span>' for d in domains_list)
-    domains_html = f'<div class="domains">{domains_tags}</div>' if domains_list else ""
+    # ── Build content sections ──────────────────────────────────────────
+    bio_html = seo_render.render_mind_bio(bio_raw)
+    thinking_html = seo_render.render_mind_thinking_style(thinking_style)
+    phrases_html = seo_render.render_mind_phrases(phrases)
+    persona_html = seo_render.render_mind_persona_excerpt(persona)
+    works_html = seo_render.render_mind_works(works_list, linked_books, base)
+    extra_books_html = seo_render.render_books_for_mind(extra_books, base)
+    related_html = seo_render.render_related_minds(related, base)
+    topic_links_html = seo_render.render_topic_links_for_mind(matching_topics, base)
+
+    # ── JSON-LD ─────────────────────────────────────────────────────────
+    # sameAs telling Google's Knowledge Graph "this is THE Karl Marx" is
+    # the single biggest entity-identity signal we can send. Curated list
+    # lives in seo.FAMOUS_MIND_SAMEAS; unmatched names get None and the
+    # schema validator skips the field.
+    person_ld = seo_render.jsonld_script(seo_render.person_jsonld(
+        name=name_raw,
+        description=bio_raw,
+        domain=domain_raw,
+        url=canonical,
+        image=og_image_url,
+        same_as=seo_render.lookup_same_as(name_raw),
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Great Minds", f"{base}/#/minds"),
+        (name_raw, canonical),
+    ]))
+
+    # Same referer-aware gate as book_page — external visitors see the
+    # landing page (with bio + works + cross-links to books), internal
+    # clicks continue straight to the mind chat as before.
+    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    show_landing = (
+        _is_crawler(request)
+        or not seo_render.is_internal_referer(referer, base)
+    )
+    body_style = '' if show_landing else ' style="opacity:0"'
+    redirect_script = (
+        ''
+        if show_landing
+        else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
+    )
+    if era_raw and domain_raw:
+        era_domain_html = f'<p class="mind-meta">{era} · {domain}</p>'
+    elif era_raw:
+        era_domain_html = f'<p class="mind-meta">{era}</p>'
+    elif domain_raw:
+        era_domain_html = f'<p class="mind-meta">{domain}</p>'
+    else:
+        era_domain_html = ''
+    profile_first = f'<meta property="profile:first_name" content="{first_name}">' if first_name else ''
+    profile_last = f'<meta property="profile:last_name" content="{last_name}">' if last_name else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1191,8 +1435,8 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta property="og:image:alt" content="{og_image_alt}">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="Feynman">
-{f'<meta property="profile:first_name" content="{first_name}">' if first_name else ''}
-{f'<meta property="profile:last_name" content="{last_name}">' if last_name else ''}
+{profile_first}
+{profile_last}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@steve_yeow">
 <meta name="twitter:creator" content="@steve_yeow">
@@ -1200,16 +1444,779 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
-<script type="application/ld+json">{jsonld}</script>
-</head><body{'' if _is_crawler(request) else ' style="opacity:0"'}>
+{person_ld}
+{breadcrumb_ld}
+</head><body{body_style}>
 <h1>{name}</h1>
-{f'<p>{era} · {domain}</p>' if era else f'<p>{domain}</p>'}
-{f'<p>{bio}</p>' if bio else ''}
+{era_domain_html}
+{bio_html}
+{thinking_html}
+{phrases_html}
+{persona_html}
 {works_html}
-<p><a href="{html_esc(reader_url)}">Chat with {name} on Feynman</a></p>
-{'' if _is_crawler(request) else f'<script>window.location.replace({json.dumps(reader_url)});</script>'}
+{extra_books_html}
+{related_html}
+{topic_links_html}
+<p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
+{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
+
+
+# ─── Phase 4A — Book Q&A compound pages ─────────────────────────────
+#
+# /book/{agent_id}/q/{slug} renders one indexable URL per popular
+# question per book. 5 questions per indexed book × hundreds of books
+# = thousands of new long-tail entry points. Each page is:
+#   * Grounded in RAG-retrieved passages from the parent book
+#   * Optionally enriched with an LLM-synthesized answer (cacheable,
+#     kill-switched by ENABLE_QA_LLM env var)
+#   * Wrapped in QAPage schema for Google rich-result eligibility
+#
+# Caching strategy: answers are slow to generate (RAG + LLM round trip).
+# We cache the rendered HTML by (agent_id, slug) so the first crawler
+# pays the cost and every subsequent hit is free. The Vercel edge
+# Cache-Control header gives us a second tier outside the function.
+
+_QA_PAGE_CACHE_TTL = 86400  # 24h — answers don't change unless we
+                            # explicitly re-run the question/answer flow
+
+
+@app.get("/book/{agent_id}/q/{question_slug}", response_class=HTMLResponse)
+def book_question_page(agent_id: str, question_slug: str, request: Request) -> HTMLResponse:
+    """Per-question compound page for a book. See module-level comment."""
+    from html import escape as html_esc
+
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    try:
+        questions = list_questions(agent_id) or []
+    except Exception:
+        questions = []
+    question = seo_render.find_question_by_slug(questions, question_slug)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found for this book")
+
+    cache_key = f"qa_page:{agent_id}:{question_slug}"
+    cached = _cache_get(cache_key, _QA_PAGE_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    book = get_ai_book_by_agent(agent_id)
+    title_raw = book["title"] if book and book.get("title") else agent.get("name", "Untitled")
+    title = html_esc(title_raw)
+    base = _SITE_URL
+    book_url = f"{base}/book/{agent_id}"
+    canonical = f"{base}/book/{agent_id}/q/{question_slug}"
+
+    # ── Generate answer (lazy, in-process cached) ──────────────────────
+    qa_result = qa_module.generate_grounded_answer(
+        agent_id, question, book_title=title_raw,
+    )
+    answer = qa_result.get("answer", "")
+    passages = qa_result.get("passages", [])
+
+    # ── Render sections ────────────────────────────────────────────────
+    answer_html = seo_render.render_qa_answer(answer)
+    passages_html = seo_render.render_qa_passages(passages)
+    siblings_html = seo_render.render_sibling_questions(
+        questions, agent_id, base, current_question=question,
+    )
+
+    qa_ld = seo_render.jsonld_script(seo_render.qa_page_jsonld(
+        question=question,
+        answer=answer,
+        url=canonical,
+        book_title=title_raw,
+        book_url=book_url,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Books", f"{base}/#/library"),
+        (title_raw, book_url),
+        ("Q&A", canonical),
+    ]))
+
+    page_title_raw = f"{question} — {title_raw}"
+    if len(page_title_raw) > 120:
+        page_title_raw = page_title_raw[:117].rsplit(" ", 1)[0] + "..."
+    page_title = html_esc(page_title_raw)
+    desc_raw = answer[:180].strip() if answer else (
+        f"Discuss \"{question}\" with the book \"{title_raw}\" on Feynman."
+    )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    og_image_url = f"{base}/book/{agent_id}/og.png?v={config.OG_IMAGE_CACHE_VERSION}"
+    chat_url = f"{base}/#/chat/{agent_id}"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{html_esc(question)}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{html_esc(question)}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
+{qa_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="qa-back"><a href="{book_url}">← {title}</a></nav>
+<h1>{html_esc(question)}</h1>
+{answer_html}
+{passages_html}
+{siblings_html}
+<p class="cta"><a href="{html_esc(chat_url)}">Chat about this question →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 4B — Mind-on-topic compound pages ────────────────────────
+#
+# /mind/{mind_id}/on/{topic_slug} renders an imagined-perspective essay
+# of how this mind would approach this topic. Relevance is enforced —
+# non-matching pairs 404 to avoid programmatic spam (e.g. "Confucius on
+# Computer Science"). Essays are LLM-generated, labelled as imagined,
+# and grounded in the mind's persona/thinking_style/typical_phrases.
+
+_MIND_ESSAY_CACHE_TTL = 86400
+
+
+@app.get("/mind/{mind_id}/on/{topic_slug}", response_class=HTMLResponse)
+def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLResponse:
+    """Per-(mind, topic) compound page. See module-level comment."""
+    from html import escape as html_esc
+
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    topic = _resolve_topic_slug(topic_slug)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    if not qa_module.is_mind_topic_relevant(mind, topic):
+        # Relevance gate — pair isn't plausible enough to merit an essay.
+        # 404 keeps Google from indexing programmatic combinations.
+        raise HTTPException(status_code=404, detail="Topic not relevant to this mind")
+
+    cache_key = f"mind_essay:{mind_id}:{topic_slug}"
+    cached = _cache_get(cache_key, _MIND_ESSAY_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    name_raw = mind.get("name", "Unknown")
+    name = html_esc(name_raw)
+    base = _SITE_URL
+    mind_url = f"{base}/mind/{mind_id}"
+    canonical = f"{base}/mind/{mind_id}/on/{topic_slug}"
+    chat_url = f"{base}/#/mind/{mind_id}"
+
+    essay_result = qa_module.generate_mind_on_topic_essay(mind, topic)
+    essay = essay_result.get("essay", "")
+    if not essay:
+        # Generation failed (LLM disabled, provider error, or empty
+        # response). Don't render a blank page — 404 so we don't pollute
+        # the index with empty essays.
+        raise HTTPException(status_code=404, detail="Essay unavailable")
+
+    page_title_raw = f"How {name_raw} would approach {topic} — Feynman"
+    if len(page_title_raw) > 120:
+        page_title_raw = page_title_raw[:117].rsplit(" ", 1)[0] + "..."
+    page_title = html_esc(page_title_raw)
+    desc_raw = essay[:180].strip().replace("\n", " ")
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+    og_image_url = f"{base}/mind/{mind_id}/og.png"
+
+    essay_html = seo_render.render_mind_on_topic_essay(essay, name_raw, topic)
+    article_ld = seo_render.jsonld_script(seo_render.mind_essay_jsonld(
+        mind_name=name_raw, topic=topic, essay=essay,
+        url=canonical, mind_url=mind_url, image=og_image_url,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Great Minds", f"{base}/#/minds"),
+        (name_raw, mind_url),
+        (topic, canonical),
+    ]))
+    topic_hub_url = f"{base}/topic/{topic_slug}"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{html_esc(f'How {name_raw} would approach {topic}')}">
+<meta property="og:description" content="{desc}">
+<meta property="og:image" content="{og_image_url}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{html_esc(f'How {name_raw} would approach {topic}')}">
+<meta name="twitter:description" content="{desc}">
+<meta name="twitter:image" content="{og_image_url}">
+{article_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="essay-back"><a href="{mind_url}">← {name}</a></nav>
+<h1>How {name} would approach {html_esc(topic)}</h1>
+{essay_html}
+<p class="related-links">
+  Read more: <a href="{mind_url}">About {name}</a> ·
+  <a href="{topic_hub_url}">{html_esc(topic)} on Feynman</a>
+</p>
+<p class="cta"><a href="{html_esc(chat_url)}">Chat with {name} →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 4C — Topic hub pages ─────────────────────────────────────
+#
+# /topic/{slug} aggregates books and minds tagged with one of the 15
+# TOPIC_TAGS. Pure aggregation — no LLM calls. Each page becomes:
+#   * a new indexable URL (sitemap)
+#   * an internal-PageRank conduit pushing authority to entity pages
+#   * a canonical destination for queries like "best Economics books"
+#
+# Cache aggressively: topic membership only changes when a new catalog
+# book is discovered, which is rare. 1 hour TTL is plenty fresh.
+
+_TOPIC_PAGE_CACHE_TTL = 3600
+
+
+def _resolve_topic_slug(slug: str) -> str | None:
+    """Find the canonical topic name for a URL slug. None if no match."""
+    index = seo_render.build_topic_slug_index(TOPIC_TAGS)
+    return index.get(slug.lower())
+
+
+@app.get("/topic/{slug}", response_class=HTMLResponse)
+def topic_page(slug: str, request: Request) -> HTMLResponse:
+    """Server-rendered topic hub. Lists all books + minds tagged with this
+    topic with cross-links — both for users and for the crawler graph.
+    """
+    from html import escape as html_esc
+
+    topic = _resolve_topic_slug(slug)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    cache_key = f"topic_page:{slug}"
+    cached = _cache_get(cache_key, _TOPIC_PAGE_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=3600, s-maxage=86400",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        books = list_books_by_topic(topic, limit=30)
+    except Exception:
+        books = []
+    try:
+        minds = list_minds_by_topic(topic, limit=12)
+    except Exception:
+        minds = []
+
+    base = _SITE_URL
+    canonical = f"{base}/topic/{slug}"
+    title = html_esc(f"{topic} on Feynman")
+    desc_raw = (
+        f"Chat with the best {topic} books and great minds on Feynman. "
+        f"{len(books)} curated {('book' if len(books) == 1 else 'books')}, "
+        f"{len(minds)} {('thinker' if len(minds) == 1 else 'thinkers')}."
+    )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+
+    intro_html = seo_render.render_topic_intro(topic, len(books), len(minds))
+    books_html = seo_render.render_topic_books(books, base)
+    minds_html = seo_render.render_topic_minds(minds, base)
+
+    # Collection schema with embedded ItemList (book entries first, then
+    # minds). LLMs use this to enumerate "what's in this topic" cleanly.
+    items: list[dict[str, str]] = []
+    for b in books[:30]:
+        if b.get("id") and b.get("name"):
+            items.append({"name": b["name"], "url": f"{base}/book/{b['id']}"})
+    for m in minds[:12]:
+        if m.get("id") and m.get("name"):
+            items.append({"name": m["name"], "url": f"{base}/mind/{m['id']}"})
+
+    collection_ld = seo_render.jsonld_script(seo_render.collection_jsonld(
+        name=f"{topic} on Feynman",
+        description=desc_raw,
+        url=canonical,
+        items=items,
+        site_url=base,
+    ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Topics", f"{base}/#/library"),
+        (topic, canonical),
+    ]))
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+{collection_ld}
+{breadcrumb_ld}
+</head><body>
+<h1>{html_esc(topic)}</h1>
+{intro_html}
+{books_html}
+{minds_html}
+<p class="cta"><a href="{base}/#/library">Explore the full Feynman library →</a></p>
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 6 — UGC: public discussions ──────────────────────────────
+#
+# Privacy is the whole game here. The feature is entirely gated by the
+# ENABLE_PUBLIC_DISCUSSIONS env var (default OFF) — all five routes
+# below return 404 when the flag is off, so the surface is invisible
+# until product/legal sign off. See app/core/ugc.py for the full
+# privacy model.
+#
+# Admin moderation is gated by ADMIN_USER_IDS env (comma-separated
+# user IDs). Empty / unset means no one can moderate, which combined
+# with the feature flag means the system stays in a safe state by
+# default even if the flag is accidentally flipped.
+
+
+def _is_admin_user(request: Request) -> bool:
+    """Membership check against ADMIN_USER_IDS env var."""
+    admin_ids = {
+        s.strip() for s in os.getenv("ADMIN_USER_IDS", "").split(",") if s.strip()
+    }
+    if not admin_ids:
+        return False
+    uid = _get_user_id(request)
+    return bool(uid) and uid in admin_ids
+
+
+def _require_ugc_enabled() -> None:
+    """Raise 404 if the feature flag is off. We use 404 (not 403) to
+    avoid signalling the route's existence to probes — the surface is
+    effectively absent when disabled."""
+    if not ugc_module.is_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+class ShareChatSessionRequest(BaseModel):
+    handle: str | None = Field(default=None, max_length=40)
+
+
+@app.post("/api/chat-sessions/{session_id}/share")
+def api_chat_session_share(
+    session_id: str, payload: ShareChatSessionRequest, request: Request,
+):
+    """User opts in to making this chat session publicly visible.
+    Status moves to 'opted_in' awaiting admin approval. Idempotent —
+    re-sharing updates the handle but doesn't double-stamp consent."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    handle, err = ugc_module.validate_public_handle(payload.handle or "")
+    if err:
+        raise HTTPException(status_code=422, detail=err)
+    result = request_chat_session_share(session_id, uid, handle=handle or None)
+    if not result:
+        # Either not found, not owned, or rejected — return 404 for all
+        # three to avoid leaking ownership / state info.
+        raise HTTPException(status_code=404, detail="Session not eligible for sharing")
+    return {
+        "id": result["id"],
+        "public_status": result["public_status"],
+        "public_handle": result.get("public_handle"),
+        "consent_at": result.get("consent_at"),
+    }
+
+
+@app.post("/api/chat-sessions/{session_id}/withdraw")
+def api_chat_session_withdraw(session_id: str, request: Request):
+    """User withdraws consent. Status moves to 'withdrawn' (or stays
+    withdrawn — idempotent). Works at any prior status."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    result = withdraw_chat_session_share(session_id, uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.get("/api/chat-sessions/{session_id}/public-status")
+def api_chat_session_public_status(session_id: str, request: Request):
+    """Read the current public status of a session. Owner-only."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("user_id") != uid:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "id": sess["id"],
+        "public_status": sess.get("public_status", "private"),
+        "public_handle": sess.get("public_handle"),
+        "consent_at": sess.get("consent_at"),
+        "approved_at": sess.get("approved_at"),
+    }
+
+
+class AdminApproveRequest(BaseModel):
+    public_title: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/api/admin/chat-sessions/{session_id}/approve")
+def api_admin_approve_session(
+    session_id: str, payload: AdminApproveRequest, request: Request,
+):
+    """Admin approves an opted-in session for public display."""
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        # Don't reveal whether the route exists to non-admins.
+        raise HTTPException(status_code=404, detail="Not found")
+    admin_uid = _get_user_id(request) or ""
+    result = approve_chat_session_public(
+        session_id, admin_uid, public_title=payload.public_title,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not pending approval")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.post("/api/admin/chat-sessions/{session_id}/reject")
+def api_admin_reject_session(session_id: str, request: Request):
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    admin_uid = _get_user_id(request) or ""
+    result = reject_chat_session_public(session_id, admin_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not pending approval")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.get("/api/admin/moderation-queue/count")
+def api_admin_moderation_queue_count(request: Request):
+    """Tiny endpoint for an admin dashboard to poll the queue size."""
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"pending": count_pending_public_sessions()}
+
+
+# ── Public discussion render routes (SSR; feature-flag gated) ────────
+
+
+def _render_public_post_html(session: dict[str, Any], chat_url: str) -> str:
+    """Render one approved chat session as a discussion post. PII is
+    scrubbed before display. Empty bodies render as a one-line stub
+    rather than a blank card."""
+    from html import escape as html_esc
+
+    title = (
+        session.get("public_title")
+        or session.get("title")
+        or "Discussion"
+    )
+    handle = session.get("public_handle") or "Anonymous"
+    # Fetch messages and assemble a sanitized snippet (cap at 4 messages,
+    # 600 chars each, then PII-scrub the whole thing).
+    msgs = []
+    try:
+        # SAFETY: list_messages_for_public_session enforces a SQL-side
+        # join on public_status='approved' so even if upstream caching
+        # surfaced a stale session row, the messages are gated by the
+        # current DB state. Caller still scrubs PII before render.
+        raw_msgs = list_messages_for_public_session(session["id"]) or []
+    except Exception:
+        raw_msgs = []
+    for m in raw_msgs[:6]:
+        role = m.get("role", "")
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        if len(content) > 600:
+            content = content[:597].rsplit(" ", 1)[0] + "…"
+        msgs.append((role, content))
+
+    inner = ""
+    if msgs:
+        rows = []
+        for role, content in msgs:
+            scrubbed = ugc_module.scrub_pii_for_public_display(content)
+            role_label = html_esc(role.upper()) if role else ""
+            rows.append(
+                f'<div class="msg msg-{html_esc(role)}">'
+                f'<small class="msg-role">{role_label}</small>'
+                f'<p>{html_esc(scrubbed)}</p>'
+                '</div>'
+            )
+        inner = "".join(rows)
+    else:
+        inner = '<p class="msg-empty"><em>No public content in this discussion.</em></p>'
+
+    return (
+        '<article class="public-post">'
+        f'<header><h3>{html_esc(title)}</h3>'
+        f'<small class="post-author">— {html_esc(handle)}</small></header>'
+        f'{inner}'
+        f'<p class="post-cta"><a href="{html_esc(chat_url)}">Start your own chat →</a></p>'
+        '</article>'
+    )
+
+
+def _render_public_discussions_page(
+    *,
+    entity_type: str,    # "book" or "mind"
+    entity_id: str,
+    entity_name: str,
+    entity_canonical: str,
+    chat_url: str,
+    sessions: list[dict[str, Any]],
+) -> str:
+    """Assemble the full HTML for a /discussions page. Common between
+    book and mind."""
+    from html import escape as html_esc
+
+    title_raw = f"Discussions about {entity_name} — Feynman"
+    title = html_esc(title_raw)
+    if sessions:
+        desc_raw = (
+            f"{len(sessions)} public "
+            f"{('discussion' if len(sessions) == 1 else 'discussions')} "
+            f"about {entity_name} on Feynman. "
+            f"All conversations are user-shared with consent and PII-scrubbed."
+        )
+    else:
+        desc_raw = (
+            f"Public discussions about {entity_name} on Feynman. "
+            f"Be the first to share — open a chat and opt in from your session."
+        )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+
+    posts_html = "".join(_render_public_post_html(s, chat_url) for s in sessions)
+    if not posts_html:
+        posts_html = (
+            '<p class="no-discussions">No public discussions yet. '
+            f'Be the first — chat with {html_esc(entity_name)} and opt to share '
+            'your conversation from the session menu.</p>'
+        )
+
+    # Build DiscussionForumPosting JSON-LD only when there are real posts
+    # (avoid emitting an empty thread schema that Google may flag).
+    forum_ld = ""
+    if sessions:
+        posts_for_ld = [
+            {
+                "handle": s.get("public_handle") or "Anonymous",
+                "body": ugc_module.scrub_pii_for_public_display(
+                    (s.get("public_title") or s.get("title") or "")
+                )[:300],
+                "created_at": s.get("approved_at") or s.get("created_at") or "",
+                "session_id": s["id"],
+            }
+            for s in sessions
+        ]
+        forum_ld = seo_render.jsonld_script(ugc_module.discussion_forum_jsonld(
+            posts=posts_for_ld,
+            page_url=entity_canonical + "/discussions",
+            headline=f"Discussions about {entity_name}",
+            about_url=entity_canonical,
+            about_type="Book" if entity_type == "book" else "Person",
+            about_name=entity_name,
+        ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", _SITE_URL),
+        (
+            "Books" if entity_type == "book" else "Great Minds",
+            f"{_SITE_URL}/#/{'library' if entity_type == 'book' else 'minds'}",
+        ),
+        (entity_name, entity_canonical),
+        ("Discussions", entity_canonical + "/discussions"),
+    ]))
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{entity_canonical}/discussions">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{entity_canonical}/discussions">
+<meta property="og:site_name" content="Feynman">
+{forum_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="back-link"><a href="{entity_canonical}">← {html_esc(entity_name)}</a></nav>
+<h1>Discussions about {html_esc(entity_name)}</h1>
+{posts_html}
+<p class="cta"><a href="{html_esc(chat_url)}">Start your own chat →</a></p>
+</body></html>"""
+
+
+_PUBLIC_DISCUSSIONS_CACHE_TTL = 600  # 10 min — fresh enough for new approvals
+
+
+@app.get("/book/{agent_id}/discussions", response_class=HTMLResponse)
+def book_discussions_page(agent_id: str, request: Request) -> HTMLResponse:
+    """List approved public discussions for this book. Returns 404 if
+    the feature flag is off, so the surface is invisible by default."""
+    _require_ugc_enabled()
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    cache_key = f"public_discussions_book:{agent_id}"
+    cached = _cache_get(cache_key, _PUBLIC_DISCUSSIONS_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=600, s-maxage=600",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        sessions = list_public_sessions_for_agent(agent_id)
+    except Exception:
+        sessions = []
+    entity_name = agent.get("name") or "this book"
+    html = _render_public_discussions_page(
+        entity_type="book",
+        entity_id=agent_id,
+        entity_name=entity_name,
+        entity_canonical=f"{_SITE_URL}/book/{agent_id}",
+        chat_url=f"{_SITE_URL}/#/chat/{agent_id}",
+        sessions=sessions,
+    )
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=600, s-maxage=600",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+@app.get("/mind/{mind_id}/discussions", response_class=HTMLResponse)
+def mind_discussions_page(mind_id: str, request: Request) -> HTMLResponse:
+    _require_ugc_enabled()
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+
+    cache_key = f"public_discussions_mind:{mind_id}"
+    cached = _cache_get(cache_key, _PUBLIC_DISCUSSIONS_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=600, s-maxage=600",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        sessions = list_public_sessions_for_mind(mind_id)
+    except Exception:
+        sessions = []
+    entity_name = mind.get("name") or "this mind"
+    html = _render_public_discussions_page(
+        entity_type="mind",
+        entity_id=mind_id,
+        entity_name=entity_name,
+        entity_canonical=f"{_SITE_URL}/mind/{mind_id}",
+        chat_url=f"{_SITE_URL}/#/mind/{mind_id}",
+        sessions=sessions,
+    )
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=600, s-maxage=600",
+            "X-Cache": "MISS",
+        },
+    )
 
 
 @app.get("/api/public/book/{agent_id}/read")
