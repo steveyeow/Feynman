@@ -867,6 +867,227 @@ class TestPopularQuestionsCompoundUrls:
         assert 'href="https://x.com/#/chat/abc"' in out
 
 
+class TestPhase5RelatedBooks:
+    """Related-books cross-links on /book/{id} — Phase 5 closes the
+    book↔book half of the internal linking graph."""
+
+    def test_render_related_books_cross_links(self):
+        out = seo.render_related_books(
+            [
+                {"id": "b1", "name": "Sapiens", "author": "Yuval Harari"},
+                {"id": "b2", "name": "Homo Deus", "author": "Yuval Harari"},
+            ],
+            "https://x.com",
+        )
+        assert 'href="https://x.com/book/b1"' in out
+        assert 'href="https://x.com/book/b2"' in out
+        assert "Sapiens" in out and "Homo Deus" in out
+        assert "Yuval Harari" in out
+
+    def test_render_related_books_empty(self):
+        assert seo.render_related_books([], "https://x.com") == ""
+
+    def test_render_related_books_skips_malformed_entries(self):
+        out = seo.render_related_books(
+            [
+                {"id": "b1", "name": "Good"},
+                {"id": "", "name": "Missing ID"},
+                {"id": "b3", "name": ""},
+            ],
+            "https://x.com",
+        )
+        assert "Good" in out
+        assert "Missing ID" not in out
+        assert out.count("<li>") == 1
+
+    def test_render_topic_link_back(self):
+        out = seo.render_topic_link_back("Economics", "https://x.com")
+        assert 'href="https://x.com/topic/economics"' in out
+        assert "Economics" in out
+
+    def test_render_topic_link_back_empty(self):
+        assert seo.render_topic_link_back("", "https://x.com") == ""
+
+    def test_render_topic_links_for_mind(self):
+        out = seo.render_topic_links_for_mind(
+            ["Economics", "Philosophy"], "https://x.com",
+        )
+        assert 'href="https://x.com/topic/economics"' in out
+        assert 'href="https://x.com/topic/philosophy"' in out
+
+    def test_render_topic_links_for_mind_caps_at_five(self):
+        out = seo.render_topic_links_for_mind(
+            ["T" + str(i) for i in range(20)], "https://x.com",
+        )
+        # Cap is 5
+        assert out.count("<a ") == 5
+
+
+class TestPhase6UgcPiiScrubbing:
+    """Phase 6: PII scrubbing must redact before any public render.
+    Conservative — better to over-redact than leak."""
+
+    def test_scrub_email(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("Email me at john.doe+tag@example.co")
+        assert "john.doe" not in out
+        assert "example.co" not in out
+        assert "[email redacted]" in out
+
+    def test_scrub_multiple_emails(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("a@b.com and c@d.org")
+        assert out.count("[email redacted]") == 2
+
+    def test_scrub_phone_us_format(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("Call (415) 555-1234 anytime")
+        assert "555-1234" not in out
+        assert "555" not in out  # full number stripped
+        assert "[phone redacted]" in out
+
+    def test_scrub_phone_intl_format(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("+86 138 0013 8000")
+        assert "138" not in out
+        assert "[phone redacted]" in out
+
+    def test_scrub_url(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("See https://github.com/me/repo")
+        assert "github.com" not in out
+        assert "[link redacted]" in out
+
+    def test_scrub_at_handle(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("Follow @username for more")
+        assert "@username" not in out
+        assert "[handle redacted]" in out
+
+    def test_scrub_preserves_non_pii_text(self):
+        from app.core import ugc
+        text = "The book discusses how capitalism evolved in the 19th century."
+        assert ugc.scrub_pii_for_public_display(text) == text
+
+    def test_scrub_empty(self):
+        from app.core import ugc
+        assert ugc.scrub_pii_for_public_display("") == ""
+
+    def test_scrub_mixed(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display(
+            "I'm jane@example.com, call 555-867-5309 or DM @jane_x"
+        )
+        assert "jane@example" not in out
+        assert "867" not in out
+        assert "@jane_x" not in out
+
+
+class TestPhase6UgcHandleValidation:
+    def test_valid_handle(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("ReaderJane")
+        assert h == "ReaderJane"
+        assert err is None
+
+    def test_trims_whitespace(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("  jane  ")
+        assert h == "jane"
+
+    def test_empty_returns_anonymous_not_error(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("")
+        assert h == ""
+        assert err is None  # caller falls back to "Anonymous"
+        h, err = ugc.validate_public_handle(None)
+        assert h == ""
+        assert err is None
+
+    def test_rejects_email_like(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("jane@example.com")
+        assert h == ""
+        assert err is not None
+        assert "@" in err
+
+    def test_rejects_long_digit_run(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("user12345")  # 5 digits in a row
+        assert h == ""
+        assert err is not None
+
+    def test_rejects_too_long(self):
+        from app.core import ugc
+        h, err = ugc.validate_public_handle("x" * 100)
+        assert h == ""
+        assert err is not None
+
+
+class TestPhase6UgcFeatureFlag:
+    """The kill switch must default OFF and gate everything."""
+
+    def test_default_disabled(self):
+        # We can't change the env var post-import (read at module load
+        # time), but the module-level read at import time is the only
+        # thing that matters in production. Default should be False.
+        from app.core import ugc
+        # Just confirm the function exists and returns a bool — actual
+        # value depends on env. In test env (no var), default is False.
+        result = ugc.is_enabled()
+        assert isinstance(result, bool)
+        # In CI / local dev where ENABLE_PUBLIC_DISCUSSIONS is unset,
+        # this must be False.
+        import os
+        if not os.getenv("ENABLE_PUBLIC_DISCUSSIONS"):
+            assert result is False
+
+
+class TestPhase6UgcDiscussionForumJsonld:
+    def test_basic_structure(self):
+        from app.core import ugc
+        ld = ugc.discussion_forum_jsonld(
+            posts=[
+                {
+                    "handle": "Jane",
+                    "body": "Great book.",
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "session_id": "s1",
+                },
+            ],
+            page_url="https://x.com/book/b1/discussions",
+            headline="Discussions about Sapiens",
+            about_url="https://x.com/book/b1",
+            about_type="Book",
+            about_name="Sapiens",
+        )
+        assert ld["@type"] == "DiscussionForumPosting"
+        assert ld["commentCount"] == 1
+        assert ld["comment"][0]["@type"] == "Comment"
+        assert ld["comment"][0]["author"]["name"] == "Jane"
+        assert ld["about"]["@type"] == "Book"
+        assert ld["about"]["name"] == "Sapiens"
+
+    def test_anonymous_falls_back_when_handle_missing(self):
+        from app.core import ugc
+        ld = ugc.discussion_forum_jsonld(
+            posts=[{"body": "x", "created_at": "", "session_id": "s1"}],
+            page_url="u", headline="h", about_url="a",
+            about_type="Book", about_name="n",
+        )
+        assert ld["comment"][0]["author"]["name"] == "Anonymous"
+
+    def test_empty_posts(self):
+        from app.core import ugc
+        ld = ugc.discussion_forum_jsonld(
+            posts=[], page_url="u", headline="h", about_url="a",
+            about_type="Person", about_name="n",
+        )
+        assert ld["commentCount"] == 0
+        assert ld["comment"] == []
+        assert ld["about"]["@type"] == "Person"
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in

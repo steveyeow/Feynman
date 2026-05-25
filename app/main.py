@@ -43,15 +43,25 @@ from .core.db import (
     init_db,
     list_agents,
     list_chat_sessions,
+    approve_chat_session_public,
+    count_pending_public_sessions,
+    get_chat_session_with_public_status,
     list_books_by_topic,
     list_books_for_mind,
     list_messages,
+    list_messages_for_public_session,
     list_minds,
     list_minds_by_topic,
     list_minds_for_agent,
+    list_public_sessions_for_agent,
+    list_public_sessions_for_mind,
     list_questions,
     list_questions_batch,
+    list_related_books,
     list_related_minds,
+    reject_chat_session_public,
+    request_chat_session_share,
+    withdraw_chat_session_share,
     list_session_messages,
     list_user_interest_profile,
     list_votes,
@@ -75,6 +85,7 @@ from .core.providers import GeminiProvider, ProviderError, chat_with_fallback, p
 from .core.rag import build_context, retrieve, retrieve_cross_book
 from .core import seo as seo_render
 from .core import qa as qa_module
+from .core import ugc as ugc_module
 from .core.minds import (
     SEED_MINDS,
     create_mind_from_content,
@@ -767,6 +778,27 @@ def sitemap_xml():
     <priority>0.8</priority>
   </url>
 """
+        # Phase 6 — public discussion pages. Only included when the
+        # feature flag is on, so the sitemap stays consistent with the
+        # actual route surface. Flip ENABLE_PUBLIC_DISCUSSIONS to surface
+        # these to Google.
+        if ugc_module.is_enabled():
+            for agent in ready_agents:
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/book/{agent["id"]}/discussions</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>
+"""
+            for mind in all_minds:
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["id"]}/discussions</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
+  </url>
+"""
     except Exception:
         pass
 
@@ -1107,6 +1139,16 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         related_minds = list_minds_for_agent(agent_id)
     except Exception:
         related_minds = []
+    # Phase 5 — related books surfaced from same-topic + same-author cohort
+    agent_meta = agent.get("meta") or {}
+    book_topic = (agent_meta.get("category") or "").strip()
+    book_author = author_raw or (agent_meta.get("author") or "")
+    try:
+        related_books = list_related_books(
+            agent_id, topic=book_topic, author=book_author, limit=6,
+        )
+    except Exception:
+        related_books = []
 
     # ── Detect capabilities (Phase 3a) ──────────────────────────────────
     # Not every book supports every action; e.g. catalog stubs only support
@@ -1127,6 +1169,8 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         questions, chat_url, book_id=agent_id, site_url=base,
     )
     minds_html = seo_render.render_minds_for_book(related_minds, base)
+    related_books_html = seo_render.render_related_books(related_books, base)
+    topic_link_html = seo_render.render_topic_link_back(book_topic, base) if book_topic else ""
     cta_html = seo_render.render_cta_matrix(
         caps, entity_id=agent_id, entity_name=title_raw, base=base
     )
@@ -1213,6 +1257,8 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {toc_html}
 {questions_html}
 {minds_html}
+{related_books_html}
+{topic_link_html}
 {cta_html}
 {redirect_script}
 </body></html>"""
@@ -1297,6 +1343,13 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
         related = list_related_minds(mind_id, domain_raw)
     except Exception:
         related = []
+    # Phase 5 — surface topic-hub links for any TOPIC_TAG this mind is
+    # relevant to. Reuses the same morphological matcher Phase 4B uses
+    # to gate /mind/{id}/on/{topic} compound pages, so the two link sets
+    # stay consistent.
+    matching_topics = [
+        t for t in TOPIC_TAGS if qa_module.is_mind_topic_relevant(mind, t)
+    ]
 
     # "Books in library" surfaces the extras that Notable Works doesn't already
     # list — avoid double-rendering the same title in both sections.
@@ -1320,6 +1373,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
     works_html = seo_render.render_mind_works(works_list, linked_books, base)
     extra_books_html = seo_render.render_books_for_mind(extra_books, base)
     related_html = seo_render.render_related_minds(related, base)
+    topic_links_html = seo_render.render_topic_links_for_mind(matching_topics, base)
 
     # ── JSON-LD ─────────────────────────────────────────────────────────
     # sameAs telling Google's Knowledge Graph "this is THE Karl Marx" is
@@ -1402,6 +1456,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {works_html}
 {extra_books_html}
 {related_html}
+{topic_links_html}
 <p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
 {redirect_script}
 </body></html>"""
@@ -1777,6 +1832,388 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
         html,
         headers={
             "Cache-Control": "public, max-age=3600, s-maxage=86400",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+# ─── Phase 6 — UGC: public discussions ──────────────────────────────
+#
+# Privacy is the whole game here. The feature is entirely gated by the
+# ENABLE_PUBLIC_DISCUSSIONS env var (default OFF) — all five routes
+# below return 404 when the flag is off, so the surface is invisible
+# until product/legal sign off. See app/core/ugc.py for the full
+# privacy model.
+#
+# Admin moderation is gated by ADMIN_USER_IDS env (comma-separated
+# user IDs). Empty / unset means no one can moderate, which combined
+# with the feature flag means the system stays in a safe state by
+# default even if the flag is accidentally flipped.
+
+
+def _is_admin_user(request: Request) -> bool:
+    """Membership check against ADMIN_USER_IDS env var."""
+    admin_ids = {
+        s.strip() for s in os.getenv("ADMIN_USER_IDS", "").split(",") if s.strip()
+    }
+    if not admin_ids:
+        return False
+    uid = _get_user_id(request)
+    return bool(uid) and uid in admin_ids
+
+
+def _require_ugc_enabled() -> None:
+    """Raise 404 if the feature flag is off. We use 404 (not 403) to
+    avoid signalling the route's existence to probes — the surface is
+    effectively absent when disabled."""
+    if not ugc_module.is_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+class ShareChatSessionRequest(BaseModel):
+    handle: str | None = Field(default=None, max_length=40)
+
+
+@app.post("/api/chat-sessions/{session_id}/share")
+def api_chat_session_share(
+    session_id: str, payload: ShareChatSessionRequest, request: Request,
+):
+    """User opts in to making this chat session publicly visible.
+    Status moves to 'opted_in' awaiting admin approval. Idempotent —
+    re-sharing updates the handle but doesn't double-stamp consent."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    handle, err = ugc_module.validate_public_handle(payload.handle or "")
+    if err:
+        raise HTTPException(status_code=422, detail=err)
+    result = request_chat_session_share(session_id, uid, handle=handle or None)
+    if not result:
+        # Either not found, not owned, or rejected — return 404 for all
+        # three to avoid leaking ownership / state info.
+        raise HTTPException(status_code=404, detail="Session not eligible for sharing")
+    return {
+        "id": result["id"],
+        "public_status": result["public_status"],
+        "public_handle": result.get("public_handle"),
+        "consent_at": result.get("consent_at"),
+    }
+
+
+@app.post("/api/chat-sessions/{session_id}/withdraw")
+def api_chat_session_withdraw(session_id: str, request: Request):
+    """User withdraws consent. Status moves to 'withdrawn' (or stays
+    withdrawn — idempotent). Works at any prior status."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    result = withdraw_chat_session_share(session_id, uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.get("/api/chat-sessions/{session_id}/public-status")
+def api_chat_session_public_status(session_id: str, request: Request):
+    """Read the current public status of a session. Owner-only."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("user_id") != uid:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "id": sess["id"],
+        "public_status": sess.get("public_status", "private"),
+        "public_handle": sess.get("public_handle"),
+        "consent_at": sess.get("consent_at"),
+        "approved_at": sess.get("approved_at"),
+    }
+
+
+class AdminApproveRequest(BaseModel):
+    public_title: str | None = Field(default=None, max_length=200)
+
+
+@app.post("/api/admin/chat-sessions/{session_id}/approve")
+def api_admin_approve_session(
+    session_id: str, payload: AdminApproveRequest, request: Request,
+):
+    """Admin approves an opted-in session for public display."""
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        # Don't reveal whether the route exists to non-admins.
+        raise HTTPException(status_code=404, detail="Not found")
+    admin_uid = _get_user_id(request) or ""
+    result = approve_chat_session_public(
+        session_id, admin_uid, public_title=payload.public_title,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not pending approval")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.post("/api/admin/chat-sessions/{session_id}/reject")
+def api_admin_reject_session(session_id: str, request: Request):
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    admin_uid = _get_user_id(request) or ""
+    result = reject_chat_session_public(session_id, admin_uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not pending approval")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.get("/api/admin/moderation-queue/count")
+def api_admin_moderation_queue_count(request: Request):
+    """Tiny endpoint for an admin dashboard to poll the queue size."""
+    _require_ugc_enabled()
+    if not _is_admin_user(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"pending": count_pending_public_sessions()}
+
+
+# ── Public discussion render routes (SSR; feature-flag gated) ────────
+
+
+def _render_public_post_html(session: dict[str, Any], chat_url: str) -> str:
+    """Render one approved chat session as a discussion post. PII is
+    scrubbed before display. Empty bodies render as a one-line stub
+    rather than a blank card."""
+    from html import escape as html_esc
+
+    title = (
+        session.get("public_title")
+        or session.get("title")
+        or "Discussion"
+    )
+    handle = session.get("public_handle") or "Anonymous"
+    # Fetch messages and assemble a sanitized snippet (cap at 4 messages,
+    # 600 chars each, then PII-scrub the whole thing).
+    msgs = []
+    try:
+        # SAFETY: list_messages_for_public_session enforces a SQL-side
+        # join on public_status='approved' so even if upstream caching
+        # surfaced a stale session row, the messages are gated by the
+        # current DB state. Caller still scrubs PII before render.
+        raw_msgs = list_messages_for_public_session(session["id"]) or []
+    except Exception:
+        raw_msgs = []
+    for m in raw_msgs[:6]:
+        role = m.get("role", "")
+        content = (m.get("content") or "").strip()
+        if not content:
+            continue
+        if len(content) > 600:
+            content = content[:597].rsplit(" ", 1)[0] + "…"
+        msgs.append((role, content))
+
+    inner = ""
+    if msgs:
+        rows = []
+        for role, content in msgs:
+            scrubbed = ugc_module.scrub_pii_for_public_display(content)
+            role_label = html_esc(role.upper()) if role else ""
+            rows.append(
+                f'<div class="msg msg-{html_esc(role)}">'
+                f'<small class="msg-role">{role_label}</small>'
+                f'<p>{html_esc(scrubbed)}</p>'
+                '</div>'
+            )
+        inner = "".join(rows)
+    else:
+        inner = '<p class="msg-empty"><em>No public content in this discussion.</em></p>'
+
+    return (
+        '<article class="public-post">'
+        f'<header><h3>{html_esc(title)}</h3>'
+        f'<small class="post-author">— {html_esc(handle)}</small></header>'
+        f'{inner}'
+        f'<p class="post-cta"><a href="{html_esc(chat_url)}">Start your own chat →</a></p>'
+        '</article>'
+    )
+
+
+def _render_public_discussions_page(
+    *,
+    entity_type: str,    # "book" or "mind"
+    entity_id: str,
+    entity_name: str,
+    entity_canonical: str,
+    chat_url: str,
+    sessions: list[dict[str, Any]],
+) -> str:
+    """Assemble the full HTML for a /discussions page. Common between
+    book and mind."""
+    from html import escape as html_esc
+
+    title_raw = f"Discussions about {entity_name} — Feynman"
+    title = html_esc(title_raw)
+    if sessions:
+        desc_raw = (
+            f"{len(sessions)} public "
+            f"{('discussion' if len(sessions) == 1 else 'discussions')} "
+            f"about {entity_name} on Feynman. "
+            f"All conversations are user-shared with consent and PII-scrubbed."
+        )
+    else:
+        desc_raw = (
+            f"Public discussions about {entity_name} on Feynman. "
+            f"Be the first to share — open a chat and opt in from your session."
+        )
+    if len(desc_raw) > 200:
+        desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
+    desc = html_esc(desc_raw)
+
+    posts_html = "".join(_render_public_post_html(s, chat_url) for s in sessions)
+    if not posts_html:
+        posts_html = (
+            '<p class="no-discussions">No public discussions yet. '
+            f'Be the first — chat with {html_esc(entity_name)} and opt to share '
+            'your conversation from the session menu.</p>'
+        )
+
+    # Build DiscussionForumPosting JSON-LD only when there are real posts
+    # (avoid emitting an empty thread schema that Google may flag).
+    forum_ld = ""
+    if sessions:
+        posts_for_ld = [
+            {
+                "handle": s.get("public_handle") or "Anonymous",
+                "body": ugc_module.scrub_pii_for_public_display(
+                    (s.get("public_title") or s.get("title") or "")
+                )[:300],
+                "created_at": s.get("approved_at") or s.get("created_at") or "",
+                "session_id": s["id"],
+            }
+            for s in sessions
+        ]
+        forum_ld = seo_render.jsonld_script(ugc_module.discussion_forum_jsonld(
+            posts=posts_for_ld,
+            page_url=entity_canonical + "/discussions",
+            headline=f"Discussions about {entity_name}",
+            about_url=entity_canonical,
+            about_type="Book" if entity_type == "book" else "Person",
+            about_name=entity_name,
+        ))
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", _SITE_URL),
+        (
+            "Books" if entity_type == "book" else "Great Minds",
+            f"{_SITE_URL}/#/{'library' if entity_type == 'book' else 'minds'}",
+        ),
+        (entity_name, entity_canonical),
+        ("Discussions", entity_canonical + "/discussions"),
+    ]))
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{entity_canonical}/discussions">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{entity_canonical}/discussions">
+<meta property="og:site_name" content="Feynman">
+{forum_ld}
+{breadcrumb_ld}
+</head><body>
+<nav class="back-link"><a href="{entity_canonical}">← {html_esc(entity_name)}</a></nav>
+<h1>Discussions about {html_esc(entity_name)}</h1>
+{posts_html}
+<p class="cta"><a href="{html_esc(chat_url)}">Start your own chat →</a></p>
+</body></html>"""
+
+
+_PUBLIC_DISCUSSIONS_CACHE_TTL = 600  # 10 min — fresh enough for new approvals
+
+
+@app.get("/book/{agent_id}/discussions", response_class=HTMLResponse)
+def book_discussions_page(agent_id: str, request: Request) -> HTMLResponse:
+    """List approved public discussions for this book. Returns 404 if
+    the feature flag is off, so the surface is invisible by default."""
+    _require_ugc_enabled()
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    cache_key = f"public_discussions_book:{agent_id}"
+    cached = _cache_get(cache_key, _PUBLIC_DISCUSSIONS_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=600, s-maxage=600",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        sessions = list_public_sessions_for_agent(agent_id)
+    except Exception:
+        sessions = []
+    entity_name = agent.get("name") or "this book"
+    html = _render_public_discussions_page(
+        entity_type="book",
+        entity_id=agent_id,
+        entity_name=entity_name,
+        entity_canonical=f"{_SITE_URL}/book/{agent_id}",
+        chat_url=f"{_SITE_URL}/#/chat/{agent_id}",
+        sessions=sessions,
+    )
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=600, s-maxage=600",
+            "X-Cache": "MISS",
+        },
+    )
+
+
+@app.get("/mind/{mind_id}/discussions", response_class=HTMLResponse)
+def mind_discussions_page(mind_id: str, request: Request) -> HTMLResponse:
+    _require_ugc_enabled()
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+
+    cache_key = f"public_discussions_mind:{mind_id}"
+    cached = _cache_get(cache_key, _PUBLIC_DISCUSSIONS_CACHE_TTL)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={
+                "Cache-Control": "public, max-age=600, s-maxage=600",
+                "X-Cache": "HIT",
+            },
+        )
+
+    try:
+        sessions = list_public_sessions_for_mind(mind_id)
+    except Exception:
+        sessions = []
+    entity_name = mind.get("name") or "this mind"
+    html = _render_public_discussions_page(
+        entity_type="mind",
+        entity_id=mind_id,
+        entity_name=entity_name,
+        entity_canonical=f"{_SITE_URL}/mind/{mind_id}",
+        chat_url=f"{_SITE_URL}/#/mind/{mind_id}",
+        sessions=sessions,
+    )
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={
+            "Cache-Control": "public, max-age=600, s-maxage=600",
             "X-Cache": "MISS",
         },
     )

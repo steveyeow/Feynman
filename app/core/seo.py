@@ -379,6 +379,66 @@ def render_popular_questions(
     )
 
 
+def render_related_books(books: list[dict[str, Any]], site_url: str) -> str:
+    """Other books readers may want next. Same-topic and same-author
+    matches surfaced together. Phase 5 — closes the book↔book half of
+    the internal linking graph."""
+    if not books:
+        return ""
+    items = []
+    for b in books:
+        if not b.get("id") or not b.get("name"):
+            continue
+        author = f' — {_esc(b["author"])}' if b.get("author") else ""
+        items.append(
+            f'<li><a href="{_esc(site_url)}/book/{_esc(b["id"])}">{_esc(b["name"])}</a>{author}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section><h2>Related books</h2>'
+        f'<ul class="related-books">{"".join(items)}</ul></section>'
+    )
+
+
+def render_topic_link_back(topic: str, site_url: str) -> str:
+    """A single "← back to topic" link on entity pages whose meta.category
+    matches one of the canonical topics. Closes the book→topic-hub edge,
+    pushing PageRank up the tree."""
+    if not topic:
+        return ""
+    slug = slugify(topic)
+    if not slug:
+        return ""
+    return (
+        f'<p class="topic-link-back">More on '
+        f'<a href="{_esc(site_url)}/topic/{slug}">{_esc(topic)}</a></p>'
+    )
+
+
+def render_topic_links_for_mind(matching_topics: list[str], site_url: str) -> str:
+    """Render a row of links to relevant topic hubs from a mind's page.
+    ``matching_topics`` is a pre-filtered list — caller decides which
+    topics this mind belongs to (typically via qa.is_mind_topic_relevant).
+    """
+    if not matching_topics:
+        return ""
+    items = []
+    for t in matching_topics[:5]:
+        slug = slugify(t)
+        if not slug:
+            continue
+        items.append(
+            f'<a href="{_esc(site_url)}/topic/{slug}">{_esc(t)}</a>'
+        )
+    if not items:
+        return ""
+    return (
+        '<p class="topic-links">Explore the topics this mind discusses: '
+        f'{" · ".join(items)}</p>'
+    )
+
+
 def render_minds_for_book(minds: list[dict[str, Any]], site_url: str) -> str:
     """Cross-links from /book/{id} → /mind/{id}. The single biggest
     internal-link source we have."""
