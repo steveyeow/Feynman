@@ -700,6 +700,37 @@ class TestPhase4QAHelpers:
         assert text  # non-empty deflection
         assert "Book" in text  # mentions the book by title
 
+    def test_qa_page_jsonld_has_google_required_fields(self):
+        """Regression guard for the 'Q&A: 1 invalid item detected' bug
+        flagged in GSC URL Inspection. Google's QAPage rich-result spec
+        requires Question.text and Question.answerCount in addition to
+        Question.name. v1 emitted only name → GSC rejected the schema."""
+        ld = seo.qa_page_jsonld(
+            question="What is the central thesis?",
+            answer="The central thesis is X.",
+            url="https://x.com/q", book_title="B", book_url="https://x.com/b",
+        )
+        q = ld["mainEntity"]
+        # Required by Google QAPage spec
+        assert "name" in q
+        assert "text" in q, "Question.text required by Google QAPage spec"
+        assert q["text"] == "What is the central thesis?"
+        assert "answerCount" in q, "Question.answerCount required by Google QAPage spec"
+        assert q["answerCount"] == 1
+        # Author for richer eligibility
+        assert "author" in q
+        assert q["author"]["@type"] == "Organization"
+        assert q["acceptedAnswer"]["author"]["@type"] == "Organization"
+
+    def test_qa_page_jsonld_includes_date_created_when_provided(self):
+        ld = seo.qa_page_jsonld(
+            question="Q?", answer="A.",
+            url="u", book_title="B", book_url="b",
+            date_created="2026-01-01T00:00:00Z",
+        )
+        assert ld["mainEntity"]["dateCreated"] == "2026-01-01T00:00:00Z"
+        assert ld["mainEntity"]["acceptedAnswer"]["dateCreated"] == "2026-01-01T00:00:00Z"
+
 
 class TestPhase4MindOnTopic:
     """Phase 4B: /mind/{id}/on/{topic} compound pages."""
