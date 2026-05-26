@@ -37,6 +37,11 @@ PUBLIC_PATHS = {
     "/sitemap.xml",
     "/llms.txt",
     "/llms-full.txt",
+    # Phase 7.2 — IndexNow key verification file. Bing/Yandex/Naver
+    # fetch this without auth to verify domain ownership before
+    # accepting URL submissions. The filename includes the configured
+    # INDEXNOW_KEY (env var), so it's added at import time.
+    f"/{__import__('os').getenv('INDEXNOW_KEY', 'feynman-indexnow-2026-05-26-7f3a').strip().lower()}.txt",
 }
 PUBLIC_PREFIXES = ("/static/", "/share/", "/book/", "/mind/", "/topic/", "/api/public/")
 

@@ -46,8 +46,10 @@ from .core.db import (
     approve_chat_session_public,
     count_assistant_messages_batch,
     count_assistant_messages_for_minds_batch,
+    count_llm_referrals,
     count_pending_public_sessions,
     get_chat_session_with_public_status,
+    log_llm_referral,
     list_assistant_messages_for_agent,
     list_assistant_messages_for_mind,
     list_books_by_topic,
@@ -91,6 +93,8 @@ from .core import seo as seo_render
 from .core import qa as qa_module
 from .core import ugc as ugc_module
 from .core import insights as insights_module
+from .core import llm_analytics as llm_analytics_module
+from .core import indexnow as indexnow_module
 from .core.minds import (
     SEED_MINDS,
     create_mind_from_content,
@@ -138,6 +142,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Phase 7.3 — LLM referrer tracking middleware ───
+#
+# Sniffs Referer and User-Agent on every request, classifies LLM origin,
+# and logs the hit to llm_referrals. Fail-open: a logging failure is
+# never propagated. Runs AFTER CORS (so OPTIONS preflights are skipped)
+# and BEFORE the auth middleware (which may 401 the request — we want
+# to record that an LLM tried to hit a gated URL too).
+@app.middleware("http")
+async def _llm_referer_middleware(request: Request, call_next):
+    try:
+        referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+        ua = request.headers.get("user-agent", "")
+        source, ua_class = llm_analytics_module.classify_request(referer, ua)
+        if source:
+            log_llm_referral(request.url.path, source, ua_class)
+    except Exception:
+        pass  # never break the request
+    return await call_next(request)
+
 
 # ─── Pro: Auth middleware (only when ENABLE_AUTH=true) ───
 if os.getenv("ENABLE_AUTH"):
@@ -615,6 +639,23 @@ def privacy_page() -> HTMLResponse:
 # ─── SEO & GEO endpoints ───
 
 _SITE_URL = os.getenv("APP_URL", "https://feynman.wiki").rstrip("/")
+
+
+# ─── Phase 7.2 — IndexNow key verification file ───
+#
+# Bing/Yandex/Naver fetch this to verify we own the domain before
+# accepting URL submissions. The file body must be exactly the key
+# string. Route path is built from the env-configured key at startup —
+# rotating INDEXNOW_KEY requires a redeploy (intentional: we want the
+# key location and the key value to stay in lockstep).
+@app.get(f"/{indexnow_module.INDEXNOW_KEY}.txt")
+def indexnow_key_file():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(
+        indexnow_module.get_key_file_content(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/robots.txt")
@@ -1233,11 +1274,34 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     minds_html = seo_render.render_minds_for_book(related_minds, base)
     related_books_html = seo_render.render_related_books(related_books, base)
     topic_link_html = seo_render.render_topic_link_back(book_topic, base) if book_topic else ""
+
+    # Phase 5.6 — bottom-of-page Explore neighborhood: 3-5 cross-links
+    # to adjacent entities. Mix related minds, related books, and the
+    # topic hub so the link cluster reflects the graph in miniature.
+    explore_items: list[dict[str, str]] = []
+    if book_topic:
+        explore_items.append({
+            "label": f"More on {book_topic}",
+            "href": f"/topic/{seo_render.topic_slug(book_topic)}",
+        })
+    for m in related_minds[:2]:
+        if m.get("id") and m.get("name"):
+            explore_items.append({"label": m["name"], "href": f"/mind/{m['id']}"})
+    for b in related_books[:2]:
+        if b.get("id") and b.get("name"):
+            explore_items.append({"label": b["name"], "href": f"/book/{b['id']}"})
+    explore_footer_html = seo_render.render_explore_footer(explore_items, base)
     cta_html = seo_render.render_cta_matrix(
         caps, entity_id=agent_id, entity_name=title_raw, base=base
     )
 
     # ── Build JSON-LD blocks ────────────────────────────────────────────
+    # Date fields for the Book schema. agents.created_at is the only
+    # timestamp we reliably have; without an updated_at column we use
+    # the same value for both, which is honest (the page reflects the
+    # entity at creation time + whatever AI synthesis was generated
+    # afterward, which is all derived from the same source).
+    agent_created_at = agent.get("created_at", "") or ""
     book_ld = seo_render.jsonld_script(seo_render.book_jsonld(
         title=title_raw,
         description=subtitle_raw or desc_raw,
@@ -1247,6 +1311,8 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         word_count=total_words or None,
         chapters=chapters or None,
         site_url=base,
+        date_published=agent_created_at,
+        date_modified=agent_created_at,
     ))
     breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
         ("Feynman", base),
@@ -1322,6 +1388,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {related_books_html}
 {topic_link_html}
 {cta_html}
+{explore_footer_html}
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
@@ -1437,6 +1504,23 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
     related_html = seo_render.render_related_minds(related, base)
     topic_links_html = seo_render.render_topic_links_for_mind(matching_topics, base)
 
+    # Phase 5.6 — Explore footer. Mix top related minds, top books from
+    # this mind's library, and the first matching topic hub.
+    explore_items: list[dict[str, str]] = []
+    if matching_topics:
+        first_topic = matching_topics[0]
+        explore_items.append({
+            "label": f"More on {first_topic}",
+            "href": f"/topic/{seo_render.topic_slug(first_topic)}",
+        })
+    for rm in related[:2]:
+        if rm.get("id") and rm.get("name"):
+            explore_items.append({"label": rm["name"], "href": f"/mind/{rm['id']}"})
+    for b in (linked_books or [])[:2]:
+        if b.get("id") and b.get("name"):
+            explore_items.append({"label": b["name"], "href": f"/book/{b['id']}"})
+    explore_footer_html = seo_render.render_explore_footer(explore_items, base)
+
     # ── JSON-LD ─────────────────────────────────────────────────────────
     # sameAs telling Google's Knowledge Graph "this is THE Karl Marx" is
     # the single biggest entity-identity signal we can send. Curated list
@@ -1449,6 +1533,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
         url=canonical,
         image=og_image_url,
         same_as=seo_render.lookup_same_as(name_raw),
+        date_modified=mind.get("created_at", "") or "",
     ))
     breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
         ("Feynman", base),
@@ -1520,6 +1605,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {related_html}
 {topic_links_html}
 <p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
+{explore_footer_html}
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
@@ -2116,6 +2202,17 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
     books_html = seo_render.render_topic_books(books, base)
     minds_html = seo_render.render_topic_minds(minds, base)
 
+    # Phase 5.6 — Explore footer: link to other topic hubs so crawlers
+    # see the full topic graph. Pick 4 sibling topics (skip self).
+    siblings = [t for t in TOPIC_TAGS if t != topic][:4]
+    explore_items = [
+        {"label": t, "href": f"/topic/{seo_render.topic_slug(t)}"}
+        for t in siblings
+    ]
+    explore_footer_html = seo_render.render_explore_footer(
+        explore_items, base, label="Other topics",
+    )
+
     # Collection schema with embedded ItemList (book entries first, then
     # minds). LLMs use this to enumerate "what's in this topic" cleanly.
     items: list[dict[str, str]] = []
@@ -2163,6 +2260,7 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
 {books_html}
 {minds_html}
 <p class="cta"><a href="{base}/#/library">Explore the full Feynman library →</a></p>
+{explore_footer_html}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -2312,6 +2410,22 @@ def api_admin_moderation_queue_count(request: Request):
     if not _is_admin_user(request):
         raise HTTPException(status_code=404, detail="Not found")
     return {"pending": count_pending_public_sessions()}
+
+
+@app.get("/api/admin/llm-referrals")
+def api_admin_llm_referrals(request: Request, since_days: int = 7):
+    """Aggregate LLM referrer counts for the admin dashboard. Answers
+    'which of our pages got cited by ChatGPT/Perplexity/Claude this week.'
+
+    Phase 7.3 — gated by ADMIN_USER_IDS like the moderation endpoints
+    so the URL doesn't reveal traffic data to anonymous probes. ``since_days``
+    defaults to 7 (1 week), capped at 365 to keep the SQL bounded."""
+    if not _is_admin_user(request):
+        raise HTTPException(status_code=404, detail="Not found")
+    from datetime import datetime, timedelta, timezone
+    days = max(1, min(int(since_days), 365))
+    since_iso = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    return count_llm_referrals(since_iso=since_iso)
 
 
 # ── Public discussion render routes (SSR; feature-flag gated) ────────
@@ -2708,6 +2822,38 @@ def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> di
         if a["status"] == "catalog":
             background_tasks.add_task(_learn_agent, a["id"])
     return {"status": "ok"}
+
+
+@app.get("/api/cron/indexnow")
+def api_cron_indexnow(request: Request) -> dict[str, Any]:
+    """Phase 7.2 — daily IndexNow ping. Submits URLs of entities created
+    in the last 24 hours to Bing/Yandex/Naver for faster indexing."""
+    _verify_cron(request)
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=26)).isoformat()
+    urls: list[str] = []
+    # Recent ready agents → /book/{id}
+    for a in list_agents(limit=2000):
+        if a.get("status") != "ready":
+            continue
+        if (a.get("created_at") or "") < cutoff:
+            continue
+        urls.append(f"{_SITE_URL}/book/{a['id']}")
+    # Recent minds → /mind/{id}
+    for m in list_minds(limit=2000):
+        if (m.get("created_at") or "") < cutoff:
+            continue
+        urls.append(f"{_SITE_URL}/mind/{m['id']}")
+    # Always re-ping sitemap so engines re-fetch the URL graph
+    urls.append(f"{_SITE_URL}/sitemap.xml")
+
+    host = _SITE_URL.split("://", 1)[-1].rstrip("/")
+    result = indexnow_module.ping_urls(urls, host=host)
+    return {
+        "candidates": len(urls),
+        "ping_result": result,
+        "key_url": f"{_SITE_URL}/{indexnow_module.INDEXNOW_KEY}.txt",
+    }
 
 
 @app.get("/api/cron/seed-minds")
