@@ -1257,9 +1257,15 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     # Not every book supports every action; e.g. catalog stubs only support
     # chat. Render the CTA matrix to match — no more blanket "Read" link
     # for books with 63 words of content.
+    #
+    # NOTE: chat_url uses /#/read/, not /#/chat/. The SPA's /#/chat/{id}
+    # route is a chat-session-id route, NOT a book-id route — passing a
+    # book id there lands the user in an empty/wrong session. The reader
+    # at /#/read/{id} carries the chat sidebar so it handles all three
+    # capability states (full read, preview, chat-only catalog stub).
     caps = seo_render.detect_capabilities(agent, book)
-    chat_url = f"{base}/#/chat/{id_path}"
-    cta_target_url = reader_url if caps.get("read") or caps.get("preview") else chat_url
+    chat_url = reader_url  # both resolve to /#/read/{book_id}
+    cta_target_url = reader_url
 
     # ── Build content sections ──────────────────────────────────────────
     about_html = seo_render.render_book_about(subtitle_raw, author_raw)
@@ -1706,7 +1712,8 @@ def book_question_page(agent_id: str, question_slug: str, request: Request) -> H
         desc_raw = desc_raw[:197].rsplit(" ", 1)[0] + "..."
     desc = html_esc(desc_raw)
     og_image_url = f"{base}/book/{agent_id}/og.png?v={config.OG_IMAGE_CACHE_VERSION}"
-    chat_url = f"{base}/#/chat/{agent_id}"
+    # See book_page comment — book chat lives at /#/read/{id} in the SPA.
+    chat_url = f"{base}/#/read/{agent_id}"
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1919,7 +1926,8 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
     base = _SITE_URL
     entity_canonical = f"{base}/book/{agent_id}"
     canonical = f"{entity_canonical}/insights"
-    chat_url = f"{base}/#/chat/{agent_id}"
+    # Book chat lives at /#/read/{id} — see book_page handler comment.
+    chat_url = f"{base}/#/read/{agent_id}"
 
     # ── Extract → sanitize → publishable filter ────────────────────────
     try:
@@ -2618,7 +2626,8 @@ def book_discussions_page(agent_id: str, request: Request) -> HTMLResponse:
         entity_id=agent_id,
         entity_name=entity_name,
         entity_canonical=f"{_SITE_URL}/book/{agent_id}",
-        chat_url=f"{_SITE_URL}/#/chat/{agent_id}",
+        # Book chat lives at /#/read/{id} — see book_page handler comment.
+        chat_url=f"{_SITE_URL}/#/read/{agent_id}",
         sessions=sessions,
     )
     _cache_set(cache_key, html)

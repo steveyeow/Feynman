@@ -542,20 +542,25 @@ class TestRenderCtaMatrix:
         assert "Chat about Sapiens" in out
         # Read subsumes Preview — no separate Preview button when Read available
         assert "Preview Sapiens" not in out
+        # Both buttons resolve to /#/read/ (the SPA reader is the chat entry
+        # point for books; /#/chat/{id} is a session-id route, NOT a book
+        # route — see render_cta_matrix docstring).
         assert 'href="https://x.com/#/read/abc"' in out
-        assert 'href="https://x.com/#/chat/abc"' in out
+        assert "/#/chat/abc" not in out, "must not link to /#/chat/{book_id} — that's a session route"
 
     def test_renders_only_chat_for_catalog_stub(self):
         caps = {"read": False, "preview": False, "chat": True}
         out = seo.render_cta_matrix(
             caps, entity_id="abc", entity_name="Stub Book", base="https://x.com",
         )
-        # The bug fix: no misleading Read button for catalog stubs
+        # The bug fix from Phase 3a: no misleading Read button for catalog stubs
         assert "Read Stub Book" not in out
         assert "Chat about Stub Book" in out
-        # And only the chat URL — no /#/read/ link at all
-        assert "/#/read/" not in out
-        assert 'href="https://x.com/#/chat/abc"' in out
+        # Chat button still points to /#/read/{id} (reader handles empty
+        # content for catalog stubs — chat sidebar is the entry point).
+        assert 'href="https://x.com/#/read/abc"' in out
+        # Must NOT use /#/chat/{book_id} — that route expects a session id.
+        assert "/#/chat/abc" not in out
 
     def test_renders_preview_when_partial_content(self):
         caps = {"read": False, "preview": True, "chat": True}

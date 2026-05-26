@@ -1152,12 +1152,17 @@ def render_cta_matrix(
 ) -> str:
     """Render the action buttons matching detected capabilities.
 
-    Buttons land users on the SPA hash routes that actually work for this
-    entity. All actions for one book share the same on-page section so the
-    user sees one row of clear choices instead of a misleading single CTA.
+    All book buttons resolve to ``/#/read/{id}`` — that's the SPA route
+    that opens the book reader, which carries the chat interface in its
+    sidebar. **Do not use ``/#/chat/{id}`` for books**: that hash route
+    is a chat-session-id route in the SPA (not a book route), so passing
+    a book id there lands the user in an empty/wrong chat session
+    (this was the bug shipped in Phase 3a and fixed here).
 
-    When ``read`` is available we don't render a separate Preview button —
-    "Read" subsumes preview, and showing both creates decision friction.
+    When ``read`` is available we still render BOTH Read and Chat buttons
+    even though they resolve to the same URL — distinct anchor text
+    ("Read X" vs "Chat about X") doubles internal-link signal diversity
+    for SEO and clarifies user intent at the page level.
     """
     if not (caps.get("read") or caps.get("preview") or caps.get("chat")):
         return ""
@@ -1165,25 +1170,22 @@ def render_cta_matrix(
     buttons: list[str] = []
     name = _esc(entity_name or "this book")
     eid = _esc(entity_id)
+    # The single canonical entry point for any book action. Reader UI
+    # handles all three capability states (full book, preview, chat-only).
+    book_url = f"{_esc(base)}/#/read/{eid}"
 
     if caps.get("read"):
         buttons.append(
-            f'<a class="cta-btn cta-read" href="{_esc(base)}/#/read/{eid}">'
-            f'Read {name}</a>'
+            f'<a class="cta-btn cta-read" href="{book_url}">Read {name}</a>'
         )
     elif caps.get("preview"):
-        # Preview surfaces the same reader URL — the reader UI decides what
-        # to show based on what content exists. The CTA wording manages
-        # expectation: "Preview" implies partial.
         buttons.append(
-            f'<a class="cta-btn cta-preview" href="{_esc(base)}/#/read/{eid}">'
-            f'Preview {name}</a>'
+            f'<a class="cta-btn cta-preview" href="{book_url}">Preview {name}</a>'
         )
 
     if caps.get("chat"):
         buttons.append(
-            f'<a class="cta-btn cta-chat" href="{_esc(base)}/#/chat/{eid}">'
-            f'Chat about {name}</a>'
+            f'<a class="cta-btn cta-chat" href="{book_url}">Chat about {name}</a>'
         )
 
     return f'<p class="cta-row">{" ".join(buttons)}</p>'
