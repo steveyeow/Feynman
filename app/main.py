@@ -1394,10 +1394,12 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
+{seo_render.landing_css_link()}
 {book_ld}
 {breadcrumb_ld}
 {faq_ld}
 </head><body{body_style}>
+{seo_render.render_landing_header(base)}
 <h1>{title}</h1>
 {author_html}
 {about_html}
@@ -1410,6 +1412,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {topic_link_html}
 {cta_html}
 {explore_footer_html}
+{seo_render.render_site_footer(base)}
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
@@ -1612,9 +1615,11 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
 <meta name="twitter:image:alt" content="{og_image_alt}">
+{seo_render.landing_css_link()}
 {person_ld}
 {breadcrumb_ld}
 </head><body{body_style}>
+{seo_render.render_landing_header(base)}
 <h1>{name}</h1>
 {era_domain_html}
 {bio_html}
@@ -1627,6 +1632,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {topic_links_html}
 <p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
 {explore_footer_html}
+{seo_render.render_site_footer(base)}
 {redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
@@ -1748,15 +1754,18 @@ def book_question_page(agent_id: str, question_slug: str, request: Request) -> H
 <meta name="twitter:title" content="{html_esc(question)}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+{seo_render.landing_css_link()}
 {qa_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(base)}
 <nav class="qa-back"><a href="{book_url}">← {title}</a></nav>
 <h1>{html_esc(question)}</h1>
 {answer_html}
 {passages_html}
 {siblings_html}
 <p class="cta"><a href="{html_esc(chat_url)}">Chat about this question →</a></p>
+{seo_render.render_site_footer(base)}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -1862,9 +1871,11 @@ def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLR
 <meta name="twitter:title" content="{html_esc(f'How {name_raw} would approach {topic}')}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+{seo_render.landing_css_link()}
 {article_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(base)}
 <nav class="essay-back"><a href="{mind_url}">← {name}</a></nav>
 <h1>How {name} would approach {html_esc(topic)}</h1>
 {essay_html}
@@ -1873,6 +1884,7 @@ def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLR
   <a href="{topic_hub_url}">{html_esc(topic)} on Feynman</a>
 </p>
 <p class="cta"><a href="{html_esc(chat_url)}">Chat with {name} →</a></p>
+{seo_render.render_site_footer(base)}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -2016,9 +2028,11 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+{seo_render.landing_css_link()}
 {article_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(base)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI insights about {entity_name}</h1>
 <p class="insights-intro">Accumulated AI-synthesized commentary drawn from
@@ -2027,6 +2041,7 @@ the text. The AI's responses are published; user questions remain private.</p>
 {cards_html}
 {empty_html}
 <p class="cta"><a href="{html_esc(chat_url)}">Chat with {entity_name} →</a></p>
+{seo_render.render_site_footer(base)}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -2138,9 +2153,11 @@ def mind_dialogues_page(mind_id: str, request: Request) -> HTMLResponse:
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{og_image_url}">
+{seo_render.landing_css_link()}
 {article_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(base)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI dialogues with {entity_name}</h1>
 <p class="insights-intro">Accumulated AI agent responses from real user
@@ -2149,6 +2166,7 @@ The agent's responses are published; user questions remain private.</p>
 {cards_html}
 {empty_html}
 <p class="cta"><a href="{html_esc(chat_url)}">Chat with {entity_name} →</a></p>
+{seo_render.render_site_footer(base)}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -2277,15 +2295,18 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
 <meta name="twitter:site" content="@steve_yeow">
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:description" content="{desc}">
+{seo_render.landing_css_link()}
 {collection_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(base)}
 <h1>{html_esc(topic)}</h1>
 {intro_html}
 {books_html}
 {minds_html}
 <p class="cta"><a href="{base}/#/library">Explore the full Feynman library →</a></p>
 {explore_footer_html}
+{seo_render.render_site_footer(base)}
 </body></html>"""
     _cache_set(cache_key, html)
     return HTMLResponse(
@@ -2598,13 +2619,16 @@ def _render_public_discussions_page(
 <meta property="og:description" content="{desc}">
 <meta property="og:url" content="{entity_canonical}/discussions">
 <meta property="og:site_name" content="Feynman">
+{seo_render.landing_css_link()}
 {forum_ld}
 {breadcrumb_ld}
 </head><body>
+{seo_render.render_landing_header(_SITE_URL)}
 <nav class="back-link"><a href="{entity_canonical}">← {html_esc(entity_name)}</a></nav>
 <h1>Discussions about {html_esc(entity_name)}</h1>
 {posts_html}
 <p class="cta"><a href="{html_esc(chat_url)}">Start your own chat →</a></p>
+{seo_render.render_site_footer(_SITE_URL)}
 </body></html>"""
 
 
