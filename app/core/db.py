@@ -39,6 +39,39 @@ _USE_PG = bool(DATABASE_URL)
 _HAS_PGVECTOR = False
 
 
+def probe_pgvector() -> bool:
+    """Set ``_HAS_PGVECTOR`` from a single information_schema lookup.
+
+    ``init_db()`` is the canonical way to flip this flag, but it runs the
+    full migration sequence (CREATE EXTENSION, ALTER TABLE, …) which hangs
+    on Supabase's pgbouncer pooler when called from a backfill script that
+    shares the pool with the live web tier. Backfill scripts pass
+    ``--skip-init-db`` to dodge that hang — but then ``_HAS_PGVECTOR``
+    stays at its False default, ``add_chunks`` takes the legacy BYTEA
+    path, and ``embedding`` (halfvec) never gets written. Resulting chunks
+    are invisible to ``rag.ann_topk`` and ``/q/`` answers regress to
+    "the passages don't contain the information."
+
+    This probe is read-only (no DDL, no transaction) so it works through
+    pgbouncer. Call it whenever you skip ``init_db()`` but still want the
+    pgvector write path enabled.
+    """
+    global _HAS_PGVECTOR
+    if not _USE_PG:
+        _HAS_PGVECTOR = False
+        return False
+    try:
+        with get_conn() as conn:
+            row = _fetchone(conn,
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'chunks' AND column_name = 'embedding'")
+            _HAS_PGVECTOR = bool(row)
+    except Exception as exc:
+        log.warning("probe_pgvector failed, leaving _HAS_PGVECTOR=False: %s", exc)
+        _HAS_PGVECTOR = False
+    return _HAS_PGVECTOR
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -1044,22 +1077,38 @@ def add_chunks(agent_id: str, chunk_records: Iterable[dict[str, Any]]) -> None:
 
     with get_conn() as conn:
         if write_pgvec:
-            params_list = [
-                (
+            # Skip writing the legacy BYTEA `vector` column when halfvec
+            # is being written for this row — the pgvector ANN path
+            # never reads BYTEA, and once halfvec is populated the
+            # agent's meta.pgvector_ready=true flag makes RAG go
+            # straight to the SQL-side ANN. BYTEA was costing ~50KB
+            # per chunk in production (50MB chunks table → 22MB after
+            # NULLing existing rows). The fallback safety net is
+            # only needed when halfvec is NOT being written for this
+            # record (off-dim chunk, dim mismatch), in which case we
+            # keep the BYTEA so the legacy in-Python scoring path
+            # still works.
+            params_list = []
+            for rec in records:
+                halfvec = None
+                if (rec.get("embedding_floats") is not None
+                        and rec["dim"] == EMBED_DIM):
+                    halfvec = _halfvec_literal(rec["embedding_floats"])
+                # Only carry BYTEA when halfvec is absent (fallback path needed)
+                if halfvec is None:
+                    bytea_val = _pg().Binary(rec["vector"])
+                else:
+                    bytea_val = None
+                params_list.append((
                     rec["id"],
                     agent_id,
                     rec["chunk_index"],
                     rec["text"],
-                    _pg().Binary(rec["vector"]),
+                    bytea_val,
                     rec["dim"],
                     rec["norm"],
-                    _halfvec_literal(rec["embedding_floats"])
-                        if rec.get("embedding_floats") is not None
-                           and rec["dim"] == EMBED_DIM
-                        else None,
-                )
-                for rec in records
-            ]
+                    halfvec,
+                ))
             _executemany(conn, _q(
                 "INSERT INTO chunks (id, agent_id, chunk_index, text, vector, dim, norm, embedding) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -1080,6 +1129,29 @@ def add_chunks(agent_id: str, chunk_records: Iterable[dict[str, Any]]) -> None:
             _executemany(conn, _q(
                 "INSERT INTO chunks (id, agent_id, chunk_index, text, vector, dim, norm) VALUES (?, ?, ?, ?, ?, ?, ?)"
             ), params_list)
+
+
+def delete_chunks_for_agent(agent_id: str) -> int:
+    """Delete every chunk row for ``agent_id`` and return the count deleted.
+
+    ``index_text(..., force=True)`` does NOT clear existing chunks before
+    inserting new ones — it always appends. That's fine for the first
+    indexing of a fresh agent, but re-indexing a catalog stub through
+    Gutenberg (where the old chunks were a 3-line OL blurb and the new
+    chunks are 300 pages of Plato) ends up with both sets coexisting,
+    same agent_id, with overlapping chunk_index values. RAG then scores
+    the stale stub against the user's query alongside the real text.
+
+    Backfill scripts call this immediately before ``index_text(force=True)``
+    to make the re-index behave like a true replace.
+    """
+    with get_conn() as conn:
+        cur = _execute(conn, _q("DELETE FROM chunks WHERE agent_id = ?"), (agent_id,))
+        # rowcount is available on both psycopg2 and sqlite3 cursors
+        try:
+            return int(cur.rowcount or 0)
+        except Exception:
+            return 0
 
 
 def get_chunks(agent_id: str) -> list[dict[str, Any]]:
