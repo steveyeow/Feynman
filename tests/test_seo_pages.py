@@ -1088,6 +1088,269 @@ class TestPhase6UgcDiscussionForumJsonld:
         assert ld["about"]["@type"] == "Person"
 
 
+class TestPhase8InsightsSanitization:
+    """Phase 8: AI assistant messages sanitized before public render.
+    Conservative — better to over-strip than to leak user context."""
+
+    def test_strips_as_you_asked(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "As you asked about cooperation, the book argues that humans "
+            "have a unique capacity for large-scale collaboration."
+        )
+        assert "as you asked" not in out.lower()
+        # The substantive claim survives
+        assert "cooperation" in out.lower() or "humans have a unique" in out.lower()
+
+    def test_strips_your_question_about(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "Your question about capitalism is interesting. "
+            "Marx argued that capital accumulation drives historical change."
+        )
+        assert "your question about" not in out.lower()
+        assert "marx argued" in out.lower()
+
+    def test_strips_thanks_for_question(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "Thanks for the question! The Cognitive Revolution marks a key transition in human history."
+        )
+        assert "thanks for" not in out.lower()
+        assert "cognitive revolution" in out.lower()
+
+    def test_strips_great_question_opener(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "Great question. The Industrial Revolution transformed labor relations fundamentally."
+        )
+        assert "great question" not in out.lower()
+        assert "industrial revolution" in out.lower()
+
+    def test_strips_sentence_starting_with_you(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "The book has three main themes. You might find chapter 5 particularly relevant. "
+            "The central thesis is about cognitive flexibility."
+        )
+        assert "you might find" not in out.lower()
+        assert "three main themes" in out.lower()
+        assert "central thesis" in out.lower()
+
+    def test_strips_situation_you_described(self):
+        from app.core import insights
+        out = insights.sanitize_assistant_message(
+            "The situation you described is well-documented in chapter 3. "
+            "The author argues that institutional inertia is the root cause."
+        )
+        assert "you described" not in out.lower()
+        assert "institutional inertia" in out.lower()
+
+    def test_preserves_non_personal_text(self):
+        from app.core import insights
+        text = (
+            "Sapiens argues that the Cognitive Revolution roughly 70,000 years ago "
+            "marked the emergence of fictive language, which enabled large-scale cooperation."
+        )
+        # Nothing addresses the user — should be unchanged
+        out = insights.sanitize_assistant_message(text)
+        assert out == text
+
+    def test_empty_input(self):
+        from app.core import insights
+        assert insights.sanitize_assistant_message("") == ""
+        assert insights.sanitize_assistant_message(None or "") == ""
+
+
+class TestPhase8PublishableGate:
+    def test_too_short_rejected(self):
+        from app.core import insights
+        # Below _MIN_INSIGHT_CHARS (200)
+        assert insights.is_publishable_insight("Short answer.") is False
+        assert insights.is_publishable_insight("x" * 199) is False
+
+    def test_long_enough_accepted(self):
+        from app.core import insights
+        text = "The author makes a sustained argument across many chapters. " * 5
+        assert insights.is_publishable_insight(text) is True
+
+    def test_rejects_low_quality_openers(self):
+        from app.core import insights
+        for opener in ["Sorry, I don't know", "I'm not sure",
+                       "I apologize", "Unfortunately, I cannot"]:
+            text = opener + ", " + "x" * 250
+            assert insights.is_publishable_insight(text) is False, f"failed for: {opener}"
+
+    def test_empty_rejected(self):
+        from app.core import insights
+        assert insights.is_publishable_insight("") is False
+        assert insights.is_publishable_insight(None or "") is False
+
+
+class TestPhase8SelectPublishable:
+    def _make(self, n: int, prefix: str = "Insight") -> list[dict]:
+        return [
+            {"content": f"{prefix} {i}: " + ("substantive content " * 25),
+             "created_at": f"2026-01-{i:02d}"}
+            for i in range(1, n + 1)
+        ]
+
+    def test_caps_at_limit(self):
+        from app.core import insights
+        raw = self._make(20)
+        out = insights.select_publishable(raw, limit=5)
+        assert len(out) == 5
+
+    def test_dedupes_identical_openers(self):
+        from app.core import insights
+        # Three messages where the FIRST 120 CHARS are identical — this is
+        # what the dedup bucket actually keys on. (Different fillers after
+        # that point are legitimately distinct responses and should not be
+        # deduped — a chatbot rephrasing slightly across sessions is a
+        # feature, not a duplicate.)
+        identical_opener = (
+            "The book argues that the cognitive revolution roughly 70,000 "
+            "years ago marked the emergence of fictive language enabling "
+            "large-scale cooperation. "
+        )
+        assert len(identical_opener) >= 120, "test fixture insufficient"
+        raw = [
+            {"content": identical_opener + "alpha " * 60, "created_at": "2026-01-01"},
+            {"content": identical_opener + "beta " * 60,  "created_at": "2026-01-02"},
+            {"content": identical_opener + "gamma " * 60, "created_at": "2026-01-03"},
+        ]
+        out = insights.select_publishable(raw, limit=10)
+        assert len(out) == 1, f"expected dedup to 1, got {len(out)}"
+
+    def test_pii_scrubbed_via_ugc_scrubber(self):
+        """Defense in depth: if AI ever echoes PII the user supplied
+        (rare but possible), the second-pass scrubber catches it.
+        Same redaction module Phase 6 /discussions uses."""
+        from app.core import insights
+        raw = [{
+            "content": (
+                "Capitalism produces both innovation and inequality. "
+                "Reach me at marx@example.com or 555-867-5309 "
+                + ("more substantive content " * 30)
+            ),
+            "created_at": "2026-01-01",
+        }]
+        out = insights.select_publishable(raw, limit=10)
+        assert len(out) == 1
+        text = out[0]["text"]
+        assert "marx@example.com" not in text
+        assert "867-5309" not in text
+        assert "[email redacted]" in text or "[phone redacted]" in text
+
+    def test_keeps_responses_with_distinct_openers(self):
+        from app.core import insights
+        # Different opening sentences → kept separately even though both
+        # are about the same book
+        raw = [
+            {"content": "The cognitive revolution is a major theme in this book. " + ("alpha " * 50),
+             "created_at": "2026-01-01"},
+            {"content": "Agricultural revolution receives extensive treatment here. " + ("beta " * 50),
+             "created_at": "2026-01-02"},
+        ]
+        out = insights.select_publishable(raw, limit=10)
+        assert len(out) == 2
+
+    def test_drops_short_messages(self):
+        from app.core import insights
+        raw = [
+            {"content": "Substantive content " * 30, "created_at": "2026-01-01"},
+            {"content": "tiny", "created_at": "2026-01-02"},
+            {"content": "Different substantive content " * 30, "created_at": "2026-01-03"},
+        ]
+        out = insights.select_publishable(raw, limit=10)
+        assert len(out) == 2  # tiny dropped
+
+    def test_drops_user_echoes_so_aggressively_message_is_lost(self):
+        from app.core import insights
+        # A message that's mostly echoes will be stripped to below the
+        # publishable threshold
+        raw = [{
+            "content": "As you asked, " + "your question about X is interesting. " * 5,
+            "created_at": "2026-01-01",
+        }]
+        out = insights.select_publishable(raw, limit=10)
+        # Nothing of substance remained after stripping
+        assert len(out) == 0
+
+
+class TestPhase8Renderers:
+    def test_insight_cards_renders_paragraphs(self):
+        from app.core import seo
+        out = seo.render_insight_cards([
+            {"text": "First paragraph.\n\nSecond paragraph.", "created_at": "2026-01-01"},
+        ])
+        # Two body paragraphs from the message, plus attribution paragraph
+        assert "<p>First paragraph.</p>" in out
+        assert "<p>Second paragraph.</p>" in out
+        # Privacy attribution must be present
+        assert "user questions are never published" in out.lower()
+
+    def test_insight_cards_truncates_long(self):
+        from app.core import seo
+        long = "word " * 500  # 2500 chars
+        out = seo.render_insight_cards(
+            [{"text": long, "created_at": "2026-01-01"}],
+            max_chars=200,
+        )
+        assert "…" in out
+
+    def test_insight_cards_escapes_html(self):
+        from app.core import seo
+        out = seo.render_insight_cards(
+            [{"text": "Visit <script>alert(1)</script>", "created_at": "x"}],
+        )
+        assert "<script>alert(1)</script>" not in out
+        assert "&lt;script&gt;" in out
+
+    def test_insight_cards_empty(self):
+        from app.core import seo
+        assert seo.render_insight_cards([]) == ""
+
+    def test_empty_state_includes_cta(self):
+        from app.core import seo
+        out = seo.render_insights_empty_state("Sapiens", "https://x.com/#/chat/abc")
+        assert "Sapiens" in out
+        assert "https://x.com/#/chat/abc" in out
+        assert "No AI insights" in out or "Start a chat" in out
+
+    def test_article_jsonld_structure(self):
+        from app.core import seo
+        ld = seo.insights_article_jsonld(
+            headline="AI insights about Sapiens",
+            description="…",
+            url="https://x.com/book/b1/insights",
+            about_url="https://x.com/book/b1",
+            about_type="Book",
+            about_name="Sapiens",
+            site_url="https://x.com",
+            date_modified="2026-01-01",
+            insight_count=5,
+        )
+        assert ld["@type"] == "Article"
+        # Author is platform, not the entity — we synthesized this from AI output
+        assert ld["author"]["name"] == "Feynman"
+        assert ld["about"]["@type"] == "Book"
+        assert ld["about"]["name"] == "Sapiens"
+        assert ld["dateModified"] == "2026-01-01"
+
+
+class TestPhase8FeatureFlag:
+    def test_default_enabled(self):
+        # Unlike LLM-cost features (QA, mind essay), insights renders
+        # data we already have — no cost concern. Default ON.
+        from app.core import insights
+        result = insights.is_enabled()
+        assert isinstance(result, bool)
+        import os
+        if not os.getenv("ENABLE_AI_INSIGHTS"):
+            assert result is True
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in
