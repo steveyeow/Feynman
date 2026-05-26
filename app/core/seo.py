@@ -883,33 +883,66 @@ def qa_page_jsonld(
     url: str,
     book_title: str,
     book_url: str,
+    site_url: str = "",
+    date_created: str = "",
 ) -> dict[str, Any]:
-    """Schema.org/QAPage with acceptedAnswer. Google supports this rich
-    result; LLMs use it as a clean enumerable signal.
+    """Schema.org/QAPage. Required fields per Google's rich-result spec
+    (https://developers.google.com/search/docs/appearance/structured-data/qapage):
 
-    If we don't have an LLM-synthesized answer yet, we still emit the
-    schema with a deflection answer pointing to the chat — better than
-    omitting the schema entirely (which would forfeit the rich-result
-    eligibility) and Google accepts non-empty deflection text."""
+    Question (required):
+      * ``name`` — short summary
+      * ``text`` — full question text  ← was missing in v1, caused
+        "1 invalid item" in GSC URL Inspection
+      * ``answerCount`` — integer count of answers  ← was missing in v1
+      * ``acceptedAnswer`` OR ``suggestedAnswer``
+
+    Answer (required):
+      * ``text``
+      * ``url`` (when answer is on a different URL, optional otherwise)
+
+    Recommended fields we also include for richer eligibility:
+      * ``author`` on both Question and Answer (Organization = Feynman)
+      * ``dateCreated`` when available
+      * ``upvoteCount`` on Answer (0 default — Google accepts 0)
+    """
     answer_text = (answer or "").strip()
     if not answer_text:
         answer_text = (
             f"Open Feynman to chat with the book \"{book_title}\" and explore "
             f"the answer in depth: {book_url}"
         )
+
+    author = {
+        "@type": "Organization",
+        "name": "Feynman",
+    }
+    if site_url:
+        author["url"] = site_url
+
+    question_obj: dict[str, Any] = {
+        "@type": "Question",
+        "name": question,           # short summary (same as text for our case)
+        "text": question,           # FULL question text — required by Google
+        "answerCount": 1,           # required — we always have one synthesized answer
+        "upvoteCount": 0,
+        "url": url,
+        "author": author,
+        "acceptedAnswer": {
+            "@type": "Answer",
+            "text": answer_text,
+            "upvoteCount": 0,
+            "url": url,
+            "author": author,
+        },
+    }
+    if date_created:
+        question_obj["dateCreated"] = date_created
+        question_obj["acceptedAnswer"]["dateCreated"] = date_created
+
     return {
         "@context": "https://schema.org",
         "@type": "QAPage",
-        "mainEntity": {
-            "@type": "Question",
-            "name": question,
-            "url": url,
-            "acceptedAnswer": {
-                "@type": "Answer",
-                "text": answer_text,
-                "url": url,
-            },
-        },
+        "mainEntity": question_obj,
     }
 
 

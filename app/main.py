@@ -1685,6 +1685,8 @@ def book_question_page(agent_id: str, question_slug: str, request: Request) -> H
         url=canonical,
         book_title=title_raw,
         book_url=book_url,
+        site_url=base,
+        date_created=agent.get("created_at", "") or "",
     ))
     breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
         ("Feynman", base),
