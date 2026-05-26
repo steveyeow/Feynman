@@ -1215,6 +1215,68 @@ def is_internal_referer(referer: str, site_url: str) -> bool:
     return bool(site_host) and referer_host == site_host
 
 
+# ─── Landing-page chrome (header + footer + CSS) ──────────────────────
+#
+# Shared across every SSR landing page so the visual treatment is
+# consistent (book, mind, topic, /q/, /on/, /insights, /dialogues,
+# /discussions). CSS lives in app/static/seo-landing.css; helpers below
+# emit the `<link>`, the brand header, and the site footer.
+#
+# Why a separate stylesheet (vs inline): one file, browser-cached on
+# first hit, no re-download per page. ~5KB compressed.
+
+LANDING_CSS_PATH = "/static/seo-landing.css"
+
+
+def landing_css_link() -> str:
+    """The single ``<link>`` tag every SSR landing page should put in
+    its ``<head>``. Versioned via a query param so changes invalidate
+    the browser cache deterministically."""
+    return f'<link rel="stylesheet" href="{LANDING_CSS_PATH}?v=1">'
+
+
+def render_landing_header(site_url: str) -> str:
+    """Brand header — Feynman logo + tagline on the left, primary CTA
+    on the right. Same shape across all landing pages so visitors who
+    arrive from search recognize the brand and have one obvious way to
+    open the app."""
+    return (
+        '<header class="feynman-header">'
+        f'<a class="feynman-brand" href="{_esc(site_url)}/">'
+        '<svg viewBox="0 0 280 64" xmlns="http://www.w3.org/2000/svg" aria-label="Feynman">'
+        '<line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
+        '<line x1="32" y1="30" x2="56" y2="58" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
+        '<line x1="20" y1="44" x2="44" y2="44" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
+        '<circle cx="32" cy="14" r="6" fill="currentColor"/>'
+        '<text x="76" y="42" font-family="Inter, -apple-system, sans-serif" '
+        'font-size="26" font-weight="600" fill="currentColor">Feynman</text>'
+        '</svg>'
+        '</a>'
+        '<nav class="feynman-nav">'
+        f'<a href="{_esc(site_url)}/#/library">Library</a>'
+        f'<a href="{_esc(site_url)}/#/minds">Great Minds</a>'
+        f'<a class="feynman-cta" href="{_esc(site_url)}/">Open Feynman →</a>'
+        '</nav>'
+        '</header>'
+    )
+
+
+def render_site_footer(site_url: str) -> str:
+    """Small footer at the absolute bottom of every landing page.
+    Different from the Explore footer (which lists neighbor entities) —
+    this is site-wide chrome: brand mark, legal links, repo link."""
+    return (
+        '<footer class="feynman-site-footer">'
+        f'<span>© Feynman — an interactive knowledge network</span>'
+        '<span>'
+        f'<a href="{_esc(site_url)}/terms">Terms</a> · '
+        f'<a href="{_esc(site_url)}/privacy">Privacy</a> · '
+        '<a href="https://github.com/steveyeow/feynman">GitHub</a>'
+        '</span>'
+        '</footer>'
+    )
+
+
 # ─── Word/structure counters (used by tests to enforce density floors) ─
 
 _TAG_RE = re.compile(r"<[^>]+>")

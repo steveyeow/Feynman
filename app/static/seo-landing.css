@@ -1,0 +1,315 @@
+/* SEO landing-page stylesheet.
+ *
+ * Loaded by all SSR landing pages (/book/{id}, /mind/{id}, /topic/{slug},
+ * /book/{id}/q/{slug}, /mind/{id}/on/{slug}, /book/{id}/insights,
+ * /mind/{id}/dialogues, /book/{id}/discussions). The SPA at /#/... has
+ * its own separate stylesheet (styles.css); this file is intentionally
+ * small and standalone so it loads fast for first-paint on share links
+ * and search-result clicks.
+ *
+ * Constraints:
+ *  - No external font requests beyond what the SPA already loads —
+ *    re-use Inter + Libre Baskerville from Google Fonts.
+ *  - Match the SPA brand palette (#0071e3 accent, #1d1d1f text on
+ *    #ffffff body, with dark-mode counterparts) so users who navigate
+ *    from landing to SPA don't feel a jarring re-skin.
+ *  - Body styles only — never set `display: none` on .opacity-zero
+ *    bodies because the handler uses `opacity:0` for non-crawler
+ *    visitors during the JS redirect; CSS must not interfere.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
+
+:root {
+  --feynman-text: #1d1d1f;
+  --feynman-text-secondary: #6e6e73;
+  --feynman-text-tertiary: #a1a1a6;
+  --feynman-bg: #ffffff;
+  --feynman-bg-subtle: #f5f5f7;
+  --feynman-border: rgba(0, 0, 0, 0.08);
+  --feynman-border-strong: rgba(0, 0, 0, 0.14);
+  --feynman-accent: #0071e3;
+  --feynman-accent-hover: #0058b3;
+  --feynman-quote-bg: #f9f9fb;
+  --feynman-quote-border: #e0e0e3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --feynman-text: #f5f5f7;
+    --feynman-text-secondary: #a1a1a6;
+    --feynman-text-tertiary: #6e6e73;
+    --feynman-bg: #1c1c1e;
+    --feynman-bg-subtle: #2c2c2e;
+    --feynman-border: rgba(255, 255, 255, 0.10);
+    --feynman-border-strong: rgba(255, 255, 255, 0.18);
+    --feynman-accent: #0a84ff;
+    --feynman-accent-hover: #409cff;
+    --feynman-quote-bg: #232325;
+    --feynman-quote-border: rgba(255, 255, 255, 0.08);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--feynman-bg);
+  color: var(--feynman-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Header (logo + nav) ────────────────────────────────────────── */
+
+.feynman-header {
+  border-bottom: 1px solid var(--feynman-border);
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.feynman-header a.feynman-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--feynman-text);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+.feynman-header a.feynman-brand svg {
+  height: 28px;
+  width: auto;
+}
+.feynman-header .feynman-nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 15px;
+}
+.feynman-header .feynman-nav a {
+  color: var(--feynman-text-secondary);
+  text-decoration: none;
+}
+.feynman-header .feynman-nav a:hover { color: var(--feynman-text); }
+.feynman-header .feynman-nav a.feynman-cta {
+  background: var(--feynman-accent);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.feynman-header .feynman-nav a.feynman-cta:hover {
+  background: var(--feynman-accent-hover);
+  color: #fff;
+}
+
+/* ─── Main content container ─────────────────────────────────────── */
+
+main, body > h1, body > nav.qa-back, body > nav.insights-back,
+body > nav.essay-back, body > nav.back-link, body > nav.feynman-page-nav,
+body > p, body > section, body > article, body > footer,
+body > ol, body > ul, body > blockquote {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+body > h1 { margin-top: 36px; }
+
+/* ─── Typography ────────────────────────────────────────────────── */
+
+h1, h2, h3 {
+  font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  color: var(--feynman-text);
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+h1 {
+  font-size: 36px;
+  margin: 0.4em 0 0.6em;
+}
+h2 {
+  font-size: 24px;
+  margin: 2em 0 0.6em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--feynman-border);
+}
+h3 { font-size: 19px; margin: 1.6em 0 0.4em; }
+
+p { margin: 0.6em 0; color: var(--feynman-text); }
+
+a {
+  color: var(--feynman-accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(0, 113, 227, 0.35);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--feynman-accent-hover);
+  text-decoration-color: currentColor;
+}
+
+ul, ol { padding-left: 1.4em; }
+li { margin: 0.25em 0; }
+
+small { color: var(--feynman-text-tertiary); font-size: 14px; }
+
+/* ─── Section + content blocks ───────────────────────────────────── */
+
+section { margin: 1.5em auto; }
+section > ul.toc { list-style: decimal; padding-left: 1.6em; }
+
+blockquote {
+  margin: 1em auto;
+  padding: 16px 20px;
+  background: var(--feynman-quote-bg);
+  border-left: 3px solid var(--feynman-quote-border);
+  border-radius: 6px;
+  color: var(--feynman-text);
+}
+blockquote p { margin: 0 0 0.5em; }
+blockquote p:last-child { margin-bottom: 0; }
+blockquote footer { color: var(--feynman-text-tertiary); font-size: 13px; }
+
+q {
+  display: inline-block;
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-style: italic;
+  color: var(--feynman-text);
+}
+
+article.insight-card,
+article.public-post {
+  background: var(--feynman-bg-subtle);
+  padding: 18px 22px;
+  border-radius: 10px;
+  /* Use `auto` for left/right so the body>article max-width centering
+   * rule isn't overridden by this higher-specificity class selector. */
+  margin: 16px auto;
+  border: 1px solid var(--feynman-border);
+}
+article.insight-card p,
+article.public-post p { margin: 0.5em 0; }
+
+p.book-author { color: var(--feynman-text-secondary); font-size: 18px; margin-top: 0; }
+p.book-stats, p.mind-meta { color: var(--feynman-text-secondary); font-size: 14px; }
+p.book-about { font-size: 19px; line-height: 1.55; }
+
+p.insights-intro { color: var(--feynman-text-secondary); font-size: 16px; }
+p.qa-attribution, p.essay-attribution,
+p.insights-attribution small,
+p.post-cta { color: var(--feynman-text-tertiary); font-size: 14px; margin-top: 1em; }
+
+p.topic-intro { font-size: 19px; line-height: 1.55; color: var(--feynman-text); }
+p.topic-link-back { color: var(--feynman-text-secondary); }
+p.topic-links { font-size: 15px; color: var(--feynman-text-secondary); }
+p.topic-links a { white-space: nowrap; }
+
+/* ─── CTA buttons ────────────────────────────────────────────────── */
+
+/* `auto` left/right preserves the body>p max-width centering rule —
+ * a plain `margin: 2em 0` would override it via class specificity. */
+p.cta, p.cta-row { margin: 2em auto 1.2em; }
+.cta-btn,
+p.cta > a {
+  display: inline-block;
+  background: var(--feynman-accent);
+  color: #fff !important;
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-weight: 500;
+  text-decoration: none;
+  margin-right: 8px;
+  transition: background 120ms ease;
+}
+.cta-btn:hover,
+p.cta > a:hover { background: var(--feynman-accent-hover); color: #fff !important; }
+
+.cta-btn.cta-chat,
+.cta-btn.cta-preview {
+  background: transparent;
+  color: var(--feynman-accent) !important;
+  border: 1px solid var(--feynman-accent);
+}
+.cta-btn.cta-chat:hover,
+.cta-btn.cta-preview:hover {
+  background: var(--feynman-accent-light, rgba(0,113,227,0.08));
+  color: var(--feynman-accent) !important;
+}
+
+/* ─── Back-link navigation (Q&A, insights, mind essay) ───────────── */
+
+nav.qa-back, nav.insights-back, nav.essay-back, nav.back-link {
+  margin-top: 24px;
+  font-size: 15px;
+}
+nav.qa-back a, nav.insights-back a, nav.essay-back a, nav.back-link a {
+  color: var(--feynman-text-secondary);
+  text-decoration: none;
+}
+nav.qa-back a:hover, nav.insights-back a:hover,
+nav.essay-back a:hover, nav.back-link a:hover {
+  color: var(--feynman-text);
+  text-decoration: underline;
+}
+
+/* ─── Footer (Explore links) ─────────────────────────────────────── */
+
+footer.explore-footer {
+  margin: 3em auto 4em;
+  padding-top: 1.5em;
+  border-top: 1px solid var(--feynman-border);
+  color: var(--feynman-text-tertiary);
+}
+footer.explore-footer a {
+  color: var(--feynman-text-secondary);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--feynman-border-strong);
+}
+footer.explore-footer a:hover { color: var(--feynman-accent); border-bottom-color: var(--feynman-accent); }
+
+/* ─── Site footer (small "Powered by Feynman") ───────────────────── */
+
+footer.feynman-site-footer {
+  max-width: 760px;
+  margin: 4em auto 2em;
+  padding: 1.5em 24px 0;
+  border-top: 1px solid var(--feynman-border);
+  color: var(--feynman-text-tertiary);
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+footer.feynman-site-footer a {
+  color: var(--feynman-text-secondary);
+  text-decoration: none;
+}
+footer.feynman-site-footer a:hover { color: var(--feynman-text); }
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  html, body { font-size: 16px; }
+  h1 { font-size: 28px; }
+  h2 { font-size: 21px; }
+  .feynman-header { padding: 14px 16px; flex-wrap: wrap; gap: 12px; }
+  .feynman-header .feynman-nav { gap: 14px; font-size: 14px; }
+  body > h1, body > p, body > section, body > article, body > footer,
+  body > ol, body > ul, body > blockquote, body > nav { padding-left: 16px; padding-right: 16px; }
+  footer.feynman-site-footer { padding: 1.5em 16px 0; flex-direction: column; align-items: flex-start; }
+}
