@@ -567,6 +567,104 @@ def render_related_minds(minds: list[dict[str, Any]], site_url: str) -> str:
     )
 
 
+# ─── Live AI Output Indexing — Phase 8 ──────────────────────────────
+#
+# Render layer for /book/{id}/insights and /mind/{id}/dialogues. The
+# insights themselves come from app/core/insights.py (already PII-
+# sanitized) — we just frame, label, and structure them for crawl.
+
+def render_insight_cards(insights: list[dict[str, Any]], max_chars: int = 900) -> str:
+    """Render the sanitized AI commentaries as a stack of cards. Each
+    is labelled as AI synthesis to be transparent about authorship."""
+    if not insights:
+        return ""
+    items = []
+    for i in insights:
+        text = (i.get("text") or "").strip()
+        if not text:
+            continue
+        if len(text) > max_chars:
+            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+        # Preserve paragraph breaks the LLM emitted
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        body = "".join(f"<p>{_esc(p)}</p>" for p in paragraphs) or f"<p>{_esc(text)}</p>"
+        items.append(f'<article class="insight-card">{body}</article>')
+    if not items:
+        return ""
+    return (
+        '<section class="insights">'
+        f'{"".join(items)}'
+        '<p class="insights-attribution"><small>Synthesized from AI agent '
+        'responses across reader conversations. AI output only; user '
+        'questions are never published.</small></p>'
+        '</section>'
+    )
+
+
+def render_insights_empty_state(entity_name: str, chat_url: str) -> str:
+    """Shown when an entity has no publishable AI insights yet (new
+    book, low chat volume). Better than 404 — it gives the page a
+    meaningful body and a CTA to seed content."""
+    return (
+        '<section class="insights-empty">'
+        f'<p>No AI insights have accumulated yet for {_esc(entity_name)}. '
+        'Start a chat and your conversation will help shape the public '
+        '<em>insights</em> page — the AI\'s responses get aggregated here '
+        '(your questions stay private).</p>'
+        f'<p><a class="cta-btn" href="{_esc(chat_url)}">Start a chat →</a></p>'
+        '</section>'
+    )
+
+
+def insights_article_jsonld(
+    *,
+    headline: str,
+    description: str,
+    url: str,
+    about_url: str,
+    about_type: str,        # "Book" or "Person"
+    about_name: str,
+    site_url: str,
+    date_modified: str = "",
+    insight_count: int = 0,
+) -> dict[str, Any]:
+    """Schema.org/Article describing the aggregated insights page.
+
+    Author is intentionally the platform (Feynman) — not the book or
+    mind — because the page is our synthesis of AI agent output, not a
+    direct work by the entity. ``about`` ties it back to the entity so
+    LLMs can resolve the topical relationship cleanly."""
+    out: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": headline,
+        "description": description,
+        "url": url,
+        "author": {
+            "@type": "Organization",
+            "name": "Feynman",
+            "url": site_url,
+        },
+        "publisher": {
+            "@type": "Organization",
+            "name": "Feynman",
+            "url": site_url,
+        },
+        "about": {
+            "@type": about_type,
+            "name": about_name,
+            "url": about_url,
+        },
+    }
+    if date_modified:
+        out["dateModified"] = date_modified
+    if insight_count:
+        # Custom property; LLMs that parse Article schema use this as
+        # a freshness / depth signal.
+        out["wordCount"] = insight_count * 150  # rough estimate, ~150 words/card
+    return out
+
+
 # ─── Mind-on-topic compound-page helpers (Phase 4B) ──────────────────
 #
 # /mind/{mind_id}/on/{topic_slug} renders an imagined-perspective essay

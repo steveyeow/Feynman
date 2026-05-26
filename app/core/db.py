@@ -1775,6 +1775,177 @@ def list_public_sessions_for_mind(
         return [dict(r) for r in rows]
 
 
+# ─── Phase 8 — Live AI Output Indexing reads ─────────────────────────
+#
+# These pull only role='assistant' rows and live behind the public
+# /insights and /dialogues routes. The whole point is to surface the
+# AI's accumulated commentary without ever returning user messages —
+# the SQL filter on role is the hard privacy boundary.
+
+# Per-agent (book) AI output lives in two tables historically:
+#   * `messages`           — older per-agent direct chat path
+#   * `session_messages`   — newer session-based path (joined via
+#                            chat_sessions WHERE session_type='book'
+#                            AND mind_id={agent_id})
+# Both paths still write today depending on the client endpoint; for
+# completeness we query both and merge in Python.
+
+
+def list_assistant_messages_for_agent(
+    agent_id: str, limit: int = 100, min_chars: int = 200,
+) -> list[dict[str, Any]]:
+    """Returns ``role='assistant'`` messages for a book agent, drawn
+    from BOTH the messages table and the session_messages table.
+
+    SAFETY: hard-coded role filter at SQL level. There is no code path
+    in this function that returns user-role messages."""
+    rows: list[dict[str, Any]] = []
+    with get_conn() as conn:
+        # Direct per-agent chat (messages table)
+        try:
+            direct = _fetchall(conn, _q(
+                """SELECT id, content, created_at
+                   FROM messages
+                   WHERE agent_id = ?
+                     AND role = 'assistant'
+                     AND length(content) >= ?
+                   ORDER BY created_at DESC
+                   LIMIT ?"""
+            ), (agent_id, min_chars, limit))
+            for r in direct:
+                rows.append({
+                    "id": r["id"], "content": r["content"],
+                    "created_at": r["created_at"], "source": "messages",
+                })
+        except Exception:
+            pass
+
+        # Session-based book chats (session_messages joined to chat_sessions)
+        try:
+            sess = _fetchall(conn, _q(
+                """SELECT sm.id, sm.content, sm.created_at
+                   FROM session_messages sm
+                   JOIN chat_sessions cs ON cs.id = sm.session_id
+                   WHERE cs.session_type = 'book'
+                     AND cs.mind_id = ?
+                     AND sm.role = 'assistant'
+                     AND length(sm.content) >= ?
+                   ORDER BY sm.created_at DESC
+                   LIMIT ?"""
+            ), (agent_id, min_chars, limit))
+            for r in sess:
+                rows.append({
+                    "id": r["id"], "content": r["content"],
+                    "created_at": r["created_at"], "source": "session_messages",
+                })
+        except Exception:
+            pass
+
+    # Merge + sort by created_at DESC, then cap to limit
+    rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+    return rows[:limit]
+
+
+def list_assistant_messages_for_mind(
+    mind_id: str, limit: int = 100, min_chars: int = 200,
+) -> list[dict[str, Any]]:
+    """Returns ``role='assistant'`` messages from chat sessions bound
+    to a mind. Mind chats only live in session_messages (no direct
+    messages-table path for minds)."""
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn, _q(
+                """SELECT sm.id, sm.content, sm.created_at
+                   FROM session_messages sm
+                   JOIN chat_sessions cs ON cs.id = sm.session_id
+                   WHERE cs.session_type IN ('chat', 'mind')
+                     AND cs.mind_id = ?
+                     AND sm.role = 'assistant'
+                     AND length(sm.content) >= ?
+                   ORDER BY sm.created_at DESC
+                   LIMIT ?"""
+            ), (mind_id, min_chars, limit))
+            return [{
+                "id": r["id"], "content": r["content"],
+                "created_at": r["created_at"], "source": "session_messages",
+            } for r in rows]
+        except Exception:
+            return []
+
+
+def count_assistant_messages_batch(
+    agent_ids: list[str], min_chars: int = 200,
+) -> dict[str, int]:
+    """One-shot count of assistant messages per agent across BOTH
+    tables. Used by sitemap rendering to decide which /insights URLs
+    are worth advertising (skip empty ones to avoid burning crawl
+    budget on thin pages). Returns {agent_id: count}; agents with
+    zero rows are omitted."""
+    if not agent_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(agent_ids))
+    out: dict[str, int] = {}
+    with get_conn() as conn:
+        # messages table
+        try:
+            r1 = _fetchall(conn, _q(
+                f"""SELECT agent_id, COUNT(*) AS n FROM messages
+                    WHERE agent_id IN ({placeholders})
+                      AND role = 'assistant'
+                      AND length(content) >= ?
+                    GROUP BY agent_id"""
+            ), (*agent_ids, min_chars))
+            for r in r1:
+                out[r["agent_id"]] = out.get(r["agent_id"], 0) + int(r["n"])
+        except Exception:
+            pass
+        # session_messages via chat_sessions
+        try:
+            r2 = _fetchall(conn, _q(
+                f"""SELECT cs.mind_id AS agent_id, COUNT(*) AS n
+                    FROM session_messages sm
+                    JOIN chat_sessions cs ON cs.id = sm.session_id
+                    WHERE cs.session_type = 'book'
+                      AND cs.mind_id IN ({placeholders})
+                      AND sm.role = 'assistant'
+                      AND length(sm.content) >= ?
+                    GROUP BY cs.mind_id"""
+            ), (*agent_ids, min_chars))
+            for r in r2:
+                out[r["agent_id"]] = out.get(r["agent_id"], 0) + int(r["n"])
+        except Exception:
+            pass
+    return out
+
+
+def count_assistant_messages_for_minds_batch(
+    mind_ids: list[str], min_chars: int = 200,
+) -> dict[str, int]:
+    """Same as count_assistant_messages_batch but for minds (only
+    session_messages path applies)."""
+    if not mind_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(mind_ids))
+    out: dict[str, int] = {}
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn, _q(
+                f"""SELECT cs.mind_id, COUNT(*) AS n
+                    FROM session_messages sm
+                    JOIN chat_sessions cs ON cs.id = sm.session_id
+                    WHERE cs.session_type IN ('chat', 'mind')
+                      AND cs.mind_id IN ({placeholders})
+                      AND sm.role = 'assistant'
+                      AND length(sm.content) >= ?
+                    GROUP BY cs.mind_id"""
+            ), (*mind_ids, min_chars))
+            for r in rows:
+                out[r["mind_id"]] = int(r["n"])
+        except Exception:
+            pass
+    return out
+
+
 def list_messages_for_public_session(
     session_id: str, limit: int = 12,
 ) -> list[dict[str, Any]]:
