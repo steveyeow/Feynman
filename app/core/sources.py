@@ -112,22 +112,49 @@ def fetch_google_books_info(title: str, author: str = "") -> str:
 
 
 def fetch_book_content(title: str, author: str = "") -> str:
-    """Orchestrator: try Open Library → Google Books → Wikipedia → return best result."""
-    # Try Open Library first (may have full descriptions)
+    """Orchestrator: try Gutenberg (full text) → Open Library (metadata)
+    → Google Books (metadata) → Wikipedia (summary) → return best result.
+
+    Gutenberg comes FIRST because it's the only source that can return
+    full primary text. For any pre-1928 work in the public-domain canon
+    this means RAG actually has the book to retrieve from, instead of
+    just metadata. Modern in-copyright books fall through to the
+    existing metadata sources (which is the best we can legally get
+    via free APIs)."""
+    # Local import — sources_gutenberg pulls in httpx and we want this
+    # module to stay importable even in environments that have stripped
+    # the optional source.
+    try:
+        from .sources_gutenberg import fetch_gutenberg_content
+        gb_text = fetch_gutenberg_content(title, author)
+    except Exception as exc:
+        log.warning("Gutenberg lookup failed for %r: %s", title, exc)
+        gb_text = ""
+
+    if gb_text and len(gb_text) > 2000:
+        # Got real full text. Prepend a small header so chunk[0] still
+        # carries the title/author for downstream attribution. Also
+        # supplement with the metadata block from Open Library so RAG
+        # has both primary content AND structured context (subjects,
+        # categories).
+        header = f"Title: {title}" + (f" by {author}" if author else "") + "\n\n"
+        meta = fetch_open_library_text(title, author)
+        if meta:
+            header += "--- Metadata ---\n\n" + meta + "\n\n--- Text ---\n\n"
+        return header + gb_text
+
+    # Fallback chain — metadata-only (modern books)
     text = fetch_open_library_text(title, author)
     if text and len(text) > 100:
-        # Supplement with Google Books if available
         gb = fetch_google_books_info(title, author)
         if gb:
             text += "\n\n--- Google Books ---\n\n" + gb
         return text
 
-    # Try Google Books
     text = fetch_google_books_info(title, author)
     if text and len(text) > 50:
         return text
 
-    # Fallback to Wikipedia (try English)
     wiki = fetch_wikipedia_summary(title, lang="en")
     if wiki:
         return f"Title: {title}" + (f" by {author}" if author else "") + f"\n\nWikipedia: {wiki}"
