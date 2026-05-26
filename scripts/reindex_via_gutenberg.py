@@ -63,9 +63,14 @@ from app.core import config  # noqa: F401 — loads env
 from app.core.db import (
     count_chunks_batch,
     get_agent,
+    get_conn,
     init_db,
     list_agents,
+    probe_pgvector,
+    _fetchall,
+    _q,
 )
+import os as _os
 from app.core.indexer import index_text
 from app.core.sources_gutenberg import (
     fetch_gutenberg_content,
@@ -118,10 +123,17 @@ def _eligible(
 
 
 def _process(
-    agent: dict[str, Any], dry_run: bool,
+    agent: dict[str, Any], dry_run: bool, max_text_kb: int | None = None,
 ) -> tuple[str, str]:
     """Returns (verdict, message). verdict ∈ {SKIP_NO_MATCH, WOULD_UPGRADE,
-    UPGRADED, FAILED}."""
+    UPGRADED, FAILED}.
+
+    ``max_text_kb`` caps the per-book text size to keep DB storage
+    bounded — important on Supabase free tier where each chunk costs
+    ~55KB (text + halfvec embedding + overhead). A 200KB cap yields
+    ~170 chunks ≈ 9MB per book; full text for War-and-Peace-class
+    books would be ~70MB each which blows the free-tier budget.
+    """
     aid = agent["id"]
     name = agent.get("name") or ""
     author = _resolve_author(agent)
@@ -139,18 +151,53 @@ def _process(
     text = fetch_gutenberg_content(name, author)
     if not text:
         return "FAILED", f"matched book_id={match['id']} but text fetch returned empty"
+    orig_chars = len(text)
+    if max_text_kb is not None and orig_chars > max_text_kb * 1024:
+        text = text[: max_text_kb * 1024]
+        # Snap to a sentence boundary if we can — avoids cutting mid-word
+        last_period = text.rfind(". ")
+        if last_period > len(text) * 0.9:
+            text = text[: last_period + 1]
 
-    # Reindex — index_text replaces existing chunks for the agent
+    # index_text(replace_existing=True) deletes stale stub chunks AFTER
+    # embeddings come back successfully — if the embedder 429s the agent
+    # keeps its pre-existing chunks instead of getting wiped to zero.
+    # See indexer.index_text docstring for the failure-mode reasoning.
     try:
-        result = index_text(aid, text, update_status=True, force=True)
+        result = index_text(
+            aid, text, update_status=True, force=True, replace_existing=True,
+        )
     except Exception as exc:
         return "FAILED", f"index_text exception: {exc}"
 
-    chunks = result.get("chunks") if isinstance(result, dict) else None
+    chunks = (result.get("chunk_count") if isinstance(result, dict) else None)
+    cap_note = ""
+    if max_text_kb is not None and orig_chars > max_text_kb * 1024:
+        cap_note = f" (capped from {orig_chars:,} → {len(text):,})"
     return "UPGRADED", (
         f"Gutenberg book_id={match['id']}, "
-        f"{len(text):,} chars → {chunks or '?'} chunks"
+        f"{len(text):,} chars{cap_note} → {chunks or '?'} chunks"
     )
+
+
+def _priority_score(agent_id: str, mind_works_links: dict[str, int]) -> int:
+    """Higher score = more important to upgrade first. Books referenced
+    by more great-mind agents (via mind_works) are higher-leverage for
+    SEO because they're the canonical works cited on mind pages."""
+    return mind_works_links.get(agent_id, 0)
+
+
+def _fetch_mind_works_counts() -> dict[str, int]:
+    """Returns {agent_id: count_of_minds_that_reference_this_book}.
+    Used for --priority ordering."""
+    try:
+        with get_conn() as conn:
+            rows = _fetchall(conn, _q(
+                "SELECT agent_id, COUNT(*) as n FROM mind_works GROUP BY agent_id"
+            ))
+            return {r["agent_id"]: int(r["n"]) for r in rows}
+    except Exception:
+        return {}
 
 
 def main() -> int:
@@ -165,6 +212,19 @@ def main() -> int:
                         help="Only re-index agents with fewer than this many chunks (default 5).")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Print per-skip detail.")
+    parser.add_argument("--skip-init-db", action="store_true",
+                        help="Skip init_db() — use when the schema is already established "
+                             "(production). init_db can hang on pooled connections (pgbouncer) "
+                             "when it tries to run idempotent migrations through transaction-mode pooling.")
+    parser.add_argument("--max-text-kb", type=int, default=None,
+                        help="Cap per-book Gutenberg text to N kilobytes before indexing. "
+                             "Each KB of text becomes ~46 bytes in chunks table (text + halfvec). "
+                             "Use 200 for ~9MB/book budget; 400 for ~18MB/book; omit for full text "
+                             "(can be 70MB+ for War-and-Peace-class books).")
+    parser.add_argument("--priority", action="store_true",
+                        help="Process agents in priority order: books referenced by more great-mind "
+                             "agents (via mind_works) go first. Use with --limit to backfill "
+                             "highest-leverage books in the first batch.")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -174,10 +234,22 @@ def main() -> int:
 
     print(
         f"--- reindex_via_gutenberg (dry_run={args.dry_run}, "
-        f"min_chunks={args.min_chunks}) ---",
+        f"min_chunks={args.min_chunks}, skip_init_db={args.skip_init_db}) ---",
         file=sys.stderr,
     )
-    init_db()
+    if not args.skip_init_db:
+        init_db()
+
+    # ``--skip-init-db`` dodges init_db()'s migration cascade (which hangs
+    # on pgbouncer transaction-mode pooling), but that leaves
+    # ``db._HAS_PGVECTOR`` at its False default, and ``add_chunks`` then
+    # silently falls through to the legacy BYTEA-only write path. Probe
+    # the column directly — read-only, pooler-safe — so the halfvec
+    # write path is enabled regardless of which init mode the caller
+    # chose. See db.probe_pgvector docstring.
+    has_pgvec = probe_pgvector()
+    print(f"pgvector write path: {'enabled' if has_pgvec else 'DISABLED'}",
+          file=sys.stderr)
 
     if args.agent:
         a = get_agent(args.agent)
@@ -189,10 +261,25 @@ def main() -> int:
         targets = list(list_agents(limit=10000))
 
     chunk_counts = count_chunks_batch([a["id"] for a in targets])
+    if args.priority:
+        # Sort by mind_works link count desc — books that great minds
+        # reference go first, so first batches upgrade the highest-SEO-
+        # leverage pages (their mind page link targets become real
+        # full-text books instead of metadata stubs).
+        mw_counts = _fetch_mind_works_counts()
+        targets.sort(key=lambda a: mw_counts.get(a["id"], 0), reverse=True)
+        print(f"priority order: top agent has {mw_counts.get(targets[0]['id'], 0)} mind_works refs",
+              file=sys.stderr)
     print(f"scanning {len(targets)} agents", file=sys.stderr)
 
-    processed = upgraded = would = no_match = failed = skipped = 0
-    start = time.time()
+    # Two-pass: pass 1 finds matchable agents (cheap — local catalog
+    # search only, no fetch). Pass 2 does the actual fetch+index and
+    # respects --limit on UPGRADED count (not skipped count). This
+    # is the natural semantic: '--limit 5' should mean 'upgrade 5
+    # books', not 'process 5 agents most of which won't match'.
+    print("pass 1: scanning for matchable agents (no fetch)…", file=sys.stderr)
+    matchable: list[dict[str, Any]] = []
+    skipped = 0
     for agent in targets:
         cc = chunk_counts.get(agent["id"], 0)
         eligible, reason = _eligible(agent, cc, args.min_chunks)
@@ -201,16 +288,39 @@ def main() -> int:
             if args.verbose:
                 print(f"  skip {agent['id'][:8]} {agent.get('name','')[:40]!r:<42} ({reason})", file=sys.stderr)
             continue
-        if args.limit is not None and processed >= args.limit:
-            break
+        # Cheap pre-check — search the local Gutenberg catalog. We
+        # call _process with dry_run=True which short-circuits before
+        # any HTTP fetch or DB write, returning WOULD_UPGRADE or
+        # SKIP_NO_MATCH.
+        verdict, msg = _process(agent, dry_run=True, max_text_kb=None)
+        if verdict == "WOULD_UPGRADE":
+            matchable.append(agent)
+        if args.verbose:
+            marker = "→" if verdict == "WOULD_UPGRADE" else "·"
+            print(f"  {marker} {verdict:<14} {agent['id'][:8]} {agent.get('name','')[:50]!r}", file=sys.stderr)
+    print(f"pass 1 done: {len(matchable)} matchable agents found", file=sys.stderr)
+
+    # Pass 2 — actual fetch+index, with --limit applied to matchable list
+    if args.limit is not None:
+        matchable = matchable[: args.limit]
+        print(f"limited to first {len(matchable)} for this batch", file=sys.stderr)
+    if args.dry_run:
+        # Dry run is already done — report and exit
+        elapsed = time.time() - start_time if False else 0.0
+        print(
+            f"--- dry-run done: processed={len(matchable)} skipped={skipped} "
+            f"would_upgrade={len(matchable)} no_match={len(targets) - skipped - len(matchable)} ---",
+            file=sys.stderr,
+        )
+        return 0
+
+    print(f"pass 2: fetching + indexing {len(matchable)} books (this is the slow part)…", file=sys.stderr)
+    processed = upgraded = failed = 0
+    start = time.time()
+    for agent in matchable:
         processed += 1
-        verdict, msg = _process(agent, dry_run=args.dry_run)
-        marker = {
-            "UPGRADED": "✓",
-            "WOULD_UPGRADE": "→",
-            "SKIP_NO_MATCH": "·",
-            "FAILED": "✗",
-        }.get(verdict, "?")
+        verdict, msg = _process(agent, dry_run=False, max_text_kb=args.max_text_kb)
+        marker = "✓" if verdict == "UPGRADED" else "✗"
         print(
             f"  {marker} {verdict:<14} {agent['id'][:8]} "
             f"{agent.get('name','')[:55]!r:<57} — {msg}",
@@ -218,23 +328,13 @@ def main() -> int:
         )
         if verdict == "UPGRADED":
             upgraded += 1
-        elif verdict == "WOULD_UPGRADE":
-            would += 1
         elif verdict == "FAILED":
             failed += 1
-        else:
-            no_match += 1
 
     elapsed = time.time() - start
-    summary_parts = [f"processed={processed}", f"skipped={skipped}"]
-    if args.dry_run:
-        summary_parts.append(f"would_upgrade={would}")
-    else:
-        summary_parts.append(f"upgraded={upgraded}")
-        summary_parts.append(f"failed={failed}")
-    summary_parts.append(f"no_match={no_match}")
     print(
-        f"--- done in {elapsed:.1f}s: " + " ".join(summary_parts) + " ---",
+        f"--- done in {elapsed:.1f}s: processed={processed} "
+        f"upgraded={upgraded} failed={failed} skipped={skipped} ---",
         file=sys.stderr,
     )
     return 0 if failed == 0 else 1
