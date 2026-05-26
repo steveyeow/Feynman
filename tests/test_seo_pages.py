@@ -1640,6 +1640,169 @@ class TestDbCountChunksBatch:
         assert "nonexistent-id" not in counts
 
 
+class TestGutenbergSource:
+    """sources_gutenberg unit tests — exercise the pure-function parts
+    (parsing, scoring, boilerplate stripping) without network."""
+
+    def test_strip_boilerplate_normal(self):
+        from app.core.sources_gutenberg import strip_gutenberg_boilerplate
+        text = (
+            "License preamble blah blah\n"
+            "*** START OF THE PROJECT GUTENBERG EBOOK FOO ***\n"
+            "Real book content here.\n"
+            "More content.\n"
+            "*** END OF THE PROJECT GUTENBERG EBOOK FOO ***\n"
+            "Big license footer\n"
+        )
+        out = strip_gutenberg_boilerplate(text)
+        assert "Real book content here." in out
+        assert "More content." in out
+        assert "License preamble" not in out
+        assert "license footer" not in out
+
+    def test_strip_boilerplate_missing_markers_returns_input(self):
+        from app.core.sources_gutenberg import strip_gutenberg_boilerplate
+        text = "Just plain text with no Gutenberg markers."
+        assert strip_gutenberg_boilerplate(text) == text
+
+    def test_strip_boilerplate_handles_this_variant(self):
+        # Some older Gutenberg files use "THIS" instead of "THE"
+        from app.core.sources_gutenberg import strip_gutenberg_boilerplate
+        text = (
+            "before\n"
+            "*** START OF THIS PROJECT GUTENBERG EBOOK BAR ***\n"
+            "body\n"
+            "*** END OF THIS PROJECT GUTENBERG EBOOK BAR ***\n"
+            "after\n"
+        )
+        out = strip_gutenberg_boilerplate(text)
+        assert out == "body"
+
+    def test_author_surname_correct_extraction(self):
+        from app.core.sources_gutenberg import _author_surname
+        assert _author_surname("Marx, Karl") == "marx"
+        assert _author_surname("Smith, Adam") == "smith"
+        assert _author_surname("Karl Marx") == "marx"  # 'First Last' form
+        assert _author_surname("Marx, Karl (1818-1883)") == "marx"  # with dates
+
+    def test_author_surname_empty(self):
+        from app.core.sources_gutenberg import _author_surname
+        assert _author_surname("") == ""
+        assert _author_surname(None or "") == ""
+
+    def test_parse_catalog_filters_to_text_only(self):
+        from app.core.sources_gutenberg import _parse_catalog
+        csv_body = (
+            "Text#,Type,Issued,Title,Language,Authors,Subjects,LoCC,Bookshelves\n"
+            "1,Text,2025-01-01,Real Book,en,\"Marx, Karl\",,,\n"
+            "2,Sound,2025-01-01,Audio Book,en,\"Smith, Adam\",,,\n"
+            "3,Text,2025-01-01,Another Book,en,\"Doe, Jane; Roe, Bob\",,,\n"
+        )
+        out = _parse_catalog(csv_body)
+        assert len(out) == 2  # Sound row excluded
+        assert out[0]["id"] == 1
+        assert out[0]["authors"] == ["Marx, Karl"]
+        assert out[1]["authors"] == ["Doe, Jane", "Roe, Bob"]  # split on ;
+
+    def test_search_returns_none_when_no_catalog(self, monkeypatch):
+        # When the catalog can't be loaded, search must return None
+        # rather than raising or returning a false-positive.
+        from app.core import sources_gutenberg as sg
+        monkeypatch.setattr(sg, "_get_catalog", lambda: [])
+        assert sg.search_gutenberg("Republic", "Plato") is None
+
+    def test_search_matches_title_and_author(self, monkeypatch):
+        from app.core import sources_gutenberg as sg
+        fake_catalog = [
+            {"id": 61, "title": "The Communist Manifesto",
+             "authors": ["Marx, Karl", "Engels, Friedrich"],
+             "language": "en", "subjects": ""},
+            {"id": 9999, "title": "Communism for Children",
+             "authors": ["Doe, Jane"], "language": "en", "subjects": ""},
+            {"id": 1342, "title": "Pride and Prejudice",
+             "authors": ["Austen, Jane"], "language": "en", "subjects": ""},
+        ]
+        monkeypatch.setattr(sg, "_get_catalog", lambda: fake_catalog)
+        m = sg.search_gutenberg("Communist Manifesto", "Karl Marx")
+        assert m is not None
+        assert m["id"] == 61
+
+    def test_search_demotes_when_author_mismatch(self, monkeypatch):
+        from app.core import sources_gutenberg as sg
+        # If a non-Marx book has a similar title and we say Marx is the
+        # author, the author mismatch should demote it below a real Marx
+        # work even if the title is shorter.
+        fake_catalog = [
+            {"id": 999, "title": "Communism Now", "authors": ["Doe, Jane"],
+             "language": "en", "subjects": ""},
+            {"id": 61, "title": "The Communist Manifesto",
+             "authors": ["Marx, Karl"], "language": "en", "subjects": ""},
+        ]
+        monkeypatch.setattr(sg, "_get_catalog", lambda: fake_catalog)
+        m = sg.search_gutenberg("Communist Manifesto", "Karl Marx")
+        assert m["id"] == 61  # the Marx hit, not the Doe one
+
+    def test_search_returns_none_for_no_meaningful_tokens(self, monkeypatch):
+        from app.core import sources_gutenberg as sg
+        monkeypatch.setattr(sg, "_get_catalog", lambda: [
+            {"id": 1, "title": "Whatever", "authors": [], "language": "en", "subjects": ""}
+        ])
+        # Title has only stopwords / short tokens → no meaningful search
+        assert sg.search_gutenberg("of the", "") is None
+
+    def test_short_title_no_author_requires_exact_match(self, monkeypatch):
+        """Without an author, 'Game' must NOT match 'The Game' or other
+        partial matches — only an exact normalized title equality
+        survives. This is the noise filter for junk agents like
+        'Quiet', 'Living', 'New Me' that would otherwise sweep up
+        unrelated Gutenberg books by token coincidence."""
+        from app.core import sources_gutenberg as sg
+        fake_catalog = [
+            {"id": 1, "title": "The Game", "authors": ["London, Jack"],
+             "language": "en", "subjects": ""},
+            {"id": 2, "title": "Annals of a Quiet Neighbourhood",
+             "authors": ["MacDonald, George"], "language": "en", "subjects": ""},
+        ]
+        monkeypatch.setattr(sg, "_get_catalog", lambda: fake_catalog)
+        # Single-token title, no author → both candidates rejected
+        # (neither's normalized title equals 'game' / 'quiet')
+        assert sg.search_gutenberg("Game", "") is None
+        assert sg.search_gutenberg("Quiet", "") is None
+
+    def test_one_token_title_requires_exact_match_even_with_author(self, monkeypatch):
+        """A 1-meaningful-token title is too ambiguous to match
+        loosely even when an author IS provided — otherwise a junk
+        agent named 'New Me' with author 'Samuel Butler' false-matches
+        catalog book 'Ex Voto: An Account of the Sacro Monte or New
+        Jerusalem' by 'Butler, Samuel'. The author overlap + token
+        overlap conspire. Require exact normalized title equality."""
+        from app.core import sources_gutenberg as sg
+        fake_catalog = [
+            {"id": 1, "title": "The Game", "authors": ["London, Jack"],
+             "language": "en", "subjects": ""},
+        ]
+        monkeypatch.setattr(sg, "_get_catalog", lambda: fake_catalog)
+        # 'Game' (1 token) vs 'The Game' (different norm) → reject
+        assert sg.search_gutenberg("Game", "Jack London") is None
+        # 'The Game' exactly → match
+        m = sg.search_gutenberg("The Game", "Jack London")
+        assert m is not None and m["id"] == 1
+
+    def test_short_title_no_author_accepts_exact_match(self, monkeypatch):
+        """An exact normalized-title match still succeeds without an
+        author. 'The Prince' (after lowercase/punct) matches 'The
+        Prince' exactly."""
+        from app.core import sources_gutenberg as sg
+        fake_catalog = [
+            {"id": 1232, "title": "The Prince", "authors": ["Machiavelli, Niccolò"],
+             "language": "en", "subjects": ""},
+        ]
+        monkeypatch.setattr(sg, "_get_catalog", lambda: fake_catalog)
+        m = sg.search_gutenberg("The Prince", "")
+        assert m is not None
+        assert m["id"] == 1232
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in
