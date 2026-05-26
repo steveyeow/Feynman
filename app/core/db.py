@@ -559,6 +559,21 @@ def init_db() -> None:
             # Best-effort cleanup of old idempotency records (keep 30 days for replay window)
             _execute(conn, "DELETE FROM stripe_webhook_events WHERE processed_at < NOW() - INTERVAL '30 days'")
 
+            # Phase 7.3 — LLM referrer tracking. Append-only, aggregate-only
+            # (no IP, no user id, no full UA). Indexed for the admin
+            # aggregate query.
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS llm_referrals (
+                    id BIGSERIAL PRIMARY KEY,
+                    url_path TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    ua_class TEXT NOT NULL DEFAULT 'unknown',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_llm_referrals_source_time ON llm_referrals(source, created_at DESC)")
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_llm_referrals_time ON llm_referrals(created_at DESC)")
+
             # Backfill PRIMARY KEY constraints on legacy tables. CREATE TABLE
             # IF NOT EXISTS does not add constraints to a pre-existing table,
             # so deployments that pre-date the current schema may have id
@@ -870,6 +885,19 @@ def init_db() -> None:
                 )
             """)
             _execute(conn, "DELETE FROM stripe_webhook_events WHERE processed_at < datetime('now', '-30 days')")
+
+            # Phase 7.3 — LLM referrer tracking (SQLite branch)
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS llm_referrals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url_path TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    ua_class TEXT NOT NULL DEFAULT 'unknown',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_llm_referrals_source_time ON llm_referrals(source, created_at DESC)")
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_llm_referrals_time ON llm_referrals(created_at DESC)")
 
     # Migration: copy legacy messages → session_messages (runs once, idempotent)
     try:
@@ -1941,6 +1969,92 @@ def count_assistant_messages_for_minds_batch(
             ), (*mind_ids, min_chars))
             for r in rows:
                 out[r["mind_id"]] = int(r["n"])
+        except Exception:
+            pass
+    return out
+
+
+# ─── Phase 7.3 — LLM referrer tracking ──────────────────────────────
+#
+# Append-only log of LLM-sourced traffic. Written from main.py's
+# middleware (fail-open). Read by the admin endpoint to answer "which
+# pages get the most LLM citations." Schema kept minimal to make the
+# privacy posture obvious — no IPs, no full UAs, no query strings.
+
+
+def log_llm_referral(
+    url_path: str, source: str, ua_class: str,
+) -> None:
+    """Append one row. Fail-open: a logging issue must never break the
+    request being measured."""
+    if not url_path or not source:
+        return
+    try:
+        with get_conn() as conn:
+            _execute(conn, _q(
+                "INSERT INTO llm_referrals (url_path, source, ua_class, created_at) "
+                "VALUES (?, ?, ?, ?)"
+            ), (url_path[:500], source[:50], ua_class[:20], _utcnow()))
+    except Exception:
+        pass  # swallowed by design
+
+
+def count_llm_referrals(
+    since_iso: str | None = None, limit_per_source: int = 50,
+) -> dict[str, Any]:
+    """Aggregate counts for the admin dashboard. Returns:
+
+    .. code-block:: python
+
+        {
+          "total": N,
+          "by_source": {"chatgpt": 42, "perplexity": 18, ...},
+          "by_ua_class": {"bot": 60, "human": 0, ...},
+          "top_paths": [{"path": "/book/abc", "source": "chatgpt", "n": 12}, ...],
+        }
+    """
+    where = ""
+    params: tuple = ()
+    if since_iso:
+        where = "WHERE created_at >= ?"
+        params = (since_iso,)
+    out: dict[str, Any] = {
+        "total": 0, "by_source": {}, "by_ua_class": {}, "top_paths": [],
+    }
+    with get_conn() as conn:
+        try:
+            r = _fetchone(conn, _q(
+                f"SELECT COUNT(*) AS n FROM llm_referrals {where}"
+            ), params)
+            out["total"] = int(r["n"]) if r else 0
+        except Exception:
+            return out
+        try:
+            for r in _fetchall(conn, _q(
+                f"SELECT source, COUNT(*) AS n FROM llm_referrals {where} GROUP BY source"
+            ), params):
+                out["by_source"][r["source"]] = int(r["n"])
+        except Exception:
+            pass
+        try:
+            for r in _fetchall(conn, _q(
+                f"SELECT ua_class, COUNT(*) AS n FROM llm_referrals {where} GROUP BY ua_class"
+            ), params):
+                out["by_ua_class"][r["ua_class"]] = int(r["n"])
+        except Exception:
+            pass
+        try:
+            top = _fetchall(conn, _q(
+                f"""SELECT url_path, source, COUNT(*) AS n FROM llm_referrals
+                    {where}
+                    GROUP BY url_path, source
+                    ORDER BY n DESC
+                    LIMIT ?"""
+            ), (*params, limit_per_source))
+            out["top_paths"] = [
+                {"path": r["url_path"], "source": r["source"], "n": int(r["n"])}
+                for r in top
+            ]
         except Exception:
             pass
     return out

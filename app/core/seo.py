@@ -106,10 +106,18 @@ def book_jsonld(
     word_count: int | None,
     chapters: list[dict[str, Any]] | None,
     site_url: str,
+    in_language: str = "en",
+    date_published: str = "",
+    date_modified: str = "",
 ) -> dict[str, Any]:
     """Schema.org/Book — corrected to omit `numberOfPages` (we don't have
     physical pages; previous code mis-mapped chapter count here). Chapter
-    structure goes in `hasPart` where it belongs."""
+    structure goes in `hasPart` where it belongs.
+
+    Date fields are ISO-8601 strings. Empty values are dropped by
+    ``jsonld_script``. ``inLanguage`` defaults to ``"en"`` since our
+    corpus is overwhelmingly English; pass an explicit code (e.g. ``"zh"``)
+    for non-English entities once we detect them."""
     out: dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "Book",
@@ -117,6 +125,7 @@ def book_jsonld(
         "description": description,
         "url": url,
         "image": image,
+        "inLanguage": in_language,
         "publisher": {"@type": "Organization", "name": "Feynman", "url": site_url},
     }
     if author:
@@ -128,6 +137,10 @@ def book_jsonld(
             {"@type": "Chapter", "name": c.get("title", ""), "position": i + 1}
             for i, c in enumerate(chapters)
         ]
+    if date_published:
+        out["datePublished"] = date_published
+    if date_modified:
+        out["dateModified"] = date_modified
     return out
 
 
@@ -256,7 +269,11 @@ def person_jsonld(
     url: str,
     image: str,
     same_as: list[str] | None = None,
+    date_modified: str = "",
 ) -> dict[str, Any]:
+    """Schema.org/Person. ``dateModified`` lets Google know how fresh
+    the page is — particularly useful for mind pages where new books
+    and discussions get attached over time."""
     out: dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "Person",
@@ -269,6 +286,8 @@ def person_jsonld(
         out["knowsAbout"] = [d.strip() for d in domain.split(",") if d.strip()] or domain
     if same_as:
         out["sameAs"] = same_as
+    if date_modified:
+        out["dateModified"] = date_modified
     return out
 
 
@@ -413,6 +432,41 @@ def render_topic_link_back(topic: str, site_url: str) -> str:
     return (
         f'<p class="topic-link-back">More on '
         f'<a href="{_esc(site_url)}/topic/{slug}">{_esc(topic)}</a></p>'
+    )
+
+
+def render_explore_footer(
+    items: list[dict[str, str]],
+    site_url: str,
+    label: str = "Explore further",
+) -> str:
+    """Bottom-of-page neighborhood link cluster — 3-5 cross-links to
+    adjacent entities. Mirrors the spec's Phase 5 "footer Explore"
+    requirement: gives readers a path forward after the CTA and gives
+    crawlers an extra signal of entity neighborhood.
+
+    Each item is a ``{"label", "href"}`` dict. The href can be a full
+    URL or a path; full URL is preferred so JSON-LD-style crawlers
+    that don't resolve relative paths still follow."""
+    if not items:
+        return ""
+    anchors = []
+    for it in items[:5]:
+        href = (it.get("href") or "").strip()
+        text = (it.get("label") or "").strip()
+        if not href or not text:
+            continue
+        # Convert bare paths to absolute URLs against site_url
+        if href.startswith("/") and site_url:
+            href = site_url.rstrip("/") + href
+        anchors.append(f'<a href="{_esc(href)}">{_esc(text)}</a>')
+    if not anchors:
+        return ""
+    return (
+        '<footer class="explore-footer">'
+        f'<small>{_esc(label)}: '
+        f'{" · ".join(anchors)}'
+        '</small></footer>'
     )
 
 

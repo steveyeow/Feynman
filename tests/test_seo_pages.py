@@ -1351,6 +1351,214 @@ class TestPhase8FeatureFlag:
             assert result is True
 
 
+class TestPhase0DateFieldsAndLanguage:
+    """Phase 0 gap fix — book/mind JSON-LD must emit inLanguage,
+    datePublished, dateModified when data is available."""
+
+    def test_book_jsonld_includes_in_language_default(self):
+        ld = seo.book_jsonld(
+            title="T", description="D", author="A",
+            url="u", image="i", word_count=None, chapters=None, site_url="s",
+        )
+        assert ld["inLanguage"] == "en"
+
+    def test_book_jsonld_emits_date_fields_when_provided(self):
+        ld = seo.book_jsonld(
+            title="T", description="D", author="A",
+            url="u", image="i", word_count=None, chapters=None, site_url="s",
+            date_published="2026-01-01T00:00:00Z",
+            date_modified="2026-05-01T00:00:00Z",
+        )
+        assert ld["datePublished"] == "2026-01-01T00:00:00Z"
+        assert ld["dateModified"] == "2026-05-01T00:00:00Z"
+
+    def test_book_jsonld_omits_dates_when_empty(self):
+        # Empty strings should not produce empty schema keys
+        ld = seo.book_jsonld(
+            title="T", description="D", author="A",
+            url="u", image="i", word_count=None, chapters=None, site_url="s",
+            date_published="", date_modified="",
+        )
+        wrapped = seo.jsonld_script(ld)
+        assert "datePublished" not in wrapped
+        assert "dateModified" not in wrapped
+
+    def test_person_jsonld_includes_date_modified_when_provided(self):
+        p = seo.person_jsonld(
+            name="X", description="d", domain="",
+            url="u", image="i",
+            date_modified="2026-05-26T00:00:00Z",
+        )
+        assert p["dateModified"] == "2026-05-26T00:00:00Z"
+
+
+class TestPhase5ExploreFooter:
+    """Phase 5.6 gap fix — explore-footer cross-link cluster."""
+
+    def test_renders_items_with_separator(self):
+        out = seo.render_explore_footer(
+            [
+                {"label": "Sapiens", "href": "/book/b1"},
+                {"label": "Karl Marx", "href": "/mind/m1"},
+                {"label": "Economics", "href": "/topic/economics"},
+            ],
+            "https://x.com",
+        )
+        assert "Sapiens" in out
+        assert "Karl Marx" in out
+        assert "Economics" in out
+        # All hrefs converted to absolute URLs
+        assert 'href="https://x.com/book/b1"' in out
+        assert 'href="https://x.com/mind/m1"' in out
+        assert 'href="https://x.com/topic/economics"' in out
+
+    def test_caps_at_five_items(self):
+        items = [{"label": f"L{i}", "href": f"/x/{i}"} for i in range(10)]
+        out = seo.render_explore_footer(items, "https://x.com")
+        assert out.count("<a ") == 5
+
+    def test_custom_label(self):
+        out = seo.render_explore_footer(
+            [{"label": "X", "href": "/a"}], "https://x.com",
+            label="Other topics",
+        )
+        assert "Other topics" in out
+
+    def test_empty_items_returns_empty(self):
+        assert seo.render_explore_footer([], "https://x.com") == ""
+
+    def test_skips_malformed_entries(self):
+        out = seo.render_explore_footer(
+            [
+                {"label": "Good", "href": "/a"},
+                {"label": "", "href": "/b"},         # no label
+                {"label": "Bad", "href": ""},        # no href
+            ],
+            "https://x.com",
+        )
+        assert out.count("<a ") == 1
+        assert "Good" in out
+
+    def test_preserves_absolute_urls(self):
+        # Don't double-prefix when href is already absolute
+        out = seo.render_explore_footer(
+            [{"label": "X", "href": "https://other.com/path"}],
+            "https://x.com",
+        )
+        assert 'href="https://other.com/path"' in out
+        assert "https://x.com/https://" not in out
+
+
+class TestPhase7LlmAnalytics:
+    """Phase 7.3 — LLM referrer + UA classification."""
+
+    def test_classify_referer_chatgpt(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_referer("https://chatgpt.com/c/abc") == "chatgpt"
+        assert llm_analytics.classify_referer("https://chat.openai.com/c/abc") == "chatgpt"
+
+    def test_classify_referer_perplexity(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_referer("https://perplexity.ai/search?q=x") == "perplexity"
+        assert llm_analytics.classify_referer("https://www.perplexity.ai/page") == "perplexity"
+
+    def test_classify_referer_claude_and_gemini(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_referer("https://claude.ai/chat/abc") == "claude"
+        assert llm_analytics.classify_referer("https://gemini.google.com/app") == "gemini"
+
+    def test_classify_referer_returns_none_for_non_llm(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_referer("https://www.google.com/search?q=x") is None
+        assert llm_analytics.classify_referer("https://github.com/abc/repo") is None
+
+    def test_classify_referer_empty(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_referer("") is None
+        assert llm_analytics.classify_referer(None or "") is None
+
+    def test_classify_user_agent_gptbot(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_user_agent("Mozilla/5.0 (compatible; GPTBot/1.0)") == "chatgpt"
+
+    def test_classify_user_agent_claude(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_user_agent("ClaudeBot/1.0") == "claude"
+        assert llm_analytics.classify_user_agent("anthropic-ai") == "claude"
+
+    def test_classify_user_agent_perplexity(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_user_agent("PerplexityBot/2.0") == "perplexity"
+
+    def test_classify_user_agent_returns_none_for_browser(self):
+        from app.core import llm_analytics
+        assert llm_analytics.classify_user_agent(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/537.36"
+        ) is None
+
+    def test_classify_request_bot_takes_precedence(self):
+        # If UA is a bot, ua_class is "bot" regardless of referer
+        from app.core import llm_analytics
+        src, ua = llm_analytics.classify_request("https://chatgpt.com", "GPTBot/1.0")
+        assert src == "chatgpt"
+        assert ua == "bot"
+
+    def test_classify_request_human_from_chat_surface(self):
+        # Real browser UA + LLM referer → human click-through
+        from app.core import llm_analytics
+        src, ua = llm_analytics.classify_request(
+            "https://perplexity.ai/search?q=x",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X)",
+        )
+        assert src == "perplexity"
+        assert ua == "human"
+
+    def test_classify_request_no_llm_signal(self):
+        from app.core import llm_analytics
+        src, ua = llm_analytics.classify_request(
+            "https://google.com", "Mozilla/5.0",
+        )
+        assert src is None
+        assert ua == "unknown"
+
+
+class TestPhase7IndexNow:
+    """Phase 7.2 — IndexNow key file + ping protocol."""
+
+    def test_key_file_content_matches_key(self):
+        from app.core import indexnow
+        assert indexnow.get_key_file_content() == indexnow.INDEXNOW_KEY
+
+    def test_key_file_name_format(self):
+        from app.core import indexnow
+        name = indexnow.get_key_file_name()
+        assert name.endswith(".txt")
+        assert indexnow.INDEXNOW_KEY in name
+
+    def test_ping_urls_skipped_when_empty_list(self):
+        from app.core import indexnow
+        r = indexnow.ping_urls([], host="feynman.wiki")
+        assert r["status"] == "skipped"
+        assert r["submitted"] == 0
+
+    def test_ping_urls_skipped_when_no_host(self):
+        from app.core import indexnow
+        r = indexnow.ping_urls(["https://feynman.wiki/x"], host="")
+        assert r["status"] == "skipped"
+
+    def test_ping_urls_caps_at_max(self):
+        """Don't try to submit more than the protocol limit per request."""
+        from app.core import indexnow
+        # Use a fake host that won't resolve so we exercise the limit
+        # logic without actually hitting the wire
+        many = [f"https://feynman.wiki/x/{i}" for i in range(5000)]
+        # This will error out on network but the limit gets applied first
+        r = indexnow.ping_urls(many, host="this-host-does-not-resolve-xyz.invalid", timeout=0.1)
+        # Either error (network) or ok if mock; either way the submitted
+        # count must be capped at _MAX_URLS_PER_PING (1000)
+        assert r["submitted"] <= 1000
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in
