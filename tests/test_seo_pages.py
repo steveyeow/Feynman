@@ -1595,6 +1595,51 @@ class TestPhase7IndexNow:
         assert r["submitted"] <= 1000
 
 
+class TestDbCountChunksBatch:
+    """Sitemap relies on this to gate /q/ URL inclusion. A regression
+    in the GROUP BY shape would either over-include (low-quality pages
+    get sitemap'd) or under-include (good pages excluded). Smoke-test
+    against the SQLite in-memory DB."""
+
+    def test_returns_per_agent_counts(self):
+        # Use the in-process SQLite DB; add_chunks requires id, vector,
+        # dim, norm columns per row
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import init_db, count_chunks_batch, add_chunks, create_agent
+        init_db()
+        a1 = create_agent(name=f"a-{uuid.uuid4().hex[:6]}", agent_type="ai_book", source="x", meta={})
+        a2 = create_agent(name=f"b-{uuid.uuid4().hex[:6]}", agent_type="ai_book", source="x", meta={})
+
+        def _mk(n):
+            return [
+                {
+                    "id": str(uuid.uuid4()),
+                    "chunk_index": i,
+                    "text": f"text {i}",
+                    "vector": b"\x00\x00\x00\x00",
+                    "dim": 0,
+                    "norm": 0.0,
+                }
+                for i in range(n)
+            ]
+        add_chunks(a1, _mk(7))
+        add_chunks(a2, _mk(2))
+        counts = count_chunks_batch([a1, a2])
+        assert counts.get(a1) == 7
+        assert counts.get(a2) == 2
+
+    def test_empty_input(self):
+        from app.core.db import count_chunks_batch
+        assert count_chunks_batch([]) == {}
+
+    def test_missing_agent_omitted(self):
+        # An agent with no chunks doesn't appear in the result dict
+        from app.core.db import count_chunks_batch
+        counts = count_chunks_batch(["nonexistent-id"])
+        assert "nonexistent-id" not in counts
+
+
 class TestSparseDataDegradation:
     """A fresh book or mind with no chunks / no questions / no links still
     needs to render without crashing. The page is allowed to be thin in

@@ -46,6 +46,7 @@ from .core.db import (
     approve_chat_session_public,
     count_assistant_messages_batch,
     count_assistant_messages_for_minds_batch,
+    count_chunks_batch,
     count_llm_referrals,
     count_pending_public_sessions,
     get_chat_session_with_public_status,
@@ -757,10 +758,21 @@ def sitemap_xml():
             a for a in list_agents(limit=5000)
             if a.get("status") == "ready"
         ]
+        ready_ids = [a["id"] for a in ready_agents]
         # Batch-fetch questions for all ready agents in a single query —
         # the previous loop pattern would issue N round-trips inside the
         # sitemap render hot path.
-        questions_by_agent = list_questions_batch([a["id"] for a in ready_agents])
+        questions_by_agent = list_questions_batch(ready_ids)
+        # Quality gate for /q/ URL inclusion: a book needs at least this
+        # many indexed chunks for its question pages to produce
+        # substantive RAG-grounded answers. Below the threshold the
+        # synthesized answer tends to be "the passages don't contain
+        # the information" — a low-quality page Google will flag and
+        # which drags site-wide quality score down. 5 chunks ≈ 3-4
+        # paragraphs of indexed content, the minimum for a meaningful
+        # cross-passage synthesis.
+        _MIN_CHUNKS_FOR_Q_URLS = 5
+        chunks_by_agent = count_chunks_batch(ready_ids)
         for agent in ready_agents:
             agent_id = agent["id"]
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
@@ -772,8 +784,11 @@ def sitemap_xml():
   </url>
 """
             # Phase 4A — compound Q&A URLs. One per popular question per
-            # book. Slightly lower priority than the parent page; weekly
-            # changefreq because answers may be regenerated.
+            # book. Gated on chunk count (see _MIN_CHUNKS_FOR_Q_URLS
+            # above) so catalog stubs and mis-indexed books don't expose
+            # their low-quality /q/ pages to Google.
+            if chunks_by_agent.get(agent_id, 0) < _MIN_CHUNKS_FOR_Q_URLS:
+                continue
             for q in questions_by_agent.get(agent_id, []):
                 qslug = seo_render.slugify(q)
                 if not qslug:

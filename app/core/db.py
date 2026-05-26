@@ -1600,6 +1600,45 @@ def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
         return out
 
 
+def count_chunks_batch(agent_ids: list[str]) -> dict[str, int]:
+    """One-shot count of chunks per agent — used by sitemap to gate
+    /q/ compound URL inclusion. Agents with too few chunks tend to
+    produce low-quality LLM answers (RAG retrieves the wrong things,
+    or the book has been indexed with metadata that doesn't match the
+    actual content). Excluding their /q/ URLs from sitemap protects
+    site-wide quality score.
+
+    Returns {agent_id: count}; agents with zero chunks are omitted."""
+    if not agent_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(agent_ids))
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            f"""SELECT agent_id, COUNT(*) AS n FROM chunks
+                WHERE agent_id IN ({placeholders})
+                GROUP BY agent_id"""
+        ), tuple(agent_ids))
+    return {r["agent_id"]: int(r["n"]) for r in rows}
+
+
+def get_first_chunk_text(agent_id: str, max_chars: int = 400) -> str:
+    """Pull the first chunk's text (truncated) — used by the
+    quality-audit script to spot agent-content mismatches (e.g. agent
+    named 'A World Brewed' but chunk[0] starts with content from a
+    completely different book)."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            """SELECT text FROM chunks
+               WHERE agent_id = ?
+               ORDER BY chunk_index ASC
+               LIMIT 1"""
+        ), (agent_id,))
+        if not row:
+            return ""
+        text = (row["text"] or "").strip()
+        return text[:max_chars] if len(text) > max_chars else text
+
+
 def list_questions_batch(agent_ids: list[str]) -> dict[str, list[str]]:
     """Fetch the question texts for many agents in one query — used by
     sitemap rendering, which would otherwise issue N round-trips.
