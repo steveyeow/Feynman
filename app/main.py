@@ -1319,6 +1319,19 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     cta_target_url = reader_url
 
     # ── Build content sections ──────────────────────────────────────────
+    # Stub detection: catalog book with no chunks, no chapters, no questions.
+    # The other content renderers gracefully no-op on empty input, which
+    # leaves the page nearly bare. Render an explicit empty-state so
+    # visitors (logged in or anonymous) understand WHY content is thin
+    # rather than wondering if the page is broken. The page's bottom CTA
+    # matrix still carries the Chat button — empty-state itself doesn't
+    # duplicate that affordance.
+    is_stub = not chunks and not chapters and not questions
+    empty_state_html = (
+        seo_render.render_book_empty_state(title_raw, author_raw)
+        if is_stub else ""
+    )
+
     about_html = seo_render.render_book_about(subtitle_raw, author_raw)
     stats_html = seo_render.render_stats(total_words, chapter_count)
     toc_html = seo_render.render_toc(chapters)
@@ -1447,6 +1460,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {seo_render.render_landing_header(base, is_authenticated=is_authenticated)}
 <h1>{title}</h1>
 {author_html}
+{empty_state_html}
 {about_html}
 {stats_html}
 {samples_html}

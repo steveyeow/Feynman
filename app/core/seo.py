@@ -308,6 +308,33 @@ def _drop_nulls(obj: Any) -> Any:
 
 # ─── Book page section builders ───────────────────────────────────────
 
+def render_book_empty_state(title: str, author: str) -> str:
+    """Render the "not indexed yet" notice for catalog-stub books.
+
+    Roughly 575 of 932 catalog books in production are stubs with 1-4
+    metadata chunks but no full text — Gutenberg can't serve them
+    (modern in-copyright) and no user has uploaded a copy. The SSR
+    detail page for those books otherwise degrades to just <h1>Title</h1>
+    + author + topic link + chat CTA, which looks empty enough that
+    visitors (per user screenshot review on 2026-05-27) wonder if the
+    page is broken. This section gives the page a meaningful body
+    explaining the state, while letting the page's bottom CTA matrix
+    handle the actual Chat button (no duplicate CTAs)."""
+    author_phrase = f' by {_esc(author)}' if author else ''
+    return (
+        '<section class="empty-state">'
+        f'<p class="empty-state-headline">Full text isn\'t indexed yet for '
+        f'<em>{_esc(title)}</em>{author_phrase}.</p>'
+        '<p>This title sits in our catalog but its primary text wasn\'t '
+        'available from public-domain sources (Project Gutenberg, '
+        'OpenLibrary, etc.) and no reader has uploaded a copy. You can '
+        'still chat with Feynman about it — the AI draws on general '
+        'knowledge and the book\'s metadata even when the book passages '
+        'aren\'t available for retrieval.</p>'
+        '</section>'
+    )
+
+
 def render_book_about(subtitle: str, author: str) -> str:
     """Top-of-page 1-2 sentence summary. The subtitle (from outline) is the
     best signal we have for what the book is *about* in the author's own
