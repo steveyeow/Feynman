@@ -3482,28 +3482,35 @@ async function deleteBook(agentId) {
 window.deleteBook = deleteBook;
 
 // ─── Detail-page entry points (book + mind) ───
-// Books: from library card body → /book/{id}?details=1 in a new tab.
-// Minds: from minds-graph node body → /mind/{id}?details=1 in a new tab.
-// The ?details=1 query param bypasses the server-side referer auto-redirect
-// (see book_page / mind_page handlers) so the SSR landing page actually
-// renders for the logged-in user instead of bouncing to the SPA reader/chat.
+// One URL per entity, same page for everyone — Google crawlers, share-
+// link visitors, AND logged-in product users. The SSR /book/{id} and
+// /mind/{id} pages are auth-aware: when a logged-in user lands on them
+// the chrome adapts (Feynman wordmark + "Back to app →" instead of the
+// "Open Feynman" marketing CTA), the body uses the same Inter type
+// family + color tokens as the SPA, and all the rich aggregation
+// content blocks (Sample Passages, Popular Questions, Discussed by
+// Great Minds, Related Books, Insights, Dialogues) render identically.
 //
-// Splits "exploration" (free, no paywall) from "engagement" (Chat button,
-// paywall on minds). Discovery is free; conversion ask happens at the
-// moment of value.
+// Earlier iterations tried multiple alternatives that didn't work:
+//   * new-tab to /book/{id}?details=1 — anonymous landing chrome,
+//     "Open Feynman" CTA showed even though user was logged in
+//   * same-tab to #/book/{id} hash route — only renders the existing
+//     SPA chat-with-sidebar view, missing all the SEO aggregations
+// The right model is the one the user landed on: one canonical URL,
+// auth-aware chrome, full aggregations always present.
+//
+// Same-tab navigation means a real page load (we leave the SPA). The
+// SSR page is rich and SPA-styled enough that this is not jarring;
+// the back button returns to the SPA.
 function openBookDetails(agentId) {
   if (!agentId) return;
-  // selectedBooks doesn't change — the user's chat composer keeps whatever
-  // it had. They're just opening a side view of the book.
-  window.open('/book/' + encodeURIComponent(agentId) + '?details=1', '_blank',
-              'noopener,noreferrer');
+  window.location.href = '/book/' + encodeURIComponent(agentId);
 }
 window.openBookDetails = openBookDetails;
 
 function openMindDetails(mindId) {
   if (!mindId) return;
-  window.open('/mind/' + encodeURIComponent(mindId) + '?details=1', '_blank',
-              'noopener,noreferrer');
+  window.location.href = '/mind/' + encodeURIComponent(mindId);
 }
 window.openMindDetails = openMindDetails;
 
@@ -4974,10 +4981,10 @@ async function renderReader(agentId) {
   const _rTweetText = encodeURIComponent(`${d.title} — by ${_rAuthor || 'AI'} on feynman.wiki`);
   const _rTweetUrl = encodeURIComponent(_rShareUrl);
   const _rTweetIntentUrl = `https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}`;
-  // Details button — opens /book/{id}?details=1 in new tab. Single entry
-  // point; the detail page itself surfaces Popular Questions + AI Insights
-  // + Discussed-by-Great-Minds + Related Books (the SEO long-tail
-  // content blocks that have no SPA-native equivalent).
+  // Details button — navigates to the SPA-native book detail view at
+  // #/book/{id} (NOT the SSR landing). Keeps the user in the same tab
+  // with proper SPA chrome, logo, and auth context. openBookDetails()
+  // uses window.location.hash so the back button works.
   const _rTopbarDetailsHtml = `
       <button type="button" class="reader-topbar-details-btn" aria-label="Book details" title="Book details" onclick="openBookDetails('${esc(agentId)}')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -6655,14 +6662,32 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
             <div class="tt-name">${n.name}</div>
             <div class="tt-era">${n.era}</div>
           </div>
-          <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>Chat</span>
-          </button>
+          <div class="tt-actions">
+            <button class="tt-profile-btn" data-mind-id="${n.id}" title="View ${n.name}'s profile">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Profile</span>
+            </button>
+            <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Chat</span>
+            </button>
+          </div>
         </div>
         <div class="tt-domains">${domains}</div>
         <div class="tt-bio">${n.bio}</div>
         ${discoverBtn}`;
+      const profileBtn = tooltip.querySelector('.tt-profile-btn');
+      if (profileBtn) {
+        profileBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          tooltip.classList.add('hidden');
+          _tooltipNode = null;
+          // Profile is FREE for all users — open SSR /mind/{id} which
+          // is now auth-aware and shows the rich aggregation page with
+          // proper SPA chrome for logged-in visitors.
+          openMindDetails(profileBtn.dataset.mindId);
+        });
+      }
       const chatBtn = tooltip.querySelector('.tt-chat-icon-btn');
       if (chatBtn) {
         chatBtn.addEventListener('click', (ev) => {

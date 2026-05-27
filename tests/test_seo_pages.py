@@ -1347,12 +1347,17 @@ class TestPhase8Renderers:
         from app.core import seo
         assert seo.render_insight_cards([]) == ""
 
-    def test_empty_state_includes_cta(self):
+    def test_empty_state_explains_what_is_missing(self):
+        # Renamed from test_empty_state_includes_cta — the empty state
+        # used to inline its own "Start a chat →" button which duplicated
+        # the page's bottom CTA. Removed that button after screenshot
+        # review showed it as a redundant second Chat affordance.
         from app.core import seo
         out = seo.render_insights_empty_state("Sapiens", "https://x.com/#/chat/abc")
         assert "Sapiens" in out
-        assert "https://x.com/#/chat/abc" in out
-        assert "No AI insights" in out or "Start a chat" in out
+        assert "No AI insights" in out or "haven't accumulated" in out
+        # No inline CTA — the page's own bottom CTA handles that.
+        assert "cta-btn" not in out
 
     def test_article_jsonld_structure(self):
         from app.core import seo

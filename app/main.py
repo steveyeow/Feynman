@@ -1403,31 +1403,15 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
             (q, deflect) for q in questions if q
         ]))
 
-    # ── Decide who sees the landing page vs gets redirected ─────────────
-    # Crawlers: always see the landing page (no redirect, body visible).
-    # In-product clicks with ?details=1: SPA user EXPLICITLY clicked
-    #   "View details" — they want the landing page, not the SPA action.
-    #   Opt-out the auto-redirect. Same query param works for both books
-    #   and minds; checked here via request.query_params.
-    # In-product clicks (Referer = our origin, no ?details): redirect to
-    #   the SPA action so existing UX is unchanged — they expect to land
-    #   in reader/chat.
-    # Everyone else (Google, share links, direct visits, missing referer):
-    #   stay on the landing page so they see what the URL actually offers
-    #   instead of being dropped into an empty reader.
-    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
-    wants_details = request.query_params.get("details") == "1"
-    show_landing = (
-        wants_details
-        or _is_crawler(request)
-        or not seo_render.is_internal_referer(referer, base)
-    )
-    body_style = '' if show_landing else ' style="opacity:0"'
-    redirect_script = (
-        ''
-        if show_landing
-        else f'<script>window.location.replace({json.dumps(cta_target_url)});</script>'
-    )
+    # The page is the destination for everyone — crawlers, share-link
+    # visitors, and logged-in SPA users alike. Earlier iteration
+    # redirected internal-referer hits to the SPA action; that
+    # fragmented the experience (same URL meant different things
+    # depending on who you were and where you came from) and made
+    # logged-in users miss the rich aggregation content the SSR page
+    # assembles. One URL, one page, one set of content; only the
+    # header chrome adapts via is_authenticated.
+    is_authenticated = _get_user_id(request) is not None
     author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
     author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
 
@@ -1459,8 +1443,8 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {book_ld}
 {breadcrumb_ld}
 {faq_ld}
-</head><body{body_style}>
-{seo_render.render_landing_header(base)}
+</head><body>
+{seo_render.render_landing_header(base, is_authenticated=is_authenticated)}
 <h1>{title}</h1>
 {author_html}
 {about_html}
@@ -1475,7 +1459,6 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {cta_html}
 {explore_footer_html}
 {seo_render.render_site_footer(base)}
-{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
@@ -1655,22 +1638,10 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
         (name_raw, canonical),
     ]))
 
-    # Same referer-aware gate as book_page. ?details=1 opts out of the
-    # auto-redirect so SPA users who explicitly clicked "View profile"
-    # land on the landing page instead of bouncing to the chat.
-    referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
-    wants_details = request.query_params.get("details") == "1"
-    show_landing = (
-        wants_details
-        or _is_crawler(request)
-        or not seo_render.is_internal_referer(referer, base)
-    )
-    body_style = '' if show_landing else ' style="opacity:0"'
-    redirect_script = (
-        ''
-        if show_landing
-        else f'<script>window.location.replace({json.dumps(reader_url)});</script>'
-    )
+    # The page is the destination for everyone — see book_page above for
+    # the rationale. One URL, one page, header chrome adapts via
+    # is_authenticated.
+    is_authenticated = _get_user_id(request) is not None
     if era_raw and domain_raw:
         era_domain_html = f'<p class="mind-meta">{era} · {domain}</p>'
     elif era_raw:
@@ -1710,8 +1681,8 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {seo_render.landing_css_link()}
 {person_ld}
 {breadcrumb_ld}
-</head><body{body_style}>
-{seo_render.render_landing_header(base)}
+</head><body>
+{seo_render.render_landing_header(base, is_authenticated=is_authenticated)}
 <h1>{name}</h1>
 {era_domain_html}
 {bio_html}
@@ -1727,7 +1698,6 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 <p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
 {explore_footer_html}
 {seo_render.render_site_footer(base)}
-{redirect_script}
 </body></html>"""
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"})
 
@@ -1852,7 +1822,7 @@ def book_question_page(agent_id: str, question_slug: str, request: Request) -> H
 {qa_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <nav class="qa-back"><a href="{book_url}">← {title}</a></nav>
 <h1>{html_esc(question)}</h1>
 {answer_html}
@@ -1969,7 +1939,7 @@ def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLR
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <nav class="essay-back"><a href="{mind_url}">← {name}</a></nav>
 <h1>How {name} would approach {html_esc(topic)}</h1>
 {essay_html}
@@ -2126,7 +2096,7 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI insights about {entity_name}</h1>
 <p class="insights-intro">Accumulated AI-synthesized commentary drawn from
@@ -2251,7 +2221,7 @@ def mind_dialogues_page(mind_id: str, request: Request) -> HTMLResponse:
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI dialogues with {entity_name}</h1>
 <p class="insights-intro">Accumulated AI agent responses from real user
@@ -2393,7 +2363,7 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
 {collection_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <h1>{html_esc(topic)}</h1>
 {intro_html}
 {books_html}
@@ -2748,7 +2718,7 @@ def _render_public_discussions_page(
 {forum_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(_SITE_URL)}
+{seo_render.render_landing_header(_SITE_URL, is_authenticated=_get_user_id(request) is not None)}
 <nav class="back-link"><a href="{entity_canonical}">← {html_esc(entity_name)}</a></nav>
 <h1>Discussions about {html_esc(entity_name)}</h1>
 {posts_html}
@@ -2967,7 +2937,7 @@ def public_session_page(session_id: str, request: Request) -> HTMLResponse:
 {forum_post_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base)}
+{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
 <h1>{title}</h1>
 <p class="post-byline">Shared by {handle}</p>
 {post_html}
