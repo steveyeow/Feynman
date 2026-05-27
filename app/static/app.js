@@ -5677,6 +5677,34 @@ let _graphAnim = null;
 let _graphState = null;
 let _graphResizeObserver = null;
 let _graphNodePositions = null; // in-memory cache: skip fly-in on same-session revisit
+let _graphAbort = null; // AbortController for window/tooltip listeners — prevents accumulation across re-renders
+
+// Theme cache — `getComputedStyle()` and `matchMedia()` are surprisingly expensive when called inside the
+// per-frame draw loop. Cache the values and invalidate via MutationObserver when the html class flips,
+// or via prefers-color-scheme media query change.
+let _graphThemeCache = null;
+let _graphThemeWired = false;
+function _getGraphTheme() {
+  if (_graphThemeCache) return _graphThemeCache;
+  if (!_graphThemeWired) {
+    try {
+      new MutationObserver(() => { _graphThemeCache = null; }).observe(
+        document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        const onChange = () => { _graphThemeCache = null; };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+      }
+    } catch (_) { /* observers/matchMedia unavailable — fall back to per-call reads */ }
+    _graphThemeWired = true;
+  }
+  _graphThemeCache = {
+    dk: _isDarkMode(),
+    canvasBg: getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim() || '#ffffff',
+  };
+  return _graphThemeCache;
+}
 
 function _domainTokens(m) {
   return (m.domain || '').toLowerCase().split(/[,;\/&]+/).map(d => d.trim()).filter(Boolean);
@@ -5884,6 +5912,12 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
   if (_graphAnim) { cancelAnimationFrame(_graphAnim); _graphAnim = null; }
   if (_graphSim) { _graphSim.stop(); _graphSim = null; }
   if (_graphResizeObserver) { _graphResizeObserver.disconnect(); _graphResizeObserver = null; }
+  // Drop any window/tooltip listeners from the previous render. Without this,
+  // every navigation to #/minds piled on a fresh pair of mousemove/mouseup handlers,
+  // each holding the previous render's nodes/links arrays alive.
+  if (_graphAbort) { _graphAbort.abort(); }
+  _graphAbort = new AbortController();
+  const _listenerSignal = _graphAbort.signal;
   container.innerHTML = '';
   tooltip.classList.add('hidden');
 
@@ -5979,18 +6013,15 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
     _draggedNode.fy = wy;
 
     state._dragDropTarget = null;
-    let closest = null, closestDist = Infinity;
+    let closest = null, closestDist2 = (BASE_R * 3.5) * (BASE_R * 3.5);
     for (const n of nodes) {
       if (n === _draggedNode || n._isAdd) continue;
       const dx = n.x - wx, dy = n.y - wy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < BASE_R * 3.5 && dist < closestDist) {
-        closestDist = dist;
-        closest = n;
-      }
+      const d2 = dx * dx + dy * dy;
+      if (d2 < closestDist2) { closestDist2 = d2; closest = n; }
     }
     state._dragDropTarget = closest;
-  });
+  }, { signal: _listenerSignal });
 
   window.addEventListener('mouseup', (e) => {
     if (!_draggedNode) return;
@@ -6031,11 +6062,12 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
     _dragStartPos = null;
     _suppressClick = true;
     sim.alphaTarget(0);
-  });
+  }, { signal: _listenerSignal });
 
   const particles = [];
   links.forEach(l => {
-    const count = Math.max(1, Math.round(l.strength * 1.5));
+    // Cap particles per link — strong links used to spawn 3-5 each, ballooning the per-frame loop.
+    const count = Math.min(2, Math.max(1, Math.round(l.strength)));
     for (let i = 0; i < count; i++) {
       particles.push({
         link: l,
@@ -6105,8 +6137,12 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
       _insertMindNode(m, nearNode);
     }
 
+    // Read theme once per frame and reuse — avoids per-node getComputedStyle / matchMedia calls.
+    const _theme = _getGraphTheme();
+    const dk = _theme.dk;
+
     ctx.save();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim() || '#ffffff';
+    ctx.fillStyle = _theme.canvasBg;
     ctx.fillRect(0, 0, W, H);
     ctx.translate(transform.x, transform.y);
     ctx.scale(transform.k, transform.k);
@@ -6185,15 +6221,30 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
     }
 
     if (state.hoveredNode !== addNode) {
-      let cx = 0, cy = 0, cnt = 0;
-      for (const n of nodes) { if (!n._isAdd) { cx += n.x; cy += n.y; cnt++; } }
-      if (cnt) {
-        cx /= cnt; cy /= cnt;
-        let maxD = 0;
-        for (const n of nodes) { if (!n._isAdd) { const d = Math.hypot(n.x - cx, n.y - cy); if (d > maxD) maxD = d; } }
+      // The orbit centroid + radius only need refreshing as nodes drift — not every frame.
+      // We still rotate the angle every frame (smooth motion), but skip the O(N) recompute.
+      if (time.now >= (state._addOrbitNextAt || 0)) {
+        let cx = 0, cy = 0, cnt = 0;
+        for (const n of nodes) { if (!n._isAdd) { cx += n.x; cy += n.y; cnt++; } }
+        if (cnt) {
+          cx /= cnt; cy /= cnt;
+          let maxD2 = 0;
+          for (const n of nodes) {
+            if (n._isAdd) continue;
+            const ddx = n.x - cx, ddy = n.y - cy;
+            const d2 = ddx * ddx + ddy * ddy;
+            if (d2 > maxD2) maxD2 = d2;
+          }
+          state._addOrbitCx = cx;
+          state._addOrbitCy = cy;
+          state._addOrbitR = Math.sqrt(maxD2) + BASE_R * 3.5;
+        }
+        state._addOrbitNextAt = time.now + 150; // ~6.7 Hz refresh — geometry settles slowly
+      }
+      if (state._addOrbitR != null) {
         const a = time.now * 0.00015;
-        addNode.x = cx + Math.cos(a) * (maxD + BASE_R * 3.5);
-        addNode.y = cy + Math.sin(a) * (maxD + BASE_R * 3.5);
+        addNode.x = state._addOrbitCx + Math.cos(a) * state._addOrbitR;
+        addNode.y = state._addOrbitCy + Math.sin(a) * state._addOrbitR;
       }
     }
 
@@ -6261,15 +6312,25 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
       const [cr, cg, cb] = _hexToRgb(n.color);
       const nodeAlpha = dimmed ? 0.12 : 1;
 
+      // Glow: the gradient version is rich-looking but expensive (one createRadialGradient per node
+      // per frame ≈ N×60 allocations/sec). For non-hovered nodes the alpha is ~0.05 so a flat
+      // translucent halo is visually indistinguishable. Reserve the gradient for the hovered node.
       if (!dimmed) {
-        const glowR = rr * 2.5;
-        const grad = ctx.createRadialGradient(n.x, n.y, rr * 0.5, n.x, n.y, glowR);
-        grad.addColorStop(0, `rgba(${cr},${cg},${cb},${hovered ? 0.15 : 0.05})`);
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
+        if (hovered) {
+          const glowR = rr * 2.5;
+          const grad = ctx.createRadialGradient(n.x, n.y, rr * 0.5, n.x, n.y, glowR);
+          grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.15)`);
+          grad.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, rr * 1.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${cr},${cg},${cb},0.04)`;
+          ctx.fill();
+        }
       }
 
       if (n._newAt) {
@@ -6363,7 +6424,8 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
         ctx.setLineDash([]);
       }
 
-      const flashEntry = _flashNodes.find(f => f.node === n);
+      // _flashNodes is almost always empty; skip the linear scan in that common case.
+      const flashEntry = _flashNodes.length ? _flashNodes.find(f => f.node === n) : null;
       if (flashEntry) {
         const elapsed = time.now - flashEntry.startAt;
         if (elapsed >= 0 && elapsed < FLASH_DURATION) {
@@ -6389,7 +6451,6 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
       ctx.arc(n.x, n.y, rr, 0, Math.PI * 2);
       ctx.fillStyle = dimmed ? `rgba(${cr},${cg},${cb},${nodeAlpha})` : n.color;
       ctx.fill();
-      const dk = _isDarkMode();
       ctx.strokeStyle = dimmed ? (dk ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)') : 'rgba(255,255,255,0.25)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
@@ -6414,7 +6475,6 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
     ctx.restore();
 
     if (noMatch) {
-      const dk = _isDarkMode();
       const centerX = W / 2;
       const centerY = H / 2;
       const inviteText = `"${state.highlightQuery}" is not in the network yet`;
@@ -6630,7 +6690,7 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
 
   function _cancelHideTimer() { if (_hideTimer) { clearTimeout(_hideTimer); _hideTimer = null; } }
 
-  tooltip.addEventListener('mouseenter', () => { _tooltipInside = true; _cancelHideTimer(); });
+  tooltip.addEventListener('mouseenter', () => { _tooltipInside = true; _cancelHideTimer(); }, { signal: _listenerSignal });
   tooltip.addEventListener('mouseleave', () => {
     _tooltipInside = false;
     _hideTimer = setTimeout(() => {
@@ -6640,7 +6700,7 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
         tooltip.classList.add('hidden');
       }
     }, 100);
-  });
+  }, { signal: _listenerSignal });
 
   function _showTooltip(n, anchorX, anchorY) {
     _cancelHideTimer();
