@@ -30,6 +30,12 @@ jobs:
           # are written to work against either; the SQLite branch is the
           # cheaper default for CI.
           DATABASE_URL: ""
+          # Dummy LLM key so pick_provider() passes its has_key() check.
+          # Tests that exercise the chat path use unittest.mock to replace
+          # chat_with_fallback — no real network call ever fires. Without
+          # this, pick_provider raises ProviderError before the mock can
+          # intercept, masking the test intent.
+          GEMINI_API_KEY: "ci-dummy-key-never-hits-network"
         run: |
           PYTHONPATH=. pytest tests/ -q --tb=short
 
@@ -58,5 +64,6 @@ jobs:
         # silently ignoring the schema). Cheaper to catch in CI than in GSC.
         env:
           DATABASE_URL: ""
+          GEMINI_API_KEY: "ci-dummy-key-never-hits-network"
         run: |
           PYTHONPATH=. pytest tests/test_jsonld_regression.py -v --tb=short
