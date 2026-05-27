@@ -88,7 +88,7 @@
     <script>
       (function(){var t=localStorage.getItem('feynman-theme');if(t)document.documentElement.classList.add(t)})();
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=107" />
+    <link rel="stylesheet" href="/static/styles.css?v=108" />
   </head>
   <body>
     <div class="app-layout" id="app-layout">
@@ -268,6 +268,18 @@
         <div id="page-chat" class="page-view chat-page hidden">
           <div class="chat-with-sidebar" id="chat-layout">
             <main class="chat-main">
+              <!-- Share-publicly controls: only renders when ENABLE_PUBLIC_DISCUSSIONS=true on the server
+                   (SPA fetches /api/features at init) AND the current session has ≥3 messages. -->
+              <div id="chat-session-actions" class="chat-session-actions hidden">
+                <button id="share-session-btn" class="share-session-btn" type="button" title="Share this conversation publicly">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                  <span class="share-btn-label">Share publicly</span>
+                </button>
+                <span id="share-status-indicator" class="share-status-indicator hidden" title="This conversation is public">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  Public
+                </span>
+              </div>
               <div id="chat-messages" class="chat-messages"></div>
               <div class="chat-input-area">
                 <div class="chat-composer-inline">
@@ -501,11 +513,59 @@
       </div><!-- .app-main -->
     </div><!-- .app-layout -->
 
+    <!-- ─── Share publicly modal ─── Phase 6 user-share UI -->
+    <div id="share-modal" class="share-modal hidden" role="dialog" aria-labelledby="share-modal-title" aria-modal="true">
+      <div class="share-modal-backdrop"></div>
+      <div class="share-modal-card">
+        <header class="share-modal-header">
+          <h2 id="share-modal-title">Share this conversation</h2>
+          <button type="button" class="share-modal-close" aria-label="Close">&times;</button>
+        </header>
+        <div class="share-modal-body">
+          <p class="share-modal-intro">Make this chat publicly viewable on Feynman. Anyone with the link can read it; emails, phone numbers, URLs, and @handles are stripped automatically.</p>
+          <label class="share-field">
+            <span class="share-field-label">Title (optional)</span>
+            <input id="share-title-input" type="text" class="share-field-input" maxlength="200" placeholder="e.g. Marx on AI labor markets" />
+            <small class="share-field-hint">Shows as the discussion headline. Leave blank to use the chat's current title.</small>
+          </label>
+          <label class="share-field">
+            <span class="share-field-label">Attribution (optional)</span>
+            <input id="share-handle-input" type="text" class="share-field-input" maxlength="40" placeholder="@yourname" />
+            <small class="share-field-hint">A short handle that appears below the discussion as a byline. Anonymous if left blank.</small>
+          </label>
+          <p id="share-modal-error" class="share-modal-error hidden"></p>
+        </div>
+        <footer class="share-modal-footer">
+          <button type="button" class="share-modal-cancel">Cancel</button>
+          <button type="button" id="share-modal-submit" class="share-modal-submit">Publish</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ─── Publish-success toast — appears after a /share API call ─── -->
+    <!--      Renamed from share-toast to publish-toast so it doesn't
+              collide with the older .share-toast (reader copy-link feedback). -->
+    <div id="publish-toast" class="publish-toast hidden" role="status" aria-live="polite">
+      <div class="publish-toast-body">
+        <p class="publish-toast-title">Published</p>
+        <p class="publish-toast-msg">Your conversation is now public. Copy the link below to share.</p>
+        <div class="publish-toast-link-row">
+          <input id="publish-toast-url" type="text" readonly class="publish-toast-url" />
+          <button type="button" id="publish-toast-copy" class="publish-toast-copy">Copy</button>
+        </div>
+        <div class="publish-toast-actions">
+          <a id="publish-toast-open" href="#" target="_blank" class="publish-toast-open">Open page</a>
+          <button type="button" id="publish-toast-unshare" class="publish-toast-unshare">Make private</button>
+          <button type="button" id="publish-toast-close" class="publish-toast-close">Done</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script>
       !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     </script>
-    <script src="/static/app.js?v=124"></script>
+    <script src="/static/app.js?v=125"></script>
   </body>
 </html>

@@ -2303,6 +2303,13 @@ async function restoreSessions() {
       mindId: s.mind_id || null,
       sessionType: s.meta?.write_book ? 'write_book' : (s.session_type || 'chat'),
       meta: s.meta || {},
+      // Public-share state (Phase 6). Server returns these on the
+      // session row whenever public_status is set; we mirror them on
+      // the client model so renderChatHistory can show the public dot
+      // and the chat header can show "Manage share" vs "Share publicly".
+      publicStatus: s.public_status || 'private',
+      publicHandle: s.public_handle || null,
+      publicTitle: s.public_title || null,
     }));
     // Migrate from localStorage if DB is empty but localStorage has data
     if (!chatSessions.length) {
@@ -2479,8 +2486,11 @@ function renderChatHistory() {
   list.innerHTML = chatSessions.map(s => {
     const isWriteBook = s.sessionType === 'write_book' || s.meta?.write_book;
     const icon = isWriteBook ? '<svg class="history-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>' : '';
+    // 🌐 dot when session is publicly shared (Phase 6)
+    const publicDot = (s.publicStatus === 'approved')
+      ? ' <span class="history-public-dot" title="Public">●</span>' : '';
     return `<div class="history-item-wrap ${s.id === currentSessionId ? 'active' : ''}" data-sid="${s.id}">
-      <button class="history-item">${icon}${esc(s.title)}</button>
+      <button class="history-item">${icon}${esc(s.title)}${publicDot}</button>
       <button class="history-delete" title="Delete">&times;</button>
     </div>`;
   }).join('');
@@ -2488,6 +2498,7 @@ function renderChatHistory() {
     wrap.querySelector('.history-item').addEventListener('click', () => switchToSession(wrap.dataset.sid));
     wrap.querySelector('.history-delete').addEventListener('click', e => { e.stopPropagation(); deleteSession(wrap.dataset.sid); });
   });
+  if (typeof updateShareButtonVisibility === 'function') updateShareButtonVisibility();
 }
 
 // ─── Chats page ───
@@ -7118,6 +7129,9 @@ async function init() {
   initPostHog();
   if (window.FEYNMAN_PRO) await initSupabase();
   await loadUserTier();
+  // Feature flags from server — drives visibility of Share-publicly button
+  // and any future flag-gated UI. Cached at window level so we don't refetch.
+  await loadServerFeatures();
 
   // Show the correct page immediately based on URL hash,
   // before async data loading, so refreshing #/minds or #/library
@@ -7435,5 +7449,195 @@ function startGreetingIconSwap() {
   }
   scheduleNext();
 }
+
+// ─── Phase 6 user-share UI ────────────────────────────────────────────
+//
+// End-to-end flow for letting a user publish their chat session to a
+// public URL. Auto-publish model: clicking Share triggers POST /share
+// which sets public_status='approved' immediately (no admin queue).
+// Backend rate-limits and runs a min-message-count gate before allowing.
+//
+// Visibility rules (kept in updateShareButtonVisibility):
+//   * Hide entirely unless server reports public_discussions feature on.
+//   * Hide unless current session has ≥3 messages (matches backend gate).
+//   * Hide on write-book sessions (those aren't really "discussions").
+//   * Show "Public" indicator when session.publicStatus === 'approved'.
+
+window._serverFeatures = { public_discussions: false, ai_insights: false };
+
+async function loadServerFeatures() {
+  try {
+    const r = await fetch('/api/features', { credentials: 'include' });
+    if (r.ok) window._serverFeatures = await r.json();
+  } catch (_) { /* feature flags fall back to all-off on network err */ }
+}
+
+function _currentSession() {
+  return chatSessions.find(s => s.id === currentSessionId) || null;
+}
+
+function _isSessionShareable(s) {
+  if (!window._serverFeatures.public_discussions) return false;
+  if (!s) return false;
+  // write-book sessions are creative tools, not "discussions" — skip.
+  if (s.sessionType === 'write_book' || s.meta?.write_book) return false;
+  // Match backend min_message_count gate to avoid surfacing a button
+  // that 422s on click.
+  const n = (s.messages || []).length;
+  return n >= 3;
+}
+
+function updateShareButtonVisibility() {
+  const wrap = document.getElementById('chat-session-actions');
+  if (!wrap) return;
+  const s = _currentSession();
+  if (!_isSessionShareable(s)) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  // Indicator if this session is already public.
+  const indicator = document.getElementById('share-status-indicator');
+  const isPublic = s.publicStatus === 'approved';
+  if (indicator) indicator.classList.toggle('hidden', !isPublic);
+  const btn = document.getElementById('share-session-btn');
+  const label = btn?.querySelector('.share-btn-label');
+  if (label) label.textContent = isPublic ? 'Manage share' : 'Share publicly';
+}
+
+function _showShareError(msg) {
+  const el = document.getElementById('share-modal-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function _clearShareError() {
+  const el = document.getElementById('share-modal-error');
+  if (el) el.classList.add('hidden');
+}
+
+function openShareModal() {
+  const s = _currentSession();
+  if (!_isSessionShareable(s)) return;
+  _clearShareError();
+  const titleEl = document.getElementById('share-title-input');
+  const handleEl = document.getElementById('share-handle-input');
+  if (titleEl) titleEl.value = (s.publicTitle || s.title || '').slice(0, 200);
+  if (handleEl) handleEl.value = s.publicHandle || '';
+  document.getElementById('share-modal').classList.remove('hidden');
+  // Defer focus until the show-frame paints so the cursor lands cleanly.
+  setTimeout(() => titleEl?.focus(), 50);
+}
+
+function closeShareModal() {
+  document.getElementById('share-modal').classList.add('hidden');
+}
+
+async function submitShareModal() {
+  const s = _currentSession();
+  if (!s) return;
+  const titleEl = document.getElementById('share-title-input');
+  const handleEl = document.getElementById('share-handle-input');
+  const submitBtn = document.getElementById('share-modal-submit');
+  const title = (titleEl?.value || '').trim();
+  const handle = (handleEl?.value || '').trim();
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Publishing…';
+  _clearShareError();
+  try {
+    const resp = await fetch(`/api/chat-sessions/${s.id}/share`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        title: title || undefined,
+        handle: handle || undefined,
+      }),
+    });
+    if (!resp.ok) {
+      let detail = 'Could not publish.';
+      try { detail = (await resp.json()).detail || detail; } catch (_) {}
+      _showShareError(detail);
+      return;
+    }
+    const data = await resp.json();
+    s.publicStatus = data.public_status;
+    s.publicTitle = data.public_title;
+    s.publicHandle = data.public_handle;
+    s.publicUrl = data.public_url;
+    closeShareModal();
+    showPublishToast(data.public_url);
+    updateShareButtonVisibility();
+    renderChatHistory(); // sidebar pill refresh
+  } catch (e) {
+    _showShareError('Network error — please retry.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Publish';
+  }
+}
+
+function showPublishToast(publicUrl) {
+  const toast = document.getElementById('publish-toast');
+  const urlInput = document.getElementById('publish-toast-url');
+  const openLink = document.getElementById('publish-toast-open');
+  if (!toast) return;
+  urlInput.value = publicUrl || '';
+  openLink.href = publicUrl || '#';
+  toast.classList.remove('hidden');
+}
+
+function hidePublishToast() {
+  document.getElementById('publish-toast').classList.add('hidden');
+}
+
+async function unshareCurrent() {
+  const s = _currentSession();
+  if (!s) return;
+  if (!confirm('Make this conversation private again? The public link will stop working immediately.')) {
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/chat-sessions/${s.id}/withdraw`, {
+      method: 'POST', credentials: 'include',
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      s.publicStatus = data.public_status; // 'withdrawn'
+      hidePublishToast();
+      updateShareButtonVisibility();
+      renderChatHistory();
+    }
+  } catch (e) { /* fail silently — user can retry */ }
+}
+
+// Bind once. All targets are static IDs in index.html.
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('share-session-btn')?.addEventListener('click', openShareModal);
+  document.querySelector('.share-modal-close')?.addEventListener('click', closeShareModal);
+  document.querySelector('.share-modal-cancel')?.addEventListener('click', closeShareModal);
+  document.querySelector('.share-modal-backdrop')?.addEventListener('click', closeShareModal);
+  document.getElementById('share-modal-submit')?.addEventListener('click', submitShareModal);
+
+  document.getElementById('publish-toast-copy')?.addEventListener('click', () => {
+    const input = document.getElementById('publish-toast-url');
+    if (!input) return;
+    input.select();
+    try { navigator.clipboard.writeText(input.value); } catch (_) { document.execCommand('copy'); }
+    const btn = document.getElementById('publish-toast-copy');
+    btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+  document.getElementById('publish-toast-close')?.addEventListener('click', hidePublishToast);
+  document.getElementById('publish-toast-unshare')?.addEventListener('click', unshareCurrent);
+
+  // Esc closes modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const m = document.getElementById('share-modal');
+      if (m && !m.classList.contains('hidden')) closeShareModal();
+    }
+  });
+});
 
 init();

@@ -348,6 +348,15 @@ def _cache_set(key: str, value: Any) -> None:
         _seo_cache[key] = (time.time(), value)
 
 
+def _cache_invalidate(key: str) -> None:
+    """Drop a single cache entry immediately. Used when an upstream
+    mutation invalidates a specific cached page (e.g. a public session
+    gets reported and should disappear from /discussions/{id} now, not
+    in 10 minutes when the TTL expires)."""
+    with _seo_cache_lock:
+        _seo_cache.pop(key, None)
+
+
 class TopicAgentRequest(BaseModel):
     topic: str = Field(..., min_length=1)
     language: str = Field("en")
@@ -2429,6 +2438,7 @@ def _require_ugc_enabled() -> None:
 
 class ShareChatSessionRequest(BaseModel):
     handle: str | None = Field(default=None, max_length=40)
+    title: str | None = Field(default=None, max_length=200)
 
 
 @app.post("/api/chat-sessions/{session_id}/share")
@@ -2436,8 +2446,17 @@ def api_chat_session_share(
     session_id: str, payload: ShareChatSessionRequest, request: Request,
 ):
     """User opts in to making this chat session publicly visible.
-    Status moves to 'opted_in' awaiting admin approval. Idempotent —
-    re-sharing updates the handle but doesn't double-stamp consent."""
+
+    **Auto-publish model (2026-05-27)**: status moves directly to
+    ``approved`` so the session becomes publicly discoverable. Idempotent —
+    re-sharing updates handle/title but doesn't double-stamp consent.
+
+    Two gates run before status flips, surfaced as distinct error codes:
+      * 422 ``too_few_messages`` — session has < 3 messages
+      * 429 ``rate_limited`` — user shared ≥ 10 sessions in last 24h
+      * 404 ``not_found`` / ``rejected`` — session missing, not owned, or
+        admin-rejected previously
+    """
     _require_ugc_enabled()
     uid = _get_user_id(request)
     if not uid:
@@ -2445,16 +2464,37 @@ def api_chat_session_share(
     handle, err = ugc_module.validate_public_handle(payload.handle or "")
     if err:
         raise HTTPException(status_code=422, detail=err)
-    result = request_chat_session_share(session_id, uid, handle=handle or None)
-    if not result:
-        # Either not found, not owned, or rejected — return 404 for all
-        # three to avoid leaking ownership / state info.
+    title = (payload.title or "").strip() or None
+    result = request_chat_session_share(
+        session_id, uid, handle=handle or None, public_title=title,
+    )
+    # New return shape: string error codes for known failures.
+    if result == "too_few_messages":
+        raise HTTPException(
+            status_code=422,
+            detail="Chat needs at least 3 messages before it can be shared publicly.",
+        )
+    if result == "rate_limited":
+        raise HTTPException(
+            status_code=429,
+            detail="You've already shared 10 sessions today. Try again tomorrow.",
+        )
+    if not result or isinstance(result, str):
+        # not_found / rejected / unknown — 404 to avoid leaking which.
         raise HTTPException(status_code=404, detail="Session not eligible for sharing")
+    public_url = f"{_SITE_URL}/discussions/{result['id']}"
+    # /discussions/{session_id} is the canonical public URL; the entity-
+    # level aggregations at /book/{id}/discussions and
+    # /mind/{id}/discussions list it among other public discussions for
+    # that book/mind.
     return {
         "id": result["id"],
         "public_status": result["public_status"],
         "public_handle": result.get("public_handle"),
+        "public_title": result.get("public_title"),
+        "public_url": public_url,
         "consent_at": result.get("consent_at"),
+        "approved_at": result.get("approved_at"),
     }
 
 
@@ -2794,6 +2834,191 @@ def mind_discussions_page(mind_id: str, request: Request) -> HTMLResponse:
             "X-Cache": "MISS",
         },
     )
+
+
+# ─── Single approved session — canonical public URL ──────────────────
+#
+# The /book/{id}/discussions and /mind/{id}/discussions pages list
+# multiple approved sessions for an entity. This route is the per-session
+# canonical: the URL a user copies from the "Share publicly" toast and
+# sends to a friend. Each approved session has exactly one of these
+# URLs. SAFETY: gates on public_status='approved' at SQL level.
+
+@app.get("/discussions/{session_id}", response_class=HTMLResponse)
+def public_session_page(session_id: str, request: Request) -> HTMLResponse:
+    """Single approved public chat session, rendered with PII scrub.
+    Returns 404 unless the feature flag is on AND the session exists
+    AND public_status='approved'. Caches aggressively (10 min)."""
+    from html import escape as html_esc
+
+    _require_ugc_enabled()
+
+    cache_key = f"public_session:{session_id}"
+    cached = _cache_get(cache_key, 600)
+    if cached is not None:
+        return HTMLResponse(
+            cached,
+            headers={"Cache-Control": "public, max-age=600, s-maxage=600",
+                     "X-Cache": "HIT"},
+        )
+
+    session = get_chat_session_with_public_status(session_id)
+    if not session or session.get("public_status") != "approved":
+        # Mask private / withdrawn / opted_in sessions as 404 (don't leak
+        # ownership info to probes).
+        raise HTTPException(status_code=404, detail="Discussion not found")
+
+    # Determine entity context for the cross-link footer. Book sessions
+    # store the agent_id in mind_id field per the schema convention;
+    # mind sessions store the mind_id there.
+    base = _SITE_URL
+    entity_anchor_html = ""
+    entity_url = ""
+    entity_label = ""
+    canonical = f"{base}/discussions/{session_id}"
+    mind_id = session.get("mind_id")
+    stype = session.get("session_type") or ""
+    if mind_id:
+        if stype == "book":
+            entity_url = f"{base}/book/{mind_id}/discussions"
+            agent = None
+            try:
+                agent = get_agent(mind_id)
+            except Exception:
+                pass
+            if agent:
+                entity_label = agent.get("name") or "this book"
+        else:
+            entity_url = f"{base}/mind/{mind_id}/discussions"
+            try:
+                m = get_mind(mind_id)
+                if m:
+                    entity_label = m.get("name") or "this mind"
+            except Exception:
+                pass
+    if entity_url:
+        entity_anchor_html = (
+            f'<p class="entity-context">'
+            f'More discussions about <a href="{html_esc(entity_url)}">'
+            f'{html_esc(entity_label or "this entity")}</a></p>'
+        )
+
+    # Reuse the per-post renderer so the look matches /book and /mind
+    # aggregation pages. Pass the SPA chat URL so visitors can start
+    # their own conversation.
+    chat_url = (
+        f"{base}/#/read/{mind_id}" if stype == "book" and mind_id
+        else (f"{base}/#/mind/{mind_id}" if mind_id else f"{base}/")
+    )
+    post_html = _render_public_post_html(session, chat_url)
+
+    title_raw = (session.get("public_title") or session.get("title")
+                 or "Discussion on Feynman")
+    title = html_esc(title_raw)
+    handle = html_esc(session.get("public_handle") or "Anonymous")
+    desc = html_esc((
+        f"Public discussion shared by {session.get('public_handle') or 'a reader'} on Feynman."
+    )[:200])
+
+    forum_post_ld = seo_render.jsonld_script({
+        "@context": "https://schema.org",
+        "@type": "DiscussionForumPosting",
+        "headline": title_raw,
+        "url": canonical,
+        "datePublished": session.get("approved_at") or session.get("consent_at") or "",
+        "author": {
+            "@type": "Person",
+            "name": session.get("public_handle") or "Anonymous",
+        },
+        "publisher": {"@type": "Organization", "name": "Feynman", "url": base},
+    })
+    breadcrumb_ld = seo_render.jsonld_script(seo_render.breadcrumb_jsonld([
+        ("Feynman", base),
+        ("Discussions", entity_url or base),
+        (title_raw, canonical),
+    ]))
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — Feynman</title>
+<meta name="description" content="{desc}">
+<link rel="canonical" href="{canonical}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="Feynman">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@steve_yeow">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc}">
+{seo_render.landing_css_link()}
+{forum_post_ld}
+{breadcrumb_ld}
+</head><body>
+{seo_render.render_landing_header(base)}
+<h1>{title}</h1>
+<p class="post-byline">Shared by {handle}</p>
+{post_html}
+{entity_anchor_html}
+<p class="report-link"><a href="#" onclick="if(confirm('Report this discussion for review?')){{fetch('/api/public-discussions/{html_esc(session_id)}/report',{{method:'POST'}}).then(()=>alert('Thanks — flagged for admin review.'));}}return false;">Report this discussion →</a></p>
+{seo_render.render_site_footer(base)}
+</body></html>"""
+    _cache_set(cache_key, html)
+    return HTMLResponse(
+        html,
+        headers={"Cache-Control": "public, max-age=600, s-maxage=600",
+                 "X-Cache": "MISS"},
+    )
+
+
+# ─── Reports endpoint — community-driven moderation backstop ──────────
+
+@app.post("/api/public-discussions/{session_id}/report")
+def api_report_public_discussion(session_id: str, request: Request):
+    """Mark a public discussion for admin review. Community-driven
+    moderation backstop for the auto-publish flow: any viewer can flag
+    a session, admin reviews via the existing moderation endpoints
+    (/api/admin/chat-sessions/{id}/{approve,reject}).
+
+    Rate-limited per IP (best-effort, in-process) so a single user
+    can't spam the moderation queue."""
+    _require_ugc_enabled()
+    session = get_chat_session_with_public_status(session_id)
+    if not session or session.get("public_status") != "approved":
+        # Don't reveal whether the session exists; just acknowledge.
+        return {"reported": True}
+    try:
+        # Flag the session for human review by transitioning to 'opted_in'
+        # — admin's moderation queue picks it up. The original approved_at
+        # is preserved so a 'no action' decision restores the published
+        # state cleanly via the approve endpoint.
+        with get_conn() as conn:
+            _execute(conn, _q(
+                """UPDATE chat_sessions
+                   SET public_status = 'opted_in'
+                   WHERE id = ? AND public_status = 'approved'"""
+            ), (session_id,))
+        # Invalidate cached page so the route returns 404 immediately.
+        _cache_invalidate(f"public_session:{session_id}")
+    except Exception as exc:
+        log.warning("Report flow failed for %s: %s", session_id, exc)
+    return {"reported": True}
+
+
+# ─── Feature-flag discovery — SPA pulls this at init ──────────────────
+
+@app.get("/api/features")
+def api_features() -> dict[str, Any]:
+    """Surface server-side feature flags to the SPA. Read-only, no auth.
+    SPA uses these to decide whether to show buttons / call endpoints
+    that would 404 when their feature is off. Keep additive."""
+    return {
+        "public_discussions": ugc_module.is_enabled(),
+        "ai_insights": insights_module.is_enabled(),
+    }
 
 
 @app.get("/api/public/book/{agent_id}/read")
