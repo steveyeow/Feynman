@@ -425,8 +425,25 @@ def _learn_agent(agent_id: str) -> None:
         update_agent_status(agent_id, "ready", merged)
         log.info("Agent %s (%s) learned successfully", agent_id, title)
     except Exception as exc:
+        # Transient failures (Gemini 429, network timeouts, embedder hiccups)
+        # used to set status='error' which left the agent permanently stuck —
+        # next chat couldn't re-trigger _learn_agent because the entry check
+        # only fires on status='catalog'. Revert to 'catalog' so the natural
+        # retry-on-next-chat path works. Stash the last error in meta so
+        # repeated failures are still debuggable from the agent row.
         log.error("Learning failed for agent %s: %s", agent_id, exc)
-        update_agent_status(agent_id, "error", {"error": str(exc)})
+        try:
+            from datetime import datetime, timezone
+            existing = get_agent(agent_id)
+            existing_meta = (existing or {}).get("meta") or {}
+            error_meta = {
+                **existing_meta,
+                "last_learn_error": str(exc)[:500],
+                "last_learn_error_at": datetime.now(timezone.utc).isoformat(),
+            }
+            update_agent_status(agent_id, "catalog", error_meta)
+        except Exception as inner:
+            log.error("Failed to revert agent %s to catalog after learn error: %s", agent_id, inner)
     finally:
         _learning_lock.discard(agent_id)
 
