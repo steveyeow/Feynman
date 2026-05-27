@@ -3364,28 +3364,31 @@ async function deleteBook(agentId) {
 window.deleteBook = deleteBook;
 
 // ─── Detail-page entry points (book + mind) ───
-// Books: from library card body → /book/{id}?details=1 in a new tab.
-// Minds: from minds-graph node body → /mind/{id}?details=1 in a new tab.
-// The ?details=1 query param bypasses the server-side referer auto-redirect
-// (see book_page / mind_page handlers) so the SSR landing page actually
-// renders for the logged-in user instead of bouncing to the SPA reader/chat.
+// Routes the user IN-SPA, same tab, to the existing SPA-native detail
+// surfaces (#/book/{id} and #/mind/{id}). Earlier iteration opened a new
+// tab to the SSR /book/{id} / /mind/{id} URLs — that's the SEO landing
+// page meant for external crawlers + share-link visitors. Logged-in
+// product users hit it without auth context (different chrome, "Open
+// Feynman →" CTA, different design system) and the cohesion broke.
 //
-// Splits "exploration" (free, no paywall) from "engagement" (Chat button,
-// paywall on minds). Discovery is free; conversion ask happens at the
-// moment of value.
+// Keeping the SPA hash routes preserves:
+//   * the proper Feynman logo + topbar
+//   * auth context (sidebar, user profile menu)
+//   * the unified design system (SPA tokens, sans-serif, light/dark mode)
+//   * navigation history (back button works inside SPA)
+//
+// The SSR /book/{id} and /mind/{id} URLs stay reachable for crawlers
+// and external share traffic — they're indexed by Google and cited by
+// LLMs; SPA users just don't open them directly.
 function openBookDetails(agentId) {
   if (!agentId) return;
-  // selectedBooks doesn't change — the user's chat composer keeps whatever
-  // it had. They're just opening a side view of the book.
-  window.open('/book/' + encodeURIComponent(agentId) + '?details=1', '_blank',
-              'noopener,noreferrer');
+  window.location.hash = '#/book/' + encodeURIComponent(agentId);
 }
 window.openBookDetails = openBookDetails;
 
 function openMindDetails(mindId) {
   if (!mindId) return;
-  window.open('/mind/' + encodeURIComponent(mindId) + '?details=1', '_blank',
-              'noopener,noreferrer');
+  window.location.hash = '#/mind/' + encodeURIComponent(mindId);
 }
 window.openMindDetails = openMindDetails;
 
@@ -4846,10 +4849,10 @@ async function renderReader(agentId) {
   const _rTweetText = encodeURIComponent(`${d.title} — by ${_rAuthor || 'AI'} on feynman.wiki`);
   const _rTweetUrl = encodeURIComponent(_rShareUrl);
   const _rTweetIntentUrl = `https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}`;
-  // Details button — opens /book/{id}?details=1 in new tab. Single entry
-  // point; the detail page itself surfaces Popular Questions + AI Insights
-  // + Discussed-by-Great-Minds + Related Books (the SEO long-tail
-  // content blocks that have no SPA-native equivalent).
+  // Details button — navigates to the SPA-native book detail view at
+  // #/book/{id} (NOT the SSR landing). Keeps the user in the same tab
+  // with proper SPA chrome, logo, and auth context. openBookDetails()
+  // uses window.location.hash so the back button works.
   const _rTopbarDetailsHtml = `
       <button type="button" class="reader-topbar-details-btn" aria-label="Book details" title="Book details" onclick="openBookDetails('${esc(agentId)}')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
