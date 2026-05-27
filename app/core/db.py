@@ -1915,27 +1915,86 @@ def get_chat_session_with_public_status(session_id: str) -> dict[str, Any] | Non
 
 def request_chat_session_share(
     session_id: str, user_id: str, handle: str | None = None,
-) -> dict[str, Any] | None:
-    """User opts in to making this session public. Sets status to
-    'opted_in' (awaiting moderation) and stamps consent_at. Returns the
-    updated session row, or None if the session doesn't exist / user
-    doesn't own it / withdrawn-by-admin (rejected can't re-share).
+    public_title: str | None = None,
+    min_message_count: int = 3, daily_share_limit: int = 10,
+) -> dict[str, Any] | str | None:
+    """User opts in to making this session public.
+
+    **Auto-publish model (Phase 6.1, 2026-05-27)**: sets status='approved'
+    directly so the session becomes publicly visible immediately. The
+    older 'opted_in → admin approves' flow is still available via the
+    moderation endpoints (admin can reject/withdraw post-hoc), but the
+    common path no longer blocks on human review. Industry-standard
+    Reddit/Twitter model: auto-publish + PII scrub + community report
+    + admin emergency takedown.
+
+    Two gates run before the status flips, both returning a string
+    error code instead of the row so the API layer can surface a
+    sensible message:
+
+      * ``too_few_messages`` — session has fewer than ``min_message_count``
+        messages. Avoids publishing trivially-empty pages that would render
+        as thin content and embarrass the user.
+      * ``rate_limited`` — user has already shared ``daily_share_limit``
+        sessions in the trailing 24h window. Spam / bulk-publish guard.
+
+    Returns:
+      * dict — the updated session row on success
+      * str  — error code (``"not_found"``, ``"rejected"``,
+        ``"too_few_messages"``, ``"rate_limited"``) for known failure modes
+      * None — fallback for unknown failure (legacy callers handle this)
     """
     sess = get_chat_session_with_public_status(session_id)
     if not sess or sess.get("user_id") != user_id:
-        return None
+        return "not_found"
     # Rejected sessions can't re-share — admin already declined. User
     # can still chat in them; they just can't be public.
     if sess.get("public_status") == "rejected":
-        return None
+        return "rejected"
+
     with get_conn() as conn:
+        # Quality gate: enough content to justify a public page.
+        msg_count = _fetchone(conn, _q(
+            "SELECT COUNT(*) AS n FROM session_messages WHERE session_id = ?"
+        ), (session_id,))
+        if (msg_count and int(msg_count.get("n", 0)) < min_message_count):
+            return "too_few_messages"
+
+        # Rate limit: trailing 24h window of approved/opted shares by user.
+        # Counts sessions transitioned in the last day — not lifetime.
+        if _USE_PG:
+            recent = _fetchone(conn, _q(
+                """SELECT COUNT(*) AS n FROM chat_sessions
+                   WHERE user_id = ?
+                     AND public_status IN ('approved', 'opted_in')
+                     AND consent_at > NOW() - INTERVAL '1 day'"""
+            ), (user_id,))
+        else:
+            # SQLite path: ISO timestamp string comparison vs 'now-1 day'.
+            recent = _fetchone(conn, _q(
+                """SELECT COUNT(*) AS n FROM chat_sessions
+                   WHERE user_id = ?
+                     AND public_status IN ('approved', 'opted_in')
+                     AND consent_at > datetime('now', '-1 day')"""
+            ), (user_id,))
+        if recent and int(recent.get("n", 0)) >= daily_share_limit:
+            return "rate_limited"
+
+        now = _utcnow()
+        # Auto-publish: write 'approved' + stamp approved_at in the same
+        # statement so the session becomes immediately discoverable. The
+        # approved_by column is left NULL on auto-publish — distinguishes
+        # auto-approved rows from editorial-marked ones (where approved_by
+        # carries the admin uuid).
         _execute(conn, _q(
             """UPDATE chat_sessions
-               SET public_status = 'opted_in',
+               SET public_status = 'approved',
                    public_handle = ?,
-                   consent_at = ?
+                   public_title  = COALESCE(?, public_title),
+                   consent_at    = ?,
+                   approved_at   = ?
                WHERE id = ? AND user_id = ?"""
-        ), (handle, _utcnow(), session_id, user_id))
+        ), (handle, public_title, now, now, session_id, user_id))
     return get_chat_session_with_public_status(session_id)
 
 
@@ -2604,6 +2663,13 @@ def _row_to_session(row: dict[str, Any]) -> dict[str, Any]:
         "meta": json.loads(row.get("meta_json") or "{}"),
         "updated_at": row["updated_at"],
         "created_at": row["created_at"],
+        # Public-share columns. Defaulted because legacy SQLite rows
+        # pre-date the migration. Exposing them on the API row lets the
+        # SPA show the public 🌐 dot and the "Manage share" button label
+        # without an extra round-trip per session.
+        "public_status": row.get("public_status") or "private",
+        "public_handle": row.get("public_handle"),
+        "public_title": row.get("public_title"),
     }
 
 

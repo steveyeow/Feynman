@@ -1841,3 +1841,124 @@ class TestSparseDataDegradation:
         )
         wrapped = seo.jsonld_script(person)
         assert "@type" in wrapped and "Person" in wrapped
+
+
+# ─── Phase 6 user-share auto-publish flow (Phase 6.1, 2026-05-27) ────
+#
+# Guards the auto-publish rewrite: clicking Share writes status='approved'
+# directly, with two gates (min message count + per-user rate limit).
+# Before this rewrite the same call wrote status='opted_in' and required
+# a separate admin approval step — the SPA UI was never built and the
+# feature was effectively dormant. Tests pin the new contract so a
+# refactor can't silently revert it.
+
+class TestPhase6AutoPublishShare:
+    def _mk_session_with_messages(self, n_messages: int):
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message,
+        )
+        init_db()
+        user_id = f"user-{uuid.uuid4().hex[:8]}"
+        sess = create_chat_session(
+            title="Test chat", session_type="chat", user_id=user_id,
+        )
+        for i in range(n_messages):
+            add_session_message(
+                sess["id"], role="user" if i % 2 == 0 else "assistant",
+                content=f"message {i}", user_id=user_id,
+            )
+        return user_id, sess["id"]
+
+    def test_auto_publish_writes_approved(self):
+        from app.core.db import request_chat_session_share
+        uid, sid = self._mk_session_with_messages(4)
+        result = request_chat_session_share(sid, uid, handle="@me")
+        assert isinstance(result, dict), f"expected dict, got {result!r}"
+        assert result["public_status"] == "approved", \
+            "Auto-publish must set status='approved', not 'opted_in'"
+        assert result["public_handle"] == "@me"
+        assert result["approved_at"]
+
+    def test_quality_gate_rejects_thin_sessions(self):
+        from app.core.db import request_chat_session_share
+        uid, sid = self._mk_session_with_messages(1)
+        result = request_chat_session_share(sid, uid)
+        assert result == "too_few_messages", \
+            "Sessions with <3 messages must be rejected to avoid thin pages"
+
+    def test_quality_gate_min_message_count_is_three(self):
+        # Boundary: exactly 3 messages passes; 2 does not.
+        from app.core.db import request_chat_session_share
+        uid_pass, sid_pass = self._mk_session_with_messages(3)
+        uid_fail, sid_fail = self._mk_session_with_messages(2)
+        assert isinstance(request_chat_session_share(sid_pass, uid_pass), dict)
+        assert request_chat_session_share(sid_fail, uid_fail) == "too_few_messages"
+
+    def test_rejected_session_cannot_reshare(self):
+        # If admin rejected a previous share, the user cannot bypass by
+        # calling share again. Status stays 'rejected'.
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message,
+            request_chat_session_share, get_chat_session_with_public_status,
+            reject_chat_session_public, get_conn, _execute, _q,
+        )
+        init_db()
+        uid = f"user-{uuid.uuid4().hex[:8]}"
+        sess = create_chat_session(title="x", session_type="chat", user_id=uid)
+        for i in range(4):
+            add_session_message(sess["id"], role="user",
+                                content=f"msg {i}", user_id=uid)
+        # Force-set rejected (simulates admin moderation outcome)
+        with get_conn() as conn:
+            _execute(conn,
+                _q("UPDATE chat_sessions SET public_status = 'rejected' WHERE id = ?"),
+                (sess["id"],))
+        # Now the user tries to share — must fail with 'rejected'
+        result = request_chat_session_share(sess["id"], uid)
+        assert result == "rejected", \
+            "Rejected sessions must not be re-publishable by the user"
+
+    def test_share_returns_not_found_when_user_doesnt_own(self):
+        from app.core.db import request_chat_session_share
+        _, sid = self._mk_session_with_messages(4)
+        # Different user_id — must look like not-found, never reveal
+        # someone else's session
+        result = request_chat_session_share(sid, "different-user", handle="@evil")
+        assert result == "not_found"
+
+    def test_share_persists_title_and_handle(self):
+        from app.core.db import (
+            request_chat_session_share, get_chat_session_with_public_status,
+        )
+        uid, sid = self._mk_session_with_messages(4)
+        result = request_chat_session_share(
+            sid, uid, handle="@stevey", public_title="A custom title",
+        )
+        assert isinstance(result, dict)
+        assert result["public_title"] == "A custom title"
+        assert result["public_handle"] == "@stevey"
+        # Round-trip: fetch again, fields must persist
+        fresh = get_chat_session_with_public_status(sid)
+        assert fresh["public_title"] == "A custom title"
+        assert fresh["public_handle"] == "@stevey"
+
+    def test_row_to_session_exposes_public_columns(self):
+        # The SPA reads s.public_status to render the 🌐 dot and pick
+        # button label between "Share publicly" and "Manage share".
+        # If _row_to_session ever stops emitting these, the UI silently
+        # forgets that a session is already public.
+        from app.core.db import (
+            request_chat_session_share, list_chat_sessions,
+        )
+        uid, sid = self._mk_session_with_messages(4)
+        request_chat_session_share(sid, uid, handle="@me")
+        rows = list_chat_sessions(user_id=uid)
+        match = [r for r in rows if r["id"] == sid]
+        assert match, "Session must appear in list_chat_sessions for owner"
+        assert match[0]["public_status"] == "approved", \
+            "_row_to_session must surface public_status (SPA UI depends on this)"
+        assert match[0]["public_handle"] == "@me"
