@@ -3327,10 +3327,15 @@ function renderBookGrid(container, books) {
     const canPreview = !b.hasFullText && b.status === 'ready' && b.agentId;
     const overlayLabel = canRead ? 'Read' : (canPreview ? 'Preview' : '');
     const readOverlay = overlayLabel ? `<div class="card-cover-overlay" onclick="event.stopPropagation();window.location.hash='#/read/${esc(b.agentId)}'"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span>${overlayLabel}</span></div>` : '';
-    return `<div class="book-card" onclick="selectBookForChat('${esc(b.id)}')">
+    // Card body / cover click → details page (exploration, free). Footer
+    // Chat button → SPA chat (engagement). cardTarget is the agent_id
+    // that resolves to the /book/{id} canonical (b.id is the row id
+    // which is the same as agentId for catalog/upload/ai_book agents).
+    const cardTarget = b.agentId || b.id;
+    return `<div class="book-card">
       ${deleteBtn}
-      <div class="card-cover-wrap">${cover}${readOverlay}</div>
-      <div class="card-body"><h3 class="card-title">${esc(b.title)}</h3><p class="card-author">${b.isAIGenerated ? (b.creatorName ? `by ${esc(b.creatorName)} · AI` : 'AI-generated') : esc(b.author)}</p></div>
+      <div class="card-cover-wrap" onclick="openBookDetails('${esc(cardTarget)}')">${cover}${readOverlay}</div>
+      <div class="card-body" onclick="openBookDetails('${esc(cardTarget)}')"><h3 class="card-title">${esc(b.title)}</h3><p class="card-author">${b.isAIGenerated ? (b.creatorName ? `by ${esc(b.creatorName)} · AI` : 'AI-generated') : esc(b.author)}</p></div>
       <div class="card-footer">
         <button class="card-chat-btn" onclick="event.stopPropagation();selectBookForChat('${esc(b.id)}')">Chat</button>
         ${statusBadge}
@@ -3357,6 +3362,32 @@ async function deleteBook(agentId) {
   }
 }
 window.deleteBook = deleteBook;
+
+// ─── Detail-page entry points (book + mind) ───
+// Books: from library card body → /book/{id}?details=1 in a new tab.
+// Minds: from minds-graph node body → /mind/{id}?details=1 in a new tab.
+// The ?details=1 query param bypasses the server-side referer auto-redirect
+// (see book_page / mind_page handlers) so the SSR landing page actually
+// renders for the logged-in user instead of bouncing to the SPA reader/chat.
+//
+// Splits "exploration" (free, no paywall) from "engagement" (Chat button,
+// paywall on minds). Discovery is free; conversion ask happens at the
+// moment of value.
+function openBookDetails(agentId) {
+  if (!agentId) return;
+  // selectedBooks doesn't change — the user's chat composer keeps whatever
+  // it had. They're just opening a side view of the book.
+  window.open('/book/' + encodeURIComponent(agentId) + '?details=1', '_blank',
+              'noopener,noreferrer');
+}
+window.openBookDetails = openBookDetails;
+
+function openMindDetails(mindId) {
+  if (!mindId) return;
+  window.open('/mind/' + encodeURIComponent(mindId) + '?details=1', '_blank',
+              'noopener,noreferrer');
+}
+window.openMindDetails = openMindDetails;
 
 // ─── Rename book (inline edit) ───
 function isBookOwner(book) {
@@ -4815,6 +4846,14 @@ async function renderReader(agentId) {
   const _rTweetText = encodeURIComponent(`${d.title} — by ${_rAuthor || 'AI'} on feynman.wiki`);
   const _rTweetUrl = encodeURIComponent(_rShareUrl);
   const _rTweetIntentUrl = `https://twitter.com/intent/tweet?text=${_rTweetText}&url=${_rTweetUrl}`;
+  // Details button — opens /book/{id}?details=1 in new tab. Single entry
+  // point; the detail page itself surfaces Popular Questions + AI Insights
+  // + Discussed-by-Great-Minds + Related Books (the SEO long-tail
+  // content blocks that have no SPA-native equivalent).
+  const _rTopbarDetailsHtml = `
+      <button type="button" class="reader-topbar-details-btn" aria-label="Book details" title="Book details" onclick="openBookDetails('${esc(agentId)}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>`;
   const _rTopbarShareHtml = `
       <div class="reader-topbar-share-wrap">
         <button type="button" class="reader-topbar-share-trigger" aria-label="Share" title="Share">
@@ -4872,6 +4911,7 @@ async function renderReader(agentId) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
       </a>
       <div class="reader-topbar-title">${esc(d.title)}</div>
+      ${_rTopbarDetailsHtml}
       ${_rTopbarShareHtml}
     </div>
     <div class="reader-layout">
@@ -6602,8 +6642,14 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
       addBusy = false;
       return;
     }
-    if (!isProUser()) { showProOverlay(); return; }
-    window.location.hash = '#/mind/' + n.id;
+    // Node click = "exploration" → opens /mind/{id}?details=1 (free,
+    // no paywall). Paywall stays on explicit "Chat" actions (the
+    // tooltip's tt-chat-icon-btn, and the canonical SPA route
+    // /#/mind/{id} entered via the chat button there). Splits
+    // discovery from conversion: users can browse mind profiles freely;
+    // they see the value (persona, recent themes, dialogues) before
+    // being asked to upgrade.
+    openMindDetails(n.id);
   });
 
   canvas.addEventListener('mouseleave', (e) => {
@@ -6719,9 +6765,10 @@ async function renderMindDetail(mindId) {
   const works = mind.works || [];
   metaSidebar.innerHTML = `
     <h3 class="sidebar-title">ABOUT</h3>
-    <div class="mind-avatar" style="background:${color};width:64px;height:64px;font-size:28px;margin:0 auto 12px">${initials}</div>
+    <div class="mind-avatar mind-avatar-clickable" style="background:${color};width:64px;height:64px;font-size:28px;margin:0 auto 12px" title="View ${esc(mind.name)}'s profile" onclick="openMindDetails('${esc(mind.id)}')">${initials}</div>
     <p style="font-size:14px;font-weight:600;text-align:center;margin-bottom:4px">${esc(mind.name)}</p>
-    <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:12px">${esc(mind.era)}</p>
+    <p style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:8px">${esc(mind.era)}</p>
+    <p style="text-align:center;margin-bottom:12px"><a href="javascript:void(0)" class="mind-view-profile-link" onclick="openMindDetails('${esc(mind.id)}')">View full profile →</a></p>
     ${mind.bio_summary ? `<p style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:12px">${esc(mind.bio_summary)}</p>` : ''}
     ${domains.length ? `<div style="margin-bottom:12px">${domains.map(d => `<span class="mind-domain-tag">${esc(d)}</span> `).join('')}</div>` : ''}
     ${works.length ? `<h3 class="sidebar-title" style="margin-top:16px">WORKS</h3><ul style="font-size:12px;color:var(--text-secondary);padding-left:16px;margin:0">${works.map(w => `<li style="margin-bottom:4px">${esc(w)}</li>`).join('')}</ul>` : ''}
