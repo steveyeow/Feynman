@@ -1876,13 +1876,20 @@ body {
   font-size: 11px;
   color: var(--text-muted);
 }
-.minds-tooltip .tt-chat-icon-btn {
+/* Tooltip action row: Profile (free, secondary) + Chat (paywall, primary).
+   Stack them with a small gap so the eye groups them clearly as two
+   distinct actions, not one big button. */
+.minds-tooltip .tt-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.minds-tooltip .tt-chat-icon-btn,
+.minds-tooltip .tt-profile-btn {
   flex-shrink: 0;
   padding: 4px 10px;
   border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1892,8 +1899,21 @@ body {
   font-family: inherit;
   transition: all 0.15s;
 }
-.minds-tooltip .tt-chat-icon-btn:hover {
-  opacity: 0.85;
+.minds-tooltip .tt-chat-icon-btn {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+}
+.minds-tooltip .tt-chat-icon-btn:hover { opacity: 0.85; }
+/* Profile button is the "free exploration" path — softer styling so the
+   accent-color Chat button stays the primary visual call to action. */
+.minds-tooltip .tt-profile-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong, rgba(255,255,255,0.18));
+}
+.minds-tooltip .tt-profile-btn:hover {
+  background: var(--hover-bg, rgba(255,255,255,0.06));
 }
 .minds-tooltip .tt-domains {
   display: flex;

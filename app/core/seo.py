@@ -768,14 +768,16 @@ def render_insight_cards(insights: list[dict[str, Any]], max_chars: int = 900) -
 def render_insights_empty_state(entity_name: str, chat_url: str) -> str:
     """Shown when an entity has no publishable AI insights yet (new
     book, low chat volume). Better than 404 — it gives the page a
-    meaningful body and a CTA to seed content."""
+    meaningful body. No duplicate CTA here; the page's bottom CTA
+    section already carries the "Chat with X" button, so a second
+    "Start a chat →" inside this empty state was redundant (caught
+    in screenshot review on 2026-05-27)."""
     return (
         '<section class="insights-empty">'
         f'<p>No AI insights have accumulated yet for {_esc(entity_name)}. '
-        'Start a chat and your conversation will help shape the public '
+        'Start a chat below and your conversation will help shape this '
         '<em>insights</em> page — the AI\'s responses get aggregated here '
         '(your questions stay private).</p>'
-        f'<p><a class="cta-btn" href="{_esc(chat_url)}">Start a chat →</a></p>'
         '</section>'
     )
 
@@ -1345,11 +1347,25 @@ def landing_css_link() -> str:
     return f'<link rel="stylesheet" href="{LANDING_CSS_PATH}?v=1">'
 
 
-def render_landing_header(site_url: str) -> str:
-    """Brand header — Feynman logo + tagline on the left, primary CTA
-    on the right. Same shape across all landing pages so visitors who
-    arrive from search recognize the brand and have one obvious way to
-    open the app."""
+def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
+    """Top brand header. Same shape across all SSR detail pages so the
+    page is recognizable whether the visitor arrived from Google, a
+    share link, or by clicking "View details" inside the SPA.
+
+    ``is_authenticated``: when True the visitor is a logged-in product
+    user — we hide the marketing-style "Open Feynman →" CTA (they're
+    already in Feynman) and surface a softer "Back to app →" link
+    instead. When False (anonymous / crawler), keep the conversion CTA.
+
+    Logo, nav links, and the brand wordmark stay identical in both
+    states so the page chrome is visually stable when auth state
+    changes (e.g. user signs in mid-session).
+    """
+    primary_cta = (
+        f'<a class="feynman-cta feynman-cta-soft" href="{_esc(site_url)}/#/library">Back to app →</a>'
+        if is_authenticated
+        else f'<a class="feynman-cta" href="{_esc(site_url)}/">Open Feynman →</a>'
+    )
     return (
         '<header class="feynman-header">'
         f'<a class="feynman-brand" href="{_esc(site_url)}/">'
@@ -1365,7 +1381,7 @@ def render_landing_header(site_url: str) -> str:
         '<nav class="feynman-nav">'
         f'<a href="{_esc(site_url)}/#/library">Library</a>'
         f'<a href="{_esc(site_url)}/#/minds">Great Minds</a>'
-        f'<a class="feynman-cta" href="{_esc(site_url)}/">Open Feynman →</a>'
+        f'{primary_cta}'
         '</nav>'
         '</header>'
     )

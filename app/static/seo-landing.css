@@ -18,7 +18,13 @@
  *    visitors during the JS redirect; CSS must not interfere.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
+/* Single sans-serif (Inter) across both SEO landing pages and the SPA
+   ensures a logged-in user navigating from /#/library to /book/{id}
+   doesn't feel any font/typeface shift. Earlier iteration loaded
+   Libre Baskerville serif here too — produced a "marketing brochure"
+   feel that clashed with the rest of the product when a user
+   actually arrived from inside the app. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
   --feynman-text: #1d1d1f;
@@ -111,6 +117,20 @@ html, body {
   background: var(--feynman-accent-hover);
   color: #fff;
 }
+/* Authenticated-user variant: visitor is already a logged-in user
+   arriving from inside the SPA. "Open Feynman →" doesn't make sense
+   anymore; surface a softer "Back to app →" link without the loud
+   filled-pill marketing styling. */
+.feynman-header .feynman-nav a.feynman-cta.feynman-cta-soft {
+  background: transparent;
+  color: var(--feynman-text);
+  border: 1px solid var(--feynman-border-strong);
+  font-weight: 500;
+}
+.feynman-header .feynman-nav a.feynman-cta.feynman-cta-soft:hover {
+  background: var(--feynman-bg-subtle);
+  color: var(--feynman-text);
+}
 
 /* ─── Main content container ─────────────────────────────────────── */
 
@@ -129,24 +149,28 @@ body > h1 { margin-top: 36px; }
 
 /* ─── Typography ────────────────────────────────────────────────── */
 
+/* All headings use the same Inter face as body copy. Hierarchy comes
+   from size + weight + letter-spacing, not typeface contrast. */
 h1, h2, h3 {
-  font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   font-weight: 700;
   color: var(--feynman-text);
-  letter-spacing: -0.01em;
-  line-height: 1.25;
+  letter-spacing: -0.022em;
+  line-height: 1.2;
 }
 h1 {
-  font-size: 36px;
-  margin: 0.4em 0 0.6em;
+  font-size: 34px;
+  margin: 0.4em 0 0.5em;
+  letter-spacing: -0.028em;
 }
 h2 {
-  font-size: 24px;
+  font-size: 20px;
   margin: 2em 0 0.6em;
   padding-bottom: 0.3em;
   border-bottom: 1px solid var(--feynman-border);
+  letter-spacing: -0.015em;
 }
-h3 { font-size: 19px; margin: 1.6em 0 0.4em; }
+h3 { font-size: 17px; margin: 1.6em 0 0.4em; letter-spacing: -0.01em; }
 
 p { margin: 0.6em 0; color: var(--feynman-text); }
 
@@ -185,7 +209,6 @@ blockquote footer { color: var(--feynman-text-tertiary); font-size: 13px; }
 
 q {
   display: inline-block;
-  font-family: 'Libre Baskerville', Georgia, serif;
   font-style: italic;
   color: var(--feynman-text);
 }

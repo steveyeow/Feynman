@@ -3364,31 +3364,35 @@ async function deleteBook(agentId) {
 window.deleteBook = deleteBook;
 
 // ─── Detail-page entry points (book + mind) ───
-// Routes the user IN-SPA, same tab, to the existing SPA-native detail
-// surfaces (#/book/{id} and #/mind/{id}). Earlier iteration opened a new
-// tab to the SSR /book/{id} / /mind/{id} URLs — that's the SEO landing
-// page meant for external crawlers + share-link visitors. Logged-in
-// product users hit it without auth context (different chrome, "Open
-// Feynman →" CTA, different design system) and the cohesion broke.
+// One URL per entity, same page for everyone — Google crawlers, share-
+// link visitors, AND logged-in product users. The SSR /book/{id} and
+// /mind/{id} pages are auth-aware: when a logged-in user lands on them
+// the chrome adapts (Feynman wordmark + "Back to app →" instead of the
+// "Open Feynman" marketing CTA), the body uses the same Inter type
+// family + color tokens as the SPA, and all the rich aggregation
+// content blocks (Sample Passages, Popular Questions, Discussed by
+// Great Minds, Related Books, Insights, Dialogues) render identically.
 //
-// Keeping the SPA hash routes preserves:
-//   * the proper Feynman logo + topbar
-//   * auth context (sidebar, user profile menu)
-//   * the unified design system (SPA tokens, sans-serif, light/dark mode)
-//   * navigation history (back button works inside SPA)
+// Earlier iterations tried multiple alternatives that didn't work:
+//   * new-tab to /book/{id}?details=1 — anonymous landing chrome,
+//     "Open Feynman" CTA showed even though user was logged in
+//   * same-tab to #/book/{id} hash route — only renders the existing
+//     SPA chat-with-sidebar view, missing all the SEO aggregations
+// The right model is the one the user landed on: one canonical URL,
+// auth-aware chrome, full aggregations always present.
 //
-// The SSR /book/{id} and /mind/{id} URLs stay reachable for crawlers
-// and external share traffic — they're indexed by Google and cited by
-// LLMs; SPA users just don't open them directly.
+// Same-tab navigation means a real page load (we leave the SPA). The
+// SSR page is rich and SPA-styled enough that this is not jarring;
+// the back button returns to the SPA.
 function openBookDetails(agentId) {
   if (!agentId) return;
-  window.location.hash = '#/book/' + encodeURIComponent(agentId);
+  window.location.href = '/book/' + encodeURIComponent(agentId);
 }
 window.openBookDetails = openBookDetails;
 
 function openMindDetails(mindId) {
   if (!mindId) return;
-  window.location.hash = '#/mind/' + encodeURIComponent(mindId);
+  window.location.href = '/mind/' + encodeURIComponent(mindId);
 }
 window.openMindDetails = openMindDetails;
 
@@ -6530,14 +6534,32 @@ function _renderMindsGraph(vectorLinks, layoutPositions) {
             <div class="tt-name">${n.name}</div>
             <div class="tt-era">${n.era}</div>
           </div>
-          <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span>Chat</span>
-          </button>
+          <div class="tt-actions">
+            <button class="tt-profile-btn" data-mind-id="${n.id}" title="View ${n.name}'s profile">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Profile</span>
+            </button>
+            <button class="tt-chat-icon-btn" data-mind-id="${n.id}" title="Chat with ${n.name}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <span>Chat</span>
+            </button>
+          </div>
         </div>
         <div class="tt-domains">${domains}</div>
         <div class="tt-bio">${n.bio}</div>
         ${discoverBtn}`;
+      const profileBtn = tooltip.querySelector('.tt-profile-btn');
+      if (profileBtn) {
+        profileBtn.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          tooltip.classList.add('hidden');
+          _tooltipNode = null;
+          // Profile is FREE for all users — open SSR /mind/{id} which
+          // is now auth-aware and shows the rich aggregation page with
+          // proper SPA chrome for logged-in visitors.
+          openMindDetails(profileBtn.dataset.mindId);
+        });
+      }
       const chatBtn = tooltip.querySelector('.tt-chat-icon-btn');
       if (chatBtn) {
         chatBtn.addEventListener('click', (ev) => {
