@@ -57,7 +57,9 @@ from .core.db import (
     list_books_for_mind,
     list_messages,
     list_messages_for_public_session,
+    list_mind_recent_topics,
     list_minds,
+    list_minds_active_for_agent,
     list_minds_by_topic,
     list_minds_for_agent,
     list_public_sessions_for_agent,
@@ -1257,6 +1259,14 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
         related_minds = list_minds_for_agent(agent_id)
     except Exception:
         related_minds = []
+    # Activity overlay for related_minds — minds that have actually spoken
+    # in chat sessions referencing this book (community-emergent signal,
+    # PG-only via JSONB query). Renderer treats this as a purely additive
+    # badge layer: curated minds without activity render unchanged.
+    try:
+        mind_activity = list_minds_active_for_agent(agent_id, since_days=60)
+    except Exception:
+        mind_activity = {}
     # Phase 5 — related books surfaced from same-topic + same-author cohort
     agent_meta = agent.get("meta") or {}
     book_topic = (agent_meta.get("category") or "").strip()
@@ -1292,9 +1302,27 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     questions_html = seo_render.render_popular_questions(
         questions, chat_url, book_id=agent_id, site_url=base,
     )
-    minds_html = seo_render.render_minds_for_book(related_minds, base)
+    minds_html = seo_render.render_minds_for_book(related_minds, base, activity=mind_activity)
     related_books_html = seo_render.render_related_books(related_books, base)
     topic_link_html = seo_render.render_topic_link_back(book_topic, base) if book_topic else ""
+
+    # Surface /book/{id}/insights from the parent landing page. Without
+    # this link, the Type-4 surface is only reachable from the sitemap —
+    # crawlers eventually find it but human visitors on the book page
+    # have no path to the live-content view.
+    insights_link_html = ""
+    if insights_module.is_enabled():
+        try:
+            counts = count_assistant_messages_batch([agent_id])
+            insights_count = int(counts.get(agent_id, 0))
+        except Exception:
+            insights_count = 0
+        insights_link_html = seo_render.render_live_content_link(
+            entity_name=title_raw,
+            kind="insights",
+            target_url=f"{base}/book/{id_path}/insights",
+            count=insights_count,
+        )
 
     # Phase 5.6 — bottom-of-page Explore neighborhood: 3-5 cross-links
     # to adjacent entities. Mix related minds, related books, and the
@@ -1410,6 +1438,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {minds_html}
 {related_books_html}
 {topic_link_html}
+{insights_link_html}
 {cta_html}
 {explore_footer_html}
 {seo_render.render_site_footer(base)}
@@ -1528,6 +1557,34 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
     related_html = seo_render.render_related_minds(related, base)
     topic_links_html = seo_render.render_topic_links_for_mind(matching_topics, base)
 
+    # Community-emergent themes pulled from real chats with this mind
+    # (mind_memories.topic aggregated across users, user_id IS NULL only).
+    # Pairs with the curated topic_links_html above: that section is the
+    # navigational layer (drives /on/{topic-slug} URLs); this section is
+    # the informational layer (no URLs, reflects actual conversations).
+    try:
+        recent_themes = list_mind_recent_topics(mind_id, limit=8)
+    except Exception:
+        recent_themes = []
+    recent_themes_html = seo_render.render_mind_recent_themes(recent_themes)
+
+    # Surface /mind/{id}/dialogues from the mind landing page — same
+    # rationale as the /book/{id}/insights link. Without this, the
+    # dialogues page exists only in the sitemap.
+    dialogues_link_html = ""
+    if insights_module.is_enabled():
+        try:
+            counts = count_assistant_messages_for_minds_batch([mind_id])
+            dialogues_count = int(counts.get(mind_id, 0))
+        except Exception:
+            dialogues_count = 0
+        dialogues_link_html = seo_render.render_live_content_link(
+            entity_name=name_raw,
+            kind="dialogues",
+            target_url=f"{base}/mind/{mind_id}/dialogues",
+            count=dialogues_count,
+        )
+
     # Phase 5.6 — Explore footer. Mix top related minds, top books from
     # this mind's library, and the first matching topic hub.
     explore_items: list[dict[str, str]] = []
@@ -1630,6 +1687,8 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {extra_books_html}
 {related_html}
 {topic_links_html}
+{recent_themes_html}
+{dialogues_link_html}
 <p class="cta"><a href="{html_esc(reader_url)}">Chat with {name} on Feynman →</a></p>
 {explore_footer_html}
 {seo_render.render_site_footer(base)}

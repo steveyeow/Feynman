@@ -470,6 +470,52 @@ def render_explore_footer(
     )
 
 
+def render_mind_recent_themes(themes: list[dict[str, Any]]) -> str:
+    """Community-emergent informational block on the mind landing page.
+
+    Renders themes the mind has actually been chatted about (pulled from
+    ``db.list_mind_recent_topics``). Distinct from ``render_topic_links_for_mind``
+    in two important ways:
+
+      * Source — those come from a fixed ``TOPIC_TAGS`` list × ``mind.domain``
+        string matching (static, curated). These come from real chat
+        aggregations (dynamic, community-emergent).
+      * URL footprint — those drive indexable ``/mind/{id}/on/{topic-slug}``
+        compound pages. These have NO links because the topics are open-ended
+        and not constrained to our curated topic set. Expanding URL space
+        based on free-form chat themes would invite Google's auto-generated
+        content penalties; we keep this as descriptive content only.
+
+    Renders nothing if ``themes`` is empty so the section gracefully
+    no-ops for new minds with no chat activity yet.
+    """
+    if not themes:
+        return ""
+    items = []
+    for t in themes[:8]:
+        topic = (t.get("topic") or "").strip()
+        n = int(t.get("count") or 0)
+        if not topic:
+            continue
+        count_badge = f' <span class="theme-count">×{n}</span>' if n > 1 else ""
+        items.append(
+            f'<li class="theme">{_esc(topic)}{count_badge}</li>'
+        )
+    if not items:
+        return ""
+    return (
+        '<section class="mind-recent-themes">'
+        '<h2>Recent themes in conversations</h2>'
+        '<p class="themes-intro">Topics readers have actually been '
+        'discussing with this mind on Feynman, aggregated across '
+        'sessions. Updates as new conversations happen.</p>'
+        '<ul class="themes-list">'
+        f'{"".join(items)}'
+        '</ul>'
+        '</section>'
+    )
+
+
 def render_topic_links_for_mind(matching_topics: list[str], site_url: str) -> str:
     """Render a row of links to relevant topic hubs from a mind's page.
     ``matching_topics`` is a pre-filtered list — caller decides which
@@ -493,19 +539,50 @@ def render_topic_links_for_mind(matching_topics: list[str], site_url: str) -> st
     )
 
 
-def render_minds_for_book(minds: list[dict[str, Any]], site_url: str) -> str:
+def render_minds_for_book(
+    minds: list[dict[str, Any]],
+    site_url: str,
+    activity: dict[str, dict[str, Any]] | None = None,
+) -> str:
     """Cross-links from /book/{id} → /mind/{id}. The single biggest
-    internal-link source we have."""
+    internal-link source we have.
+
+    Curated layer: ``minds`` comes from ``db.list_minds_for_agent``
+    (mind_works table — set at mind creation time).
+
+    Activity layer (optional): ``activity`` is a dict keyed by
+    LOWERCASE mind name → {count, last_seen}, sourced from
+    ``db.list_minds_active_for_agent`` (real chat sessions where this
+    book was in context AND the mind authored at least one response).
+    When present, minds with measurable activity get an inline badge.
+    Curated minds with no activity render unchanged — the badge is a
+    pure additive signal, not a filter."""
     if not minds:
         return ""
-    items = "".join(
-        f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(m.get("name", ""))}</a>'
-        f'{(" — " + _esc(m["domain"])) if m.get("domain") else ""}</li>'
-        for m in minds
-    )
+    activity = activity or {}
+    items_html = []
+    for m in minds:
+        name = m.get("name", "")
+        domain = m.get("domain", "")
+        badge = ""
+        if activity:
+            act = activity.get(name.lower())
+            if act and act.get("count", 0) > 0:
+                n = act["count"]
+                # "12 chats" / "1 chat" — count is distinct sessions
+                label = "chat" if n == 1 else "chats"
+                badge = (
+                    f' <span class="activity-badge" title="Active in real reader '
+                    f'conversations about this book">● active in {n} {label}</span>'
+                )
+        items_html.append(
+            f'<li><a href="{_esc(site_url)}/mind/{_esc(m["id"])}">{_esc(name)}</a>'
+            f'{(" — " + _esc(domain)) if domain else ""}'
+            f'{badge}</li>'
+        )
     return (
         '<section><h2>Great minds who discuss this book</h2>'
-        f'<ul class="related-minds">{items}</ul></section>'
+        f'<ul class="related-minds">{"".join(items_html)}</ul></section>'
     )
 
 
@@ -626,6 +703,39 @@ def render_related_minds(minds: list[dict[str, Any]], site_url: str) -> str:
 # Render layer for /book/{id}/insights and /mind/{id}/dialogues. The
 # insights themselves come from app/core/insights.py (already PII-
 # sanitized) — we just frame, label, and structure them for crawl.
+
+def render_live_content_link(
+    entity_name: str, kind: str, target_url: str, count: int = 0,
+) -> str:
+    """Surface the entity's Type-4 live-content page (``/insights`` for
+    books, ``/dialogues`` for minds) from the parent landing page. Without
+    this, the landing page never advertises that the Type-4 surface exists
+    — crawlers traverse from sitemap only, and human visitors have no path
+    to the live-content page from a book's or mind's main entry.
+
+    The link is rendered regardless of ``count`` so the page is always
+    discoverable. When ``count > 0`` a small badge advertises real activity;
+    when zero, the empty-state on the target page itself invites the visitor
+    to seed it via a chat. ``kind`` is ``"insights"`` (book) or
+    ``"dialogues"`` (mind) — pure copy variation, same structure."""
+    if kind == "insights":
+        title = f"AI insights about {entity_name}"
+        sub = ("Accumulated AI commentary on this book, drawn from real "
+               "reader chat sessions and updated as more readers engage.")
+    else:
+        title = f"Recent dialogues with {entity_name}"
+        sub = ("AI responses from real chat sessions with this mind agent, "
+               "aggregated and refreshed as new conversations happen.")
+    count_badge = (
+        f' <span class="count-badge">{count}</span>' if count > 0 else ""
+    )
+    return (
+        '<section class="live-content-link">'
+        f'<h2><a href="{_esc(target_url)}">{_esc(title)} →</a>{count_badge}</h2>'
+        f'<p>{_esc(sub)}</p>'
+        '</section>'
+    )
+
 
 def render_insight_cards(insights: list[dict[str, Any]], max_chars: int = 900) -> str:
     """Render the sanitized AI commentaries as a stack of cards. Each

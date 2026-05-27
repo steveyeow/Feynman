@@ -1643,6 +1643,129 @@ def list_minds_for_agent(agent_id: str, limit: int = 12) -> list[dict[str, Any]]
         return [dict(r) for r in rows]
 
 
+def list_minds_active_for_agent(
+    agent_id: str, since_days: int = 60, min_count: int = 1,
+) -> dict[str, dict[str, Any]]:
+    """Community-emergent activity signal: which minds have actually
+    spoken in chat sessions where this book was in context.
+
+    Returns ``{mind_name_lower: {count, last_seen}}`` so the renderer
+    can look up by mind name. Mind name is the only stable join key —
+    the SPA writes ``mindName`` into role='mind' message meta_json
+    (see app/static/app.js ``_queueSessionMessage`` flow) and writes
+    ``contextBooks: [{id, title}]`` into role='user' message meta_json
+    on the same session. We co-join within session_id.
+
+    Derivation chain (PG-only — relies on JSONB operators):
+      1. user messages where meta_json.contextBooks contains agent_id
+      2. JOIN their session to mind messages in the SAME session
+      3. GROUP by mindName, count distinct sessions
+
+    ``since_days`` bounds the lookback so old chats don't dominate as
+    the corpus grows. ``min_count`` filters out one-off invocations
+    so the badge represents real activity, not noise.
+
+    Pairs with ``list_minds_for_agent`` (the curated layer): renderer
+    overlays the activity dict on top of the mind_works cards, badging
+    minds with measurable real-chat activity. Cold-start safe — returns
+    empty dict if no signal yet, in which case the curated layer
+    renders unchanged.
+
+    Empty in SQLite path (no JSONB operators); returns {} as a no-op.
+    """
+    if not _USE_PG:
+        return {}
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn,
+                """
+                WITH book_sessions AS (
+                    SELECT DISTINCT sm.session_id
+                    FROM session_messages sm
+                    WHERE sm.role = 'user'
+                      AND sm.created_at::timestamp
+                          > NOW() - INTERVAL '1 day' * %s
+                      AND sm.meta_json::jsonb -> 'contextBooks' @>
+                          jsonb_build_array(jsonb_build_object('id', %s::text))
+                )
+                SELECT LOWER(sm.meta_json::jsonb->>'mindName') AS mind_name,
+                       COUNT(DISTINCT sm.session_id) AS session_count,
+                       MAX(sm.created_at) AS last_seen
+                FROM session_messages sm
+                JOIN book_sessions bs ON bs.session_id = sm.session_id
+                WHERE sm.role = 'mind'
+                  AND sm.meta_json::jsonb->>'mindName' IS NOT NULL
+                GROUP BY LOWER(sm.meta_json::jsonb->>'mindName')
+                HAVING COUNT(DISTINCT sm.session_id) >= %s
+                ORDER BY session_count DESC
+                """, (since_days, agent_id, min_count))
+            return {
+                r["mind_name"]: {
+                    "count": int(r["session_count"]),
+                    "last_seen": r.get("last_seen") or "",
+                }
+                for r in rows if r.get("mind_name")
+            }
+        except Exception as exc:
+            log.warning("list_minds_active_for_agent failed: %s", exc)
+            return {}
+
+
+def list_mind_recent_topics(
+    mind_id: str, limit: int = 8, min_topic_chars: int = 4,
+) -> list[dict[str, Any]]:
+    """Aggregated topic themes pulled from real chats with this mind agent.
+
+    Source: ``mind_memories.topic`` rows where ``user_id IS NULL`` (the
+    privacy-preserving anonymized aggregation that ``extract_and_save_memory``
+    already writes alongside per-user private interaction memories — see
+    ``app/core/minds.py:extract_and_save_memory``). Per-user memories with
+    ``user_id`` set are NOT included; this query only surfaces topics that
+    the mind has discussed across multiple users in non-private form.
+
+    Each row is ``{topic, count, last_seen}`` so the renderer can size the
+    UI by activity level (popular vs occasional) and show a freshness hint.
+
+    Skips trivial topics:
+      * shorter than ``min_topic_chars`` (e.g. blank, single word)
+      * boilerplate strings that the memory extractor sometimes emits as
+        topic labels for non-content turns (``user_profile``,
+        ``conversation initiation``, ``philosophical self-introduction``)
+
+    Used by the mind landing page's "Recent themes" hybrid section
+    (curated TOPIC_TAGS via ``matching_topics`` is the navigational layer
+    that drives ``/mind/{id}/on/{topic-slug}`` URLs; this is the
+    community-emergent informational layer with no URL impact).
+    """
+    boilerplate = (
+        "user_profile",
+        "conversation initiation",
+        "philosophical self-introduction",
+    )
+    boilerplate_placeholders = ",".join(["?"] * len(boilerplate))
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn, _q(
+                f"""SELECT topic, COUNT(*) AS n, MAX(created_at) AS last_seen
+                    FROM mind_memories
+                    WHERE mind_id = ?
+                      AND user_id IS NULL
+                      AND topic IS NOT NULL
+                      AND length(topic) >= ?
+                      AND LOWER(topic) NOT IN ({boilerplate_placeholders})
+                    GROUP BY topic
+                    ORDER BY COUNT(*) DESC, MAX(created_at) DESC
+                    LIMIT ?"""
+            ), (mind_id, min_topic_chars, *boilerplate, limit))
+            return [
+                {"topic": r["topic"], "count": int(r["n"]),
+                 "last_seen": r.get("last_seen") or ""}
+                for r in rows
+            ]
+        except Exception:
+            return []
+
+
 def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
     """Books in this mind's corpus, with enough fields to render link text
     on /mind/{id}. Filters to ready agents only — drafts shouldn't appear
