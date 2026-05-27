@@ -1405,14 +1405,21 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 
     # ── Decide who sees the landing page vs gets redirected ─────────────
     # Crawlers: always see the landing page (no redirect, body visible).
-    # In-product clicks (Referer = our origin): redirect to the SPA action
-    #   so the existing UX is unchanged — they expect to land in reader/chat.
+    # In-product clicks with ?details=1: SPA user EXPLICITLY clicked
+    #   "View details" — they want the landing page, not the SPA action.
+    #   Opt-out the auto-redirect. Same query param works for both books
+    #   and minds; checked here via request.query_params.
+    # In-product clicks (Referer = our origin, no ?details): redirect to
+    #   the SPA action so existing UX is unchanged — they expect to land
+    #   in reader/chat.
     # Everyone else (Google, share links, direct visits, missing referer):
     #   stay on the landing page so they see what the URL actually offers
     #   instead of being dropped into an empty reader.
     referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    wants_details = request.query_params.get("details") == "1"
     show_landing = (
-        _is_crawler(request)
+        wants_details
+        or _is_crawler(request)
         or not seo_render.is_internal_referer(referer, base)
     )
     body_style = '' if show_landing else ' style="opacity:0"'
@@ -1648,12 +1655,14 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
         (name_raw, canonical),
     ]))
 
-    # Same referer-aware gate as book_page — external visitors see the
-    # landing page (with bio + works + cross-links to books), internal
-    # clicks continue straight to the mind chat as before.
+    # Same referer-aware gate as book_page. ?details=1 opts out of the
+    # auto-redirect so SPA users who explicitly clicked "View profile"
+    # land on the landing page instead of bouncing to the chat.
     referer = request.headers.get("referer", "") or request.headers.get("referrer", "")
+    wants_details = request.query_params.get("details") == "1"
     show_landing = (
-        _is_crawler(request)
+        wants_details
+        or _is_crawler(request)
         or not seo_render.is_internal_referer(referer, base)
     )
     body_style = '' if show_landing else ' style="opacity:0"'
