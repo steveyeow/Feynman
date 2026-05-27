@@ -1579,7 +1579,12 @@ function navigate() {
       if (window.FEYNMAN_PRO && !currentUser) { window.location.hash = '#/login'; return; }
       renderChatsPage(); break;
     case 'library':
-      if (window.FEYNMAN_PRO && !currentUser) { window.location.hash = '#/login'; return; }
+      // Library is a public catalog browser — anyone can view the
+      // shared collection of books. Earlier the Pro-mode branch
+      // forced anonymous visitors to /#/login here, which was wrong:
+      // browsing the catalog is a discovery action, not a personal
+      // one. Personal actions (Upload, Delete) still gate themselves
+      // when the user clicks them.
       renderLibrary(); break;
     case 'minds': renderMindsPage(); break;
     case 'login': renderLoginPage(); break;
