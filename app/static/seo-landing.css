@@ -227,6 +227,25 @@ article.insight-card p,
 article.public-post p { margin: 0.5em 0; }
 
 p.book-author { color: var(--feynman-text-secondary); font-size: 18px; margin-top: 0; }
+
+/* Empty-state block — rendered on catalog-stub book pages where the
+   page would otherwise feel suspiciously thin. Same color treatment
+   as a quote/aside, no border, slightly muted so it reads as
+   metadata-about-the-page rather than primary content. */
+section.empty-state {
+  background: var(--feynman-bg-subtle);
+  border-radius: 10px;
+  padding: 22px 24px;
+  margin: 28px auto;
+}
+section.empty-state .empty-state-headline {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--feynman-text);
+  margin: 0 0 8px;
+}
+section.empty-state p { margin: 0.5em 0; color: var(--feynman-text-secondary); }
+section.empty-state p:last-child { margin-bottom: 0; }
 p.book-stats, p.mind-meta { color: var(--feynman-text-secondary); font-size: 14px; }
 p.book-about { font-size: 19px; line-height: 1.55; }
 
