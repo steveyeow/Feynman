@@ -29,6 +29,9 @@ PUBLIC_PATHS = {
     "/api/agents",
     "/api/votes",
     "/api/minds",
+    # Phase 6 — SPA fetches this at init (pre-login) to decide whether to
+    # render the Share-publicly button. Read-only feature flags.
+    "/api/features",
     "/favicon.ico",
     "/terms",
     "/privacy",
@@ -43,7 +46,15 @@ PUBLIC_PATHS = {
     # INDEXNOW_KEY (env var), so it's added at import time.
     f"/{__import__('os').getenv('INDEXNOW_KEY', 'feynman-indexnow-2026-05-26-7f3a').strip().lower()}.txt",
 }
-PUBLIC_PREFIXES = ("/static/", "/share/", "/book/", "/mind/", "/topic/", "/api/public/")
+PUBLIC_PREFIXES = (
+    "/static/", "/share/", "/book/", "/mind/", "/topic/", "/api/public/",
+    # Phase 6 — single-session public discussion pages. Without this prefix
+    # the auth middleware blocks /discussions/{id} with 401 before the route
+    # has a chance to render the public page. /book/{id}/discussions and
+    # /mind/{id}/discussions are already public because they fall under
+    # /book/ and /mind/ above; this entry covers the per-session canonical.
+    "/discussions/",
+)
 
 # GET requests to these paths require authentication (user-specific data)
 PRIVATE_GET_PREFIXES = (
