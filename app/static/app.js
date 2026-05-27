@@ -57,6 +57,111 @@ function isProUser() {
   return userTier === 'pro';
 }
 
+// ─── Pending intent (SEO/share → signup → resume chat) ───
+//
+// When an anonymous visitor lands on /book/{id} via search or a shared link
+// and clicks "Chat", we need to keep the *book they came for* alive across
+// the login redirect. Without this, the SPA bounces them to the generic
+// landing page after signup and the original intent is lost — the single
+// biggest funnel leak from the SEO surface.
+//
+// Lifecycle:
+//   1. chatWithBookByAgent saves { bookId, ts } when !currentUser.
+//   2. User signs up; SIGNED_IN handler in initSupabase marks onboarding
+//      done so we skip the topic-picker (they already told us with their feet
+//      which book they want).
+//   3. renderHome calls _restorePendingBookIntent, which waits for allBooks
+//      to load, then selects the book and focuses the composer.
+//   4. Intent expires after 1 day so stale localStorage doesn't hijack a
+//      future unrelated session.
+const _PENDING_INTENT_KEY = 'feynman:pendingChat';
+const _PENDING_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+function _savePendingBookIntent(bookId, opts = {}) {
+  if (!bookId) return;
+  try {
+    localStorage.setItem(_PENDING_INTENT_KEY, JSON.stringify({
+      bookId,
+      question: opts.question || '',
+      via: opts.via || 'reader',
+      ts: Date.now(),
+    }));
+    phTrack('pending_intent_saved', { via: opts.via || 'reader' });
+  } catch (e) { console.warn('pendingChat save failed:', e); }
+}
+
+function _readPendingBookIntent() {
+  try {
+    const raw = localStorage.getItem(_PENDING_INTENT_KEY);
+    if (!raw) return null;
+    const intent = JSON.parse(raw);
+    if (!intent?.bookId) return null;
+    if (intent.ts && Date.now() - intent.ts > _PENDING_INTENT_TTL_MS) {
+      localStorage.removeItem(_PENDING_INTENT_KEY);
+      return null;
+    }
+    return intent;
+  } catch { return null; }
+}
+
+function _clearPendingBookIntent() {
+  try { localStorage.removeItem(_PENDING_INTENT_KEY); } catch {}
+}
+
+async function _restorePendingBookIntent() {
+  const intent = _readPendingBookIntent();
+  if (!intent) return false;
+
+  // Wait up to ~3s for allBooks to populate. The catalog load races with
+  // renderHome on first render; without this poll, the book lookup below
+  // can miss even though the book is about to land in allBooks.
+  for (let i = 0; i < 10 && !allBooks.length; i++) {
+    await new Promise(r => setTimeout(r, 300));
+  }
+
+  let book = allBooks.find(b => b.id === intent.bookId);
+  if (!book) {
+    // Fall back to a direct fetch — happens when the book exists but the
+    // user's catalog filter excludes it (e.g. catalog stub, status='error').
+    try {
+      const agent = await api('/api/agents/' + encodeURIComponent(intent.bookId));
+      if (agent) {
+        const meta = agent.meta || {};
+        book = {
+          id: agent.id, title: agent.name, author: meta.author || agent.source || '',
+          agentId: agent.id, status: agent.status,
+          category: meta.category || agent.type,
+          available: true,
+          isAIGenerated: agent.type === 'ai_book',
+          hasFullText: agent.type === 'ai_book',
+        };
+        allBooks.push(book);
+      }
+    } catch (e) { console.warn('pendingChat fetch failed:', e); }
+  }
+
+  if (!book) {
+    _clearPendingBookIntent();
+    return false;
+  }
+
+  selectedBooks.clear();
+  selectedMinds.clear();
+  selectedBooks.set(book.id, book);
+  renderSelectedChips();
+  renderStarters();
+
+  const input = document.getElementById('home-input');
+  if (input) {
+    if (intent.question) input.value = intent.question;
+    input.focus();
+  }
+
+  phTrack('pending_intent_restored', { via: intent.via, had_question: !!intent.question });
+  _clearPendingBookIntent();
+  return true;
+}
+
 async function loadUserTier() {
   if (!window.FEYNMAN_PRO || !currentUser) { userTier = 'free'; return; }
   try {
@@ -1785,6 +1890,14 @@ function ensurePolling() {
 
 // ─── Home ───
 function renderHome() {
+  // Pending intent (SEO/share → signup) takes priority over topic onboarding.
+  // The user already told us which book they want — making them pick topics
+  // first would discard the strongest activation signal we have.
+  const hasPendingIntent = !!_readPendingBookIntent();
+  if (hasPendingIntent && !localStorage.getItem('onboardingDone')) {
+    localStorage.setItem('onboardingDone', '1');
+  }
+
   if (!localStorage.getItem('onboardingDone')) {
     document.getElementById('home-center-main').classList.add('hidden');
     showOnboarding();
@@ -1794,6 +1907,11 @@ function renderHome() {
   document.getElementById('home-center-main').classList.remove('hidden');
   document.getElementById('greeting').textContent = getGreeting();
   renderStarters();
+
+  if (hasPendingIntent) {
+    // Fire-and-forget: book lookup may need a moment for allBooks to populate.
+    _restorePendingBookIntent();
+  }
 }
 
 // ─── Starter questions ───
@@ -4716,6 +4834,16 @@ function selectBookForChat(bookId) {
 window.selectBookForChat = selectBookForChat;
 
 async function chatWithBookByAgent(agentId) {
+  // Anonymous click from reader/SEO surface: keep the book intent alive
+  // through signup so the user lands back on chat *with this book* instead
+  // of the generic landing page. See _savePendingBookIntent for the full
+  // lifecycle. Skips landing entirely — the user's already past the pitch.
+  if (window.FEYNMAN_PRO && !currentUser) {
+    _savePendingBookIntent(agentId, { via: 'reader' });
+    window.location.hash = '#/login';
+    return;
+  }
+
   let book = allBooks.find(b => b.agentId === agentId);
   if (!book) {
     try {
