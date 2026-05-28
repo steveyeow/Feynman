@@ -581,14 +581,25 @@ def _extract_recommended_books(text: str) -> list[dict[str, str]]:
 
 
 def _process_recommendations(text: str) -> None:
-    """Create catalog agents for any books mentioned in LLM response that don't exist yet."""
+    """Log candidate book mentions from an LLM response — auto-creation disabled.
+
+    This used to call ``create_catalog_agent`` for every quoted, capitalized
+    phrase (the "by author" part is optional), via a regex that cannot tell
+    a book from a game, a concept, or a quoted line of dialogue. It silently
+    polluted the catalog with non-books like "Blastar" and "I can't do it",
+    which then produced thin SEO pages and broken chat targets.
+
+    Real catalog growth now comes only from Gutenberg backfill, curated
+    seeding, and the user-triggered on-demand book writer. We keep a cheap
+    log line so the "books readers ask about that we don't have" signal
+    isn't lost. To re-enable organic creation, gate it on validation against
+    a real book source (OpenLibrary/Gutenberg), not the bare regex.
+    """
     try:
         books = _extract_recommended_books(text)
-        for book in books[:3]:  # limit to avoid spam
-            existing = find_agent_by_name(book["title"])
-            if not existing:
-                create_catalog_agent(title=book["title"], author=book["author"])
-                log.info("Auto-created agent from LLM recommendation: %s", book["title"])
+        if books:
+            log.info("Book mentions (auto-create disabled): %s",
+                     ", ".join(repr(b["title"]) for b in books[:3]))
     except Exception as exc:
         log.warning("Recommendation processing failed: %s", exc)
 
@@ -806,7 +817,17 @@ def sitemap_xml():
         chunks_by_agent = count_chunks_batch(ready_ids)
         for agent in ready_agents:
             agent_id = agent["id"]
-            priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
+            # Thin-content gate for the book URL itself. A catalog book
+            # with no indexed chunks renders an empty placeholder page
+            # (see book_page's noindex). Advertising it in the sitemap
+            # asks Google to crawl a page we've told it not to index —
+            # contradictory, and it dilutes site-wide quality. ai_books
+            # always carry generated chapter content, so they pass even
+            # before chunking. (Mirrors the /discussions thin gate.)
+            is_ai_book = agent.get("type") == "ai_book"
+            if not is_ai_book and chunks_by_agent.get(agent_id, 0) < 1:
+                continue
+            priority = "0.7" if is_ai_book else "0.5"
             urls += f"""  <url>
     <loc>{_SITE_URL}/book/{agent_id}</loc>
     <lastmod>{today}</lastmod>
@@ -1448,6 +1469,14 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     # assembles. One URL, one page, one set of content; only the
     # header chrome adapts via is_authenticated.
     is_authenticated = _get_user_id(request) is not None
+    # Thin-content gate: a stub (no indexed text, no chapters, no
+    # questions) has nothing worth indexing — the page is a placeholder
+    # until a backfill fills it in. noindex keeps it out of Google's
+    # quality assessment (matching the /discussions gate) while staying
+    # fully functional for humans who land on it. 'follow' so the links
+    # to the app and related entities still pass. Once chunks exist the
+    # page becomes indexable automatically.
+    robots_meta = '<meta name="robots" content="noindex,follow">' if is_stub else ''
     author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
     author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
 
@@ -1457,6 +1486,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — Feynman</title>
 <meta name="description" content="{desc}">
+{robots_meta}
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="book">
 <meta property="og:title" content="{title}">
@@ -2110,6 +2140,10 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
 
     title = html_esc(f"AI insights about {entity_name_raw} — Feynman")
     og_image_url = f"{base}/book/{agent_id}/og.png?v={config.OG_IMAGE_CACHE_VERSION}"
+    # No accumulated insights yet → nothing to index. noindex,follow keeps
+    # the empty placeholder out of Google until real chat-derived commentary
+    # exists, then it becomes indexable on its own.
+    robots_meta = '<meta name="robots" content="noindex,follow">' if not publishable else ''
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -2117,6 +2151,7 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
+{robots_meta}
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="article">
 <meta property="og:title" content="{title}">

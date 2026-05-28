@@ -1662,7 +1662,12 @@ async function api(path, opts = {}) {
     window.location.hash = '#/login';
     throw new Error('Please sign in to continue');
   }
-  if (!r.ok) throw new Error(_parseApiError(r.status, d));
+  if (!r.ok) {
+    const e = new Error(_parseApiError(r.status, d));
+    e.status = r.status;
+    e.detail = (typeof d.detail === 'string' ? d.detail : d.detail?.message) || '';
+    throw e;
+  }
   return d;
 }
 
@@ -4786,7 +4791,7 @@ async function chatWithBookByAgent(agentId) {
       }
     } catch (_) {}
   }
-  if (!book) return;
+  if (!book) return false;
   saveCurrentSession();
   currentSessionId = null;
   selectedBooks.clear();
@@ -4799,6 +4804,7 @@ async function chatWithBookByAgent(agentId) {
   _writeBookOutline = null;
   _writeBookAgentId = null;
   window.location.hash = '#/';
+  return true;
 }
 window.chatWithBookByAgent = chatWithBookByAgent;
 
@@ -4821,6 +4827,15 @@ async function renderReader(agentId) {
       _readerData = await api(`/api/agents/${agentId}/read`);
     }
   } catch (err) {
+    // A catalog stub (book with no indexed text) 404s here with
+    // "No content available". The reader can't paginate it, but the user
+    // CAN still chat — that's exactly what the book landing page promises.
+    // Fall back to a working chat with the book as context rather than
+    // dead-ending. A genuine "Book not found" (bad id) still shows the
+    // error so we don't silently swallow a real 404.
+    if (err.status === 404 && err.detail !== 'Book not found') {
+      if (await chatWithBookByAgent(agentId)) return;
+    }
     page.innerHTML = `<div class="reader-empty"><p>Could not load book: ${esc(err.message)}</p><a href="#/library" class="reader-back-link">&larr; Back to Library</a></div>`;
     return;
   }
