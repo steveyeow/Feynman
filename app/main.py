@@ -3035,11 +3035,19 @@ def api_public_read_book(agent_id: str, request: Request):
 
     cache_key = f"public_book:{agent_id}"
     cached = _cache_get(cache_key, _BOOK_CACHE_TTL)
+    # Cache headers tuned 2026-05-28 for egress conservatism:
+    # books are static once indexed (chunk text doesn't mutate after
+    # `_learn_agent` completes), so we can let Vercel's edge serve
+    # cache hits for 6h before re-validating. Previously s-maxage=1800
+    # (30 min) drove repeat egress on popular books — a 320 KB book
+    # × 100 crawler/share visits in a day × 12 cache rotations =
+    # ~380 MB/day from a single book. 6h cache cuts that by 12×.
+    cache_ttl_header = "public, max-age=600, s-maxage=21600"
     if cached is not None:
         return JSONResponse(
             content=cached,
             headers={
-                "Cache-Control": "public, max-age=300, s-maxage=1800",
+                "Cache-Control": cache_ttl_header,
                 "X-Cache": "HIT",
             },
         )
@@ -3053,7 +3061,7 @@ def api_public_read_book(agent_id: str, request: Request):
     return JSONResponse(
         content=payload,
         headers={
-            "Cache-Control": "public, max-age=300, s-maxage=1800",
+            "Cache-Control": cache_ttl_header,
             "X-Cache": "MISS",
         },
     )
