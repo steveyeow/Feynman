@@ -131,6 +131,15 @@ html, body {
   background: var(--feynman-bg-subtle);
   color: var(--feynman-text);
 }
+/* Auth-aware CTA swap, resolved client-side (see render_landing_header).
+   Default (anonymous visitor / crawler / no-JS): show the loud
+   "Open Feynman →" CTA, keep the soft "Back to app →" hidden. The inline
+   header script sets html[data-feynman-auth] synchronously when a
+   Supabase session exists in localStorage, flipping the two before first
+   paint — no flash. */
+.feynman-header .feynman-nav a.feynman-cta-auth { display: none; }
+html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-cta-anon { display: none; }
+html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-cta-auth { display: inline-block; }
 
 /* ─── Main content container ─────────────────────────────────────── */
 

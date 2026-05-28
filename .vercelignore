@@ -1,0 +1,20 @@
+# Keep the deploy bundle to the runtime essentials (app/, requirements.txt,
+# vercel.json). Everything below is dev-only or local state. The .venv here
+# is a symlink to a 144MB virtualenv — without this exclusion the CLI
+# follows it and the upload aborts.
+.venv
+.pytest_cache
+__pycache__
+.git
+.github
+.claude
+docs
+tests
+scripts
+supabase
+data
+*.md
+!requirements.txt
+demo-ai-book-writer.html
+mind-consent-preview.html
+.env.example

@@ -1379,22 +1379,53 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
     page is recognizable whether the visitor arrived from Google, a
     share link, or by clicking "View details" inside the SPA.
 
-    ``is_authenticated``: when True the visitor is a logged-in product
-    user — we hide the marketing-style "Open Feynman →" CTA (they're
-    already in Feynman) and surface a softer "Back to app →" link
-    instead. When False (anonymous / crawler), keep the conversion CTA.
+    Auth-aware CTA, resolved CLIENT-SIDE. ``is_authenticated`` is kept
+    for signature compatibility but no longer gates the markup, because
+    server-side auth can't work here:
 
-    Logo, nav links, and the brand wordmark stay identical in both
-    states so the page chrome is visually stable when auth state
-    changes (e.g. user signs in mid-session).
+      1. These pages are edge-cached (``s-maxage`` of a day), so one HTML
+         is served to every visitor — we can't vary it per user.
+      2. The Supabase session token lives in localStorage and is only
+         attached to the SPA's ``fetch`` calls; a top-level browser
+         navigation to ``/book/{id}`` carries no Authorization header, so
+         ``request.state.user_id`` is always unset here.
+
+    Instead we render BOTH CTAs and let a tiny inline script decide. The
+    script runs synchronously as the first child of <header> — before the
+    CTA <a> elements are even parsed — and sets ``html[data-feynman-auth]``
+    when a non-expired Supabase session is found in localStorage. The CSS
+    in seo-landing.css then shows the soft "Back to app →" CTA and hides
+    the loud "Open Feynman →" one. Because the attribute is set before the
+    CTAs paint, the swap is flicker-free; crawlers (no JS) keep the
+    conversion CTA. Logo, nav links, and wordmark are identical in both
+    states so chrome stays visually stable.
     """
-    primary_cta = (
-        f'<a class="feynman-cta feynman-cta-soft" href="{_esc(site_url)}/#/library">Back to app →</a>'
-        if is_authenticated
-        else f'<a class="feynman-cta" href="{_esc(site_url)}/">Open Feynman →</a>'
+    # Dependency-free session probe. Scans for the supabase-js storage key
+    # (sb-<ref>-auth-token) so it survives a project-ref change; tolerates
+    # both the v2 (top-level) and older (currentSession) value shapes and
+    # honors the token's expiry.
+    auth_script = (
+        '<script>'
+        '(function(){try{'
+        'for(var i=0;i<localStorage.length;i++){'
+        'var k=localStorage.key(i);'
+        "if(!k||k.slice(0,3)!=='sb-'||k.indexOf('-auth-token')<0)continue;"
+        'var r=localStorage.getItem(k);if(!r)continue;'
+        # Current supabase-js@2 stores plain JSON; a future build could
+        # base64-prefix it. Decode that case, but let any failure fall
+        # through to JSON.parse's catch (graceful anon fallback).
+        "if(r.indexOf('base64-')===0){try{r=atob(r.slice(7))}catch(e){}}"
+        'var o;try{o=JSON.parse(r)}catch(e){continue}'
+        'var s=o&&(o.access_token?o:o.currentSession);'
+        'if(s&&s.access_token){'
+        'var t=(s.expires_at||0)*1000;'
+        "if(!t||t>Date.now()){document.documentElement.setAttribute('data-feynman-auth','1');}"
+        'break;}}}catch(e){}})();'
+        '</script>'
     )
     return (
         '<header class="feynman-header">'
+        f'{auth_script}'
         f'<a class="feynman-brand" href="{_esc(site_url)}/">'
         '<svg viewBox="0 0 280 64" xmlns="http://www.w3.org/2000/svg" aria-label="Feynman">'
         '<line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
@@ -1408,7 +1439,8 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
         '<nav class="feynman-nav">'
         f'<a href="{_esc(site_url)}/#/library">Library</a>'
         f'<a href="{_esc(site_url)}/#/minds">Great Minds</a>'
-        f'{primary_cta}'
+        f'<a class="feynman-cta feynman-cta-anon" href="{_esc(site_url)}/">Open Feynman →</a>'
+        f'<a class="feynman-cta feynman-cta-soft feynman-cta-auth" href="{_esc(site_url)}/#/library">Back to app →</a>'
         '</nav>'
         '</header>'
     )
