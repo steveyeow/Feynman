@@ -85,6 +85,7 @@ from .core.db import (
     get_ai_book_status,
     get_chunks,
     get_chunks_text_only,
+    get_sample_chunks_text,
     list_ai_books,
     update_ai_book_outline,
     update_ai_book_status,
@@ -1273,8 +1274,13 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     og_image_url = f"{base}/book/{id_path}/og.png?v={v}"
 
     # ── Load enrichment data (all cheap; no LLM/embedding at SSR time) ──
+    # Sample-passage section renders 2-3 chunks. Pulling all of them
+    # (a 300-chunk book is ~300KB of text egress) was the primary
+    # driver of the 2026-05-28 Supabase egress overage — every crawler
+    # hit cost a full book's text. LIMIT 3 brings the same render at
+    # ~1% of the previous bandwidth.
     try:
-        chunks = get_chunks_text_only(agent_id)
+        chunks = get_sample_chunks_text(agent_id, limit=3)
     except Exception:
         chunks = []
     try:
@@ -3326,7 +3332,14 @@ def api_list_agents():
         log.error("Failed to enrich AI book agents: %s", exc)
     return JSONResponse(
         content=result,
-        headers={"Cache-Control": "public, max-age=30, s-maxage=120"},
+        # 5× longer edge cache (was s-maxage=120 = 2 min) — the agents
+        # list is fairly static (a new book or two per hour at peak) but
+        # the response payload is the heaviest single endpoint on the
+        # site (940 rows ≈ 2 MB). 10-minute edge cache keeps freshness
+        # acceptable for a catalog grid while cutting Supabase egress
+        # from this path by ~80%. Drove ~2 GB/month of preventable
+        # egress prior to the 2026-05-28 quota overage.
+        headers={"Cache-Control": "public, max-age=60, s-maxage=600"},
     )
 
 

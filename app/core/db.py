@@ -1162,11 +1162,42 @@ def get_chunks(agent_id: str) -> list[dict[str, Any]]:
 
 
 def get_chunks_text_only(agent_id: str) -> list[dict[str, Any]]:
-    """Lightweight variant that skips vector/dim/norm — for the reader."""
+    """Lightweight variant that skips vector/dim/norm — for the reader.
+
+    WARNING: returns EVERY chunk for the agent. A 300-chunk Gutenberg
+    book is ~300KB of text egress per call. Only call this when you
+    genuinely need the full book (e.g. the reader at /api/agents/{id}/read).
+    For sample-passage rendering on the SSR detail page, use
+    ``get_sample_chunks_text(agent_id, limit=3)`` instead — same query
+    shape with LIMIT, ~99% less egress per request.
+
+    This single call from book_page's SSR rendering was the primary
+    driver of the 2026-05-28 Supabase egress overage: crawlers hitting
+    /book/{id} were pulling the full text just to render 2-3 sample
+    passages. Fixed by switching that call site to the limited helper.
+    """
     with get_conn() as conn:
         return _fetchall(conn, _q(
             "SELECT id, chunk_index, text FROM chunks WHERE agent_id = ? ORDER BY chunk_index ASC"
         ), (agent_id,))
+
+
+def get_sample_chunks_text(agent_id: str, limit: int = 3) -> list[dict[str, Any]]:
+    """Pull just the first ``limit`` chunks for a book — enough for the
+    SSR detail page's Sample Passages section without dragging the
+    whole book over the wire.
+
+    Picks the leading chunks (lowest chunk_index) rather than random
+    samples on purpose: the opening passages of a book are usually the
+    most representative for a reader-facing preview, and the deterministic
+    pick keeps the rendered HTML cache-stable so Vercel's edge cache
+    hits properly between crawlers.
+    """
+    with get_conn() as conn:
+        return _fetchall(conn, _q(
+            "SELECT id, chunk_index, text FROM chunks WHERE agent_id = ? "
+            "ORDER BY chunk_index ASC LIMIT ?"
+        ), (agent_id, limit))
 
 
 def get_chunks_batch(agent_ids: list[str]) -> list[dict[str, Any]]:
