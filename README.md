@@ -38,7 +38,7 @@ That's why great minds aren't a secondary feature — they're an integral part o
 
 ---
 
-Feynman is an interactive knowledge network powered by AcademiAI. Three ways to enter:
+Feynman is an interactive knowledge network. Three ways to enter:
 
 **1. Enter through a book** — Ask questions and get answers grounded in the work's actual content, with every claim traced back to a specific passage. A four-layer content system (RAG, Content Fetch, Web Search, LLM Knowledge) connects the book to broader context and related knowledge across the network.
 
