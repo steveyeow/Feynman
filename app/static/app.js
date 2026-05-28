@@ -1690,7 +1690,20 @@ function navigate() {
       // browsing the catalog is a discovery action, not a personal
       // one. Personal actions (Upload, Delete) still gate themselves
       // when the user clicks them.
-      renderLibrary(); break;
+      renderLibrary();
+      // First-visit guard: if init()'s loadAgents() happened to settle
+      // before this route entry (race with OAuth callback or hash
+      // change ordering), allBooks may be empty at this point and
+      // renderBookGrid renders "No books found" for booksLoadState=
+      // 'ready'+empty. Re-fetch + re-render covers that edge case.
+      // The user previously had to F5 to see books — this fix
+      // eliminates that.
+      if (!allBooks.length && booksLoadState !== 'loading') {
+        loadAgents().then(() => {
+          if (getRoute().page === 'library') renderLibraryGrid();
+        });
+      }
+      break;
     case 'minds': renderMindsPage(); break;
     case 'login': renderLoginPage(); break;
     case 'subscription': renderSubscriptionPage(); break;
