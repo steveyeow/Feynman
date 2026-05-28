@@ -40,8 +40,25 @@
   --feynman-quote-border: #e0e0e3;
 }
 
+/* Dark tokens. Applied for the app's MANUAL toggle (:root.dark, set from
+   localStorage 'feynman-theme' by the header script) AND the system
+   preference (unless .light forces light) — identical logic to styles.css,
+   so these pages always match whatever theme the app is in. */
+:root.dark {
+  --feynman-text: #f5f5f7;
+  --feynman-text-secondary: #a1a1a6;
+  --feynman-text-tertiary: #6e6e73;
+  --feynman-bg: #1c1c1e;
+  --feynman-bg-subtle: #2c2c2e;
+  --feynman-border: rgba(255, 255, 255, 0.10);
+  --feynman-border-strong: rgba(255, 255, 255, 0.18);
+  --feynman-accent: #0a84ff;
+  --feynman-accent-hover: #409cff;
+  --feynman-quote-bg: #232325;
+  --feynman-quote-border: rgba(255, 255, 255, 0.08);
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --feynman-text: #f5f5f7;
     --feynman-text-secondary: #a1a1a6;
     --feynman-text-tertiary: #6e6e73;
@@ -235,7 +252,9 @@ body { padding-left: 260px; }
   border-radius: 8px;
   color: var(--feynman-text-secondary);
   text-decoration: none;
-  font-size: 14px;
+  /* Match the app sidebar nav (styles.css uses Libre Baskerville serif here). */
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 13px;
 }
 .feynman-nav-link:hover { background: rgba(128, 128, 128, 0.08); color: var(--feynman-text); }
 .feynman-nav-link svg { flex-shrink: 0; }

@@ -1491,8 +1491,8 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
         '</button>'
         '<div class="feynman-account-menu" role="menu">'
+        '<button class="feynman-account-menu-item" onclick="__fsbTheme(event)">Toggle theme</button>'
         f'<a class="feynman-account-menu-item menu-anon" href="{s}/#/login">Sign in →</a>'
-        f'<a class="feynman-account-menu-item menu-auth" href="{s}/#/">Open app →</a>'
         '<button class="feynman-account-menu-item menu-auth" onclick="__fsbSignout(event)">Sign out</button>'
         '</div>'
         '</div>'
@@ -1505,9 +1505,18 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
     sb_script = (
         '<script>'
         '(function(){try{var d=document.documentElement;'
+        # Theme sync — honor the app's manual toggle (localStorage feynman-theme);
+        # if unset, the @media system preference in seo-landing.css applies. Runs
+        # early so the page paints in the right theme (no flash).
+        "var th=localStorage.getItem('feynman-theme');"
+        "if(th==='dark'){d.classList.add('dark');d.classList.remove('light');}"
+        "else if(th==='light'){d.classList.add('light');d.classList.remove('dark');}"
         "if(localStorage.getItem('feynman-sb')!=='expanded')d.classList.add('feynman-sb-collapsed');"
         "window.__fsbToggle=function(e){e&&e.stopPropagation();var c=d.classList.toggle('feynman-sb-collapsed');"
         "localStorage.setItem('feynman-sb',c?'collapsed':'expanded');};"
+        "window.__fsbTheme=function(e){e&&e.stopPropagation();"
+        "var dk=!(d.classList.contains('dark')||(!d.classList.contains('light')&&matchMedia('(prefers-color-scheme: dark)').matches));"
+        "d.classList.toggle('dark',dk);d.classList.toggle('light',!dk);localStorage.setItem('feynman-theme',dk?'dark':'light');};"
         "window.__fsbMenu=function(e){e&&e.stopPropagation();var m=document.querySelector('.feynman-account-menu');if(m)m.classList.toggle('open');};"
         "window.__fsbSignout=function(e){e&&e.stopPropagation();try{for(var i=localStorage.length-1;i>=0;i--){var k=localStorage.key(i);"
         "if(k&&k.slice(0,3)==='sb-'&&k.indexOf('-auth-token')>=0)localStorage.removeItem(k);}}catch(_){}location.href='/';};"
