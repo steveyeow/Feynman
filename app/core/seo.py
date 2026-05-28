@@ -1474,17 +1474,52 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
                '<line x1="10.2" y1="17.2" x2="16" y2="17.8"/><line x1="16.5" y1="10.3" x2="17.5" y2="16"/>')
     )
 
-    # Account slot — anonymous shows "Sign in" + a person glyph; the hydration
-    # script above swaps in the user's name/avatar when a session exists.
+    # Account slot — a button that opens an up-pull menu (like the app's
+    # sidebar profile), not a navigation. Anonymous shows "Sign in"; the
+    # hydration script swaps in the user's name/avatar + flips the menu items
+    # when a session exists. Sign-out clears the localStorage session.
     account = (
-        f'<a class="feynman-account" href="{s}/#/" title="Account">'
+        '<div class="feynman-account-wrap">'
+        '<button class="feynman-account" onclick="__fsbMenu(event)" title="Account" aria-haspopup="true">'
         '<span class="feynman-account-avatar" aria-hidden="true">'
         '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
         'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
         '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
         '</span>'
         '<span class="feynman-account-name">Sign in</span>'
-        '</a>'
+        '<svg class="feynman-account-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" '
+        'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+        '</button>'
+        '<div class="feynman-account-menu" role="menu">'
+        f'<a class="feynman-account-menu-item menu-anon" href="{s}/#/login">Sign in →</a>'
+        f'<a class="feynman-account-menu-item menu-auth" href="{s}/#/">Open app →</a>'
+        '<button class="feynman-account-menu-item menu-auth" onclick="__fsbSignout(event)">Sign out</button>'
+        '</div>'
+        '</div>'
+    )
+
+    # Sidebar interactions (collapse toggle + profile menu + sign-out),
+    # replicating the app sidebar's behaviors for these server-rendered pages.
+    # Content pages auto-collapse by default (more reading room); the user's
+    # choice persists. Runs early so the collapsed width applies before paint.
+    sb_script = (
+        '<script>'
+        '(function(){try{var d=document.documentElement;'
+        "if(localStorage.getItem('feynman-sb')!=='expanded')d.classList.add('feynman-sb-collapsed');"
+        "window.__fsbToggle=function(e){e&&e.stopPropagation();var c=d.classList.toggle('feynman-sb-collapsed');"
+        "localStorage.setItem('feynman-sb',c?'collapsed':'expanded');};"
+        "window.__fsbMenu=function(e){e&&e.stopPropagation();var m=document.querySelector('.feynman-account-menu');if(m)m.classList.toggle('open');};"
+        "window.__fsbSignout=function(e){e&&e.stopPropagation();try{for(var i=localStorage.length-1;i>=0;i--){var k=localStorage.key(i);"
+        "if(k&&k.slice(0,3)==='sb-'&&k.indexOf('-auth-token')>=0)localStorage.removeItem(k);}}catch(_){}location.href='/';};"
+        "document.addEventListener('click',function(){var m=document.querySelector('.feynman-account-menu.open');if(m)m.classList.remove('open');});"
+        '}catch(e){}})();'
+        '</script>'
+    )
+    toggle_btn = (
+        '<button class="feynman-sb-toggle" onclick="__fsbToggle(event)" title="Toggle sidebar" aria-label="Toggle sidebar">'
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>'
+        '</button>'
     )
 
     # The SAME left sidebar as the product app + the public Library, so every
@@ -1494,7 +1529,8 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
     return (
         '<aside class="feynman-sidebar">'
         f'{auth_script}'
-        f'<div class="feynman-sidebar-header">{brand}</div>'
+        f'{sb_script}'
+        f'<div class="feynman-sidebar-header">{brand}{toggle_btn}</div>'
         f'<nav class="feynman-sidebar-nav">{nav}</nav>'
         '<div class="feynman-sidebar-spacer"></div>'
         f'<div class="feynman-sidebar-bottom">{account}</div>'

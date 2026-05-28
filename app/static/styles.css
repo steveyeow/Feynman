@@ -1860,9 +1860,12 @@ body {
 }
 .minds-tooltip.hidden { display: none; }
 .minds-tooltip .tt-header-row {
+  /* Stack: name/era on its own full-width row, action buttons below — so a
+     long name (e.g. "Thorstein Veblen") never gets squeezed by the
+     fixed-width Profile/Chat buttons sitting beside it. */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 10px;
   margin-bottom: 6px;
 }

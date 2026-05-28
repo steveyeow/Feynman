@@ -192,7 +192,27 @@ body { padding-left: 260px; }
   flex-direction: column;
   z-index: 50;
 }
-.feynman-sidebar-header { padding: 16px 16px 10px; }
+.feynman-sidebar-header {
+  padding: 14px 12px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.feynman-sb-toggle {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--feynman-text-tertiary);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.feynman-sb-toggle:hover { background: rgba(128, 128, 128, 0.08); color: var(--feynman-text); }
 .feynman-sidebar .feynman-brand {
   display: inline-flex;
   align-items: center;
@@ -221,16 +241,58 @@ body { padding-left: 260px; }
 .feynman-nav-link svg { flex-shrink: 0; }
 .feynman-sidebar-spacer { flex: 1 1 auto; }
 .feynman-sidebar-bottom { padding: 12px 14px; border-top: 1px solid var(--feynman-border); }
+.feynman-account-wrap { position: relative; }
 .feynman-sidebar .feynman-account {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 6px;
+  border: none;
+  background: transparent;
   border-radius: 10px;
   text-decoration: none;
   color: var(--feynman-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .feynman-sidebar .feynman-account:hover { background: rgba(128, 128, 128, 0.08); }
+.feynman-account-chevron { margin-left: auto; flex-shrink: 0; color: var(--feynman-text-tertiary); }
+/* Up-pull profile menu (opens above the account button, like the app). */
+.feynman-account-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--feynman-bg);
+  border: 1px solid var(--feynman-border-strong);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  z-index: 60;
+}
+.feynman-account-menu.open { display: block; }
+.feynman-account-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  color: var(--feynman-text);
+  font-family: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.feynman-account-menu-item:hover { background: rgba(128, 128, 128, 0.08); }
+/* Menu items flip on auth state (set by the header hydration script). */
+.feynman-account-menu .menu-auth { display: none; }
+html[data-feynman-auth] .feynman-account-menu .menu-anon { display: none; }
+html[data-feynman-auth] .feynman-account-menu .menu-auth { display: block; }
 .feynman-sidebar .feynman-account-avatar {
   width: 28px;
   height: 28px;
@@ -253,6 +315,24 @@ body { padding-left: 260px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Collapsed sidebar (desktop) — content pages auto-collapse for reading room;
+   the toggle button stays as the expand control. Desktop-scoped so it never
+   conflicts with the mobile top-bar rules below. */
+@media (min-width: 769px) {
+  html.feynman-sb-collapsed body { padding-left: 52px; }
+  html.feynman-sb-collapsed .feynman-sidebar { width: 52px; }
+  html.feynman-sb-collapsed .feynman-brand,
+  html.feynman-sb-collapsed .feynman-nav-label,
+  html.feynman-sb-collapsed .feynman-account-name,
+  html.feynman-sb-collapsed .feynman-account-chevron { display: none; }
+  html.feynman-sb-collapsed .feynman-sidebar-header { justify-content: center; padding: 14px 0 10px; }
+  html.feynman-sb-collapsed .feynman-sidebar-nav { padding: 6px 6px; }
+  html.feynman-sb-collapsed .feynman-nav-link { justify-content: center; padding: 8px; }
+  html.feynman-sb-collapsed .feynman-sidebar-bottom { padding: 12px 6px; }
+  html.feynman-sb-collapsed .feynman-account { justify-content: center; padding: 6px 0; }
+  html.feynman-sb-collapsed .feynman-account-menu { left: 6px; right: auto; min-width: 170px; }
+}
+
 @media (max-width: 768px) {
   /* Mobile: sidebar collapses to a top bar (logo + account); nav hidden. */
   body { padding-left: 0; padding-top: 54px; }
