@@ -2225,6 +2225,65 @@ def list_assistant_messages_for_mind(
             return []
 
 
+def count_approved_public_sessions_per_agent(
+    agent_ids: list[str],
+) -> dict[str, int]:
+    """How many approved public chat sessions each book has — used by the
+    sitemap to decide whether to include /book/{id}/discussions URLs.
+
+    Without this gate, sitemap emits a /discussions URL for every ready
+    book (754 of them in production as of 2026-05-28), most of which
+    render an empty aggregation page because no user has actually
+    shared a discussion yet. Google reads those as thin content and
+    drags the site-wide quality score down. Gate at >=1 approved
+    session, just like /insights gates at >=3 publishable messages.
+
+    Schema: chat_sessions.session_type='book' sets mind_id to the
+    book's agent_id (legacy column naming).
+    """
+    if not agent_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(agent_ids))
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn, _q(
+                f"""SELECT mind_id AS agent_id, COUNT(*) AS n
+                    FROM chat_sessions
+                    WHERE public_status = 'approved'
+                      AND session_type = 'book'
+                      AND mind_id IN ({placeholders})
+                    GROUP BY mind_id"""
+            ), tuple(agent_ids))
+            return {r["agent_id"]: int(r["n"]) for r in rows}
+        except Exception:
+            return {}
+
+
+def count_approved_public_sessions_per_mind(
+    mind_ids: list[str],
+) -> dict[str, int]:
+    """How many approved public chat sessions each mind has — same
+    rationale as the per-agent variant above. Schema:
+    chat_sessions.session_type IN ('chat', 'mind') AND mind_id = mind.id.
+    """
+    if not mind_ids:
+        return {}
+    placeholders = ",".join(["?"] * len(mind_ids))
+    with get_conn() as conn:
+        try:
+            rows = _fetchall(conn, _q(
+                f"""SELECT mind_id, COUNT(*) AS n
+                    FROM chat_sessions
+                    WHERE public_status = 'approved'
+                      AND session_type IN ('chat', 'mind')
+                      AND mind_id IN ({placeholders})
+                    GROUP BY mind_id"""
+            ), tuple(mind_ids))
+            return {r["mind_id"]: int(r["n"]) for r in rows}
+        except Exception:
+            return {}
+
+
 def count_assistant_messages_batch(
     agent_ids: list[str], min_chars: int = 200,
 ) -> dict[str, int]:

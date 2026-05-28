@@ -44,6 +44,8 @@ from .core.db import (
     list_agents,
     list_chat_sessions,
     approve_chat_session_public,
+    count_approved_public_sessions_per_agent,
+    count_approved_public_sessions_per_mind,
     count_assistant_messages_batch,
     count_assistant_messages_for_minds_batch,
     count_chunks_batch,
@@ -902,12 +904,22 @@ def sitemap_xml():
   </url>
 """
 
-        # Phase 6 — public discussion pages. Only included when the
-        # feature flag is on, so the sitemap stays consistent with the
-        # actual route surface. Flip ENABLE_PUBLIC_DISCUSSIONS to surface
-        # these to Google.
+        # Phase 6 — public discussion aggregation pages. Gated on the
+        # feature flag AND on the entity having ≥1 approved public
+        # session, so we don't emit 754 thin/empty pages (which was
+        # the production state observed in GSC on 2026-05-28: every
+        # /book/{id}/discussions and /mind/{id}/discussions URL was
+        # being advertised regardless of whether any user had actually
+        # shared a discussion). Empty aggregation pages drag site-wide
+        # quality score down. Single batched COUNT(*) per corpus keeps
+        # the sitemap render cheap.
         if ugc_module.is_enabled():
+            agent_discussion_counts = count_approved_public_sessions_per_agent(
+                [a["id"] for a in ready_agents]
+            )
             for agent in ready_agents:
+                if agent_discussion_counts.get(agent["id"], 0) < 1:
+                    continue
                 urls += f"""  <url>
     <loc>{_SITE_URL}/book/{agent["id"]}/discussions</loc>
     <lastmod>{today}</lastmod>
@@ -915,7 +927,12 @@ def sitemap_xml():
     <priority>0.4</priority>
   </url>
 """
+            mind_discussion_counts = count_approved_public_sessions_per_mind(
+                [m["id"] for m in all_minds]
+            )
             for mind in all_minds:
+                if mind_discussion_counts.get(mind["id"], 0) < 1:
+                    continue
                 urls += f"""  <url>
     <loc>{_SITE_URL}/mind/{mind["id"]}/discussions</loc>
     <lastmod>{today}</lastmod>
