@@ -2869,35 +2869,48 @@ def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
             ), (email, user_id))
             if old:
                 old_id = old["id"]
-                for tbl in ("agents", "chat_sessions", "ai_books", "messages", "mind_memories"):
-                    _execute(conn, _q(
-                        f'UPDATE "{tbl}" SET user_id = ? WHERE user_id = ?'
-                    ), (user_id, old_id))
+                # ORDER MATTERS: the new users row must exist BEFORE any child
+                # row is repointed to it, or a FK (chat_sessions.user_id ->
+                # users.id, etc.) rejects the UPDATE and the whole re-link
+                # throws + rolls back — leaving the migrated user stuck on free
+                # with their data orphaned under the old id. So: create new →
+                # repoint children → delete old.
+                child_tables = ("agents", "chat_sessions", "ai_books",
+                                "messages", "mind_memories", "usage")
                 if _USE_PG:
-                    # Free email on the old row so the new row can be inserted
-                    # without tripping UNIQUE(email).
+                    # 1. clear the old row's UNIQUE fields (email + stripe ids) so
+                    #    the new row can hold them without a transient collision
+                    #    (users_email_unique / users_stripe_customer_unique).
                     _execute(conn,
-                        "UPDATE users SET email = NULL WHERE id = %s",
-                        (old_id,))
+                        "UPDATE users SET email = NULL, stripe_customer_id = NULL, "
+                        "stripe_subscription_id = NULL WHERE id = %s", (old_id,))
+                    # 2. create the new user row from values captured off `old`
+                    #    (fetched before the NULL above, so they're preserved).
                     _execute(conn, _q(
                         "INSERT INTO users (id, email, tier, stripe_customer_id, "
                         "stripe_subscription_id, subscription_status, "
                         "subscription_ended_at, created_at) "
-                        "SELECT ?, ?, tier, stripe_customer_id, "
-                        "stripe_subscription_id, subscription_status, "
-                        "subscription_ended_at, created_at "
-                        "FROM users WHERE id = ?"
-                    ), (user_id, email, old_id))
-                    _execute(conn,
-                        "UPDATE usage SET user_id = %s WHERE user_id = %s",
-                        (user_id, old_id))
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                    ), (user_id, email, old.get("tier", "free"),
+                        old.get("stripe_customer_id"), old.get("stripe_subscription_id"),
+                        old.get("subscription_status"), old.get("subscription_ended_at"),
+                        old.get("created_at")))
+                    # 3. repoint every child table from old -> new.
+                    for tbl in child_tables:
+                        _execute(conn, _q(
+                            f'UPDATE "{tbl}" SET user_id = ? WHERE user_id = ?'
+                        ), (user_id, old_id))
+                    # 4. remove the now-orphaned old user row.
                     _execute(conn, _q("DELETE FROM users WHERE id = ?"), (old_id,))
                 else:
-                    _execute(conn, _q(
-                        "UPDATE usage SET user_id = ? WHERE user_id = ?"
-                    ), (user_id, old_id))
+                    # SQLite (dev): rename the PK first so children can repoint
+                    # to an existing row, then move the children over.
                     _execute(conn, _q("UPDATE users SET id = ? WHERE id = ?"),
                              (user_id, old_id))
+                    for tbl in child_tables:
+                        _execute(conn, _q(
+                            f'UPDATE "{tbl}" SET user_id = ? WHERE user_id = ?'
+                        ), (user_id, old_id))
                 row = _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (user_id,))
                 return row
 
