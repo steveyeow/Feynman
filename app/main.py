@@ -3019,6 +3019,16 @@ def api_report_public_discussion(session_id: str, request: Request):
             ), (session_id,))
         # Invalidate cached page so the route returns 404 immediately.
         _cache_invalidate(f"public_session:{session_id}")
+        # Fire-and-forget email to the operator. Anonymous reporters get
+        # logged as 'anonymous' so we can still triage and decide
+        # whether to chase up. send_admin_report_email is a no-op when
+        # RESEND_API_KEY is unset, so this is safe in local dev.
+        try:
+            from app.core.notify_email import send_admin_report_email
+            reporter = _get_user_id(request) or "anonymous"
+            send_admin_report_email(session_id, reporter)
+        except Exception as e:
+            log.warning("Report email send skipped for %s: %s", session_id, e)
     except Exception as exc:
         log.warning("Report flow failed for %s: %s", session_id, exc)
     return {"reported": True}

@@ -473,6 +473,15 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_subended")
 
+            # Migration: welcome_sent_at gates the Resend welcome email so
+            # it never double-fires across re-signs-in or worker restarts.
+            try:
+                _execute(conn, "SAVEPOINT sp_users_welcome")
+                _execute(conn, "ALTER TABLE users ADD COLUMN welcome_sent_at TIMESTAMPTZ")
+                _execute(conn, "RELEASE SAVEPOINT sp_users_welcome")
+            except Exception:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_users_welcome")
+
             # Migration: dedupe rows that share an email, then enforce PRIMARY KEY(id)
             # and UNIQUE(email). Legacy tables created before these constraints were
             # declared in the schema may have neither — CREATE TABLE IF NOT EXISTS
@@ -894,6 +903,10 @@ def init_db() -> None:
                 pass
             try:
                 _execute(conn, "ALTER TABLE users ADD COLUMN subscription_ended_at TEXT")
+            except Exception:
+                pass
+            try:
+                _execute(conn, "ALTER TABLE users ADD COLUMN welcome_sent_at TEXT")
             except Exception:
                 pass
             _execute(conn, """
@@ -2854,6 +2867,26 @@ def get_or_create_user(user_id: str, email: str) -> dict[str, Any]:
             "INSERT OR IGNORE INTO users (id, email, tier) VALUES (?, ?, 'free')"
         )), (user_id, email))
         row = _fetchone(conn, _q("SELECT * FROM users WHERE id = ?"), (user_id,))
+
+        # Send welcome email exactly once. ``welcome_sent_at`` is the
+        # idempotency gate — set it BEFORE the send call so a Resend
+        # outage or test-mode 403 doesn't make the next request try
+        # again. False from send_welcome_email is intentionally
+        # non-fatal; the row is created either way.
+        if row and not row.get("welcome_sent_at") and email:
+            try:
+                _execute(conn,
+                    _q("UPDATE users SET welcome_sent_at = "
+                       + ("NOW()" if _USE_PG else "datetime('now')")
+                       + " WHERE id = ? AND welcome_sent_at IS NULL"),
+                    (user_id,))
+                # Lazy import keeps notify_email out of the hot path
+                # when RESEND_API_KEY is unset (it's a no-op anyway).
+                from app.core.notify_email import send_welcome_email
+                send_welcome_email(email)
+            except Exception as e:
+                log.warning("welcome email send skipped: %s", e)
+
         return row
 
 
