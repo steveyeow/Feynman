@@ -193,7 +193,7 @@ Two core capabilities: **chat with any book** using a multi-layered RAG skill sy
 
 ## Community
 
-Join the [Discord](https://discord.gg/BkYSkkwq) to share what you're reading, exchange reading methods, and tell me what you'd like to see in the product — or DM me directly on [Twitter/X](https://x.com/steve_yeow).
+Join the [Discord](https://discord.gg/bCShwbFnCd) to share what you're reading, exchange reading methods, and tell me what you'd like to see in the product — or DM me directly on [Twitter/X](https://x.com/steve_yeow).
 
 ## License
 

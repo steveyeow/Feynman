@@ -1003,7 +1003,7 @@ scientists, and practitioners — who automatically join conversations with rele
 ## Contact
 
 - Twitter/X: [@steve_yeow](https://x.com/steve_yeow)
-- Discord: [discord.gg/BkYSkkwq](https://discord.gg/BkYSkkwq)
+- Discord: [discord.gg/bCShwbFnCd](https://discord.gg/bCShwbFnCd)
 - GitHub: [steveyeow/feynman](https://github.com/steveyeow/feynman)
 
 ## Optional
@@ -1172,7 +1172,7 @@ The project draws inspiration from Richard Feynman's approach to learning:
 
 - Creator: Steve Yao
 - Twitter/X: https://x.com/steve_yeow
-- Discord: https://discord.gg/BkYSkkwq
+- Discord: https://discord.gg/bCShwbFnCd
 - GitHub: https://github.com/steveyeow/feynman
 """
     _cache_set("llms_full_txt", content)
