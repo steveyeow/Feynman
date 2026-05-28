@@ -1506,6 +1506,44 @@ def find_agent_by_name(name: str) -> dict[str, Any] | None:
         return _row_to_agent(row)
 
 
+def find_agent_by_name_fuzzy(name: str, include_deleted: bool = False) -> dict[str, Any] | None:
+    """Match an agent by title, tolerant of the near-duplicate variations the
+    same book arrives under from chat: a differing leading article
+    ('ONE Thing' ↔ 'The ONE Thing') or trailing punctuation
+    ('Competitive Strategy,' ↔ 'Competitive Strategy'). Tries a small set of
+    normalized variants in one indexed equality query — no full-table scan.
+
+    ``include_deleted=True`` also matches soft-hidden agents; the chat
+    book_context path uses that to avoid re-creating a title we already hid
+    as junk.
+    """
+    import re
+    base = (name or "").strip()
+    if not base:
+        return None
+    stripped = re.sub(r"[\s,.;:!?]+$", "", base)
+    variants = {base, stripped}
+    m = re.match(r"^(the|a|an)\s+(.+)$", stripped, re.IGNORECASE)
+    if m:
+        variants.add(m.group(2).strip())   # drop leading article
+    else:
+        variants.add("The " + stripped)    # add one
+    variants = [v for v in variants if v]
+    placeholders = ",".join(["LOWER(?)"] * len(variants))
+    with get_conn() as conn:
+        if include_deleted:
+            row = _fetchone(conn, _q(
+                f"SELECT * FROM agents WHERE LOWER(name) IN ({placeholders}) "
+                "ORDER BY is_deleted ASC LIMIT 1"
+            ), tuple(variants))
+        else:
+            row = _fetchone(conn, _q(
+                f"SELECT * FROM agents WHERE is_deleted = ? "
+                f"AND LOWER(name) IN ({placeholders}) LIMIT 1"
+            ), (False, *variants))
+        return _row_to_agent(row) if row else None
+
+
 def find_existing_upload(name: str) -> dict[str, Any] | None:
     """Find a non-deleted, non-error upload/topic agent by name (case-insensitive)."""
     with get_conn() as conn:

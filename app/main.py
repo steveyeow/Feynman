@@ -35,6 +35,7 @@ from .core.db import (
     delete_agent,
     delete_chat_session,
     find_agent_by_name,
+    find_agent_by_name_fuzzy,
     find_existing_upload,
     find_mind_by_name,
     get_agent,
@@ -3706,12 +3707,21 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
     if payload.book_context:
         known_ids = {a["id"] for a in target_agents}
         for bc in payload.book_context:
-            agent = find_agent_by_name(bc.title)
-            if agent and agent["id"] not in known_ids:
-                target_agents.append(agent)
-                known_ids.add(agent["id"])
-            elif not agent:
-                # Chat-driven creation: auto-create agent for unknown book
+            # Fuzzy match so a differing leading article or trailing
+            # punctuation doesn't spawn a duplicate stub (the source of
+            # 'ONE Thing' vs 'The ONE Thing', 'Competitive Strategy,' vs
+            # 'Competitive Strategy').
+            agent = find_agent_by_name_fuzzy(bc.title)
+            if agent:
+                if agent["id"] not in known_ids:
+                    target_agents.append(agent)
+                    known_ids.add(agent["id"])
+            elif find_agent_by_name_fuzzy(bc.title, include_deleted=True):
+                # Title matches an agent we've soft-hidden as junk — don't
+                # resurrect it by creating a fresh copy.
+                log.info("book_context: %r matches a hidden agent; skipping auto-create", bc.title)
+            else:
+                # Chat-driven creation: auto-create agent for a genuinely unknown book.
                 new_id = create_catalog_agent(title=bc.title, author=bc.author)
                 new_agent = get_agent(new_id)
                 if new_agent:
