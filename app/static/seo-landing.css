@@ -176,6 +176,102 @@ html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-account {
   justify-content: center;
 }
 
+/* ─── App sidebar shell (the SAME chrome as the product app + public
+   Library). position:fixed + a body padding offset so page content stays a
+   direct child of <body> and its existing styles are untouched. ─── */
+body { padding-left: 260px; }
+.feynman-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 260px;
+  background: var(--feynman-bg-subtle);
+  border-right: 1px solid var(--feynman-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+}
+.feynman-sidebar-header { padding: 16px 16px 10px; }
+.feynman-sidebar .feynman-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--feynman-text);
+}
+.feynman-sidebar .feynman-brand-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.feynman-sidebar .feynman-brand-name {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 17px;
+  letter-spacing: 0.01em;
+}
+.feynman-sidebar-nav { display: flex; flex-direction: column; padding: 6px 12px; gap: 2px; }
+.feynman-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--feynman-text-secondary);
+  text-decoration: none;
+  font-size: 14px;
+}
+.feynman-nav-link:hover { background: rgba(128, 128, 128, 0.08); color: var(--feynman-text); }
+.feynman-nav-link svg { flex-shrink: 0; }
+.feynman-sidebar-spacer { flex: 1 1 auto; }
+.feynman-sidebar-bottom { padding: 12px 14px; border-top: 1px solid var(--feynman-border); }
+.feynman-sidebar .feynman-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--feynman-text);
+}
+.feynman-sidebar .feynman-account:hover { background: rgba(128, 128, 128, 0.08); }
+.feynman-sidebar .feynman-account-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--feynman-accent, #0071e3);
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.feynman-sidebar .feynman-account-avatar svg { color: #fff; }
+.feynman-sidebar .feynman-account-name {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  /* Mobile: sidebar collapses to a top bar (logo + account); nav hidden. */
+  body { padding-left: 0; padding-top: 54px; }
+  .feynman-sidebar {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 54px;
+    bottom: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--feynman-border);
+    padding: 0 14px;
+  }
+  .feynman-sidebar-header { padding: 0; }
+  .feynman-sidebar-nav { display: none; }
+  .feynman-sidebar-bottom { padding: 0; border-top: none; }
+  .feynman-sidebar .feynman-account-name { display: none; }
+}
+
 /* ─── Main content container ─────────────────────────────────────── */
 
 main, body > h1, body > nav.qa-back, body > nav.insights-back,

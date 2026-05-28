@@ -1429,20 +1429,19 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
         'var ap=function(){'
         "var ne=document.querySelector('.feynman-account-name');if(ne)ne.textContent=nm;"
         "var av=document.querySelector('.feynman-account-avatar');"
-        'if(av){if(pic){av.style.backgroundImage=\'url("\'+pic+\'")\';}else{av.textContent=(nm.charAt(0)||\'?\').toUpperCase();}}'
+        'if(av){if(pic){av.textContent=\'\';av.style.backgroundImage=\'url("\'+pic+\'")\';}else{av.textContent=(nm.charAt(0)||\'?\').toUpperCase();}}'
         '};'
         "if(document.readyState!=='loading')ap();else document.addEventListener('DOMContentLoaded',ap);"
         '}'
         'break;}}}catch(e){}})();'
         '</script>'
     )
-    return (
-        '<header class="feynman-header">'
-        f'{auth_script}'
-        f'<a class="feynman-brand" href="{_esc(site_url)}/" aria-label="Feynman">'
-        # Same mark as the product app sidebar (app/static/index.html) so the
-        # brand is identical across SEO pages and the app — one logo, no drift.
-        '<svg class="feynman-brand-icon" width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden="true">'
+    s = _esc(site_url)
+    # Same mark as the product app sidebar (app/static/index.html) so the
+    # brand is identical across SEO pages and the app — one logo, no drift.
+    brand = (
+        f'<a class="feynman-brand" href="{s}/" aria-label="Feynman">'
+        '<svg class="feynman-brand-icon" width="20" height="20" viewBox="0 0 64 64" fill="none" aria-hidden="true">'
         '<line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
         '<line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
         '<circle cx="32" cy="30" r="3.5" fill="currentColor"/>'
@@ -1450,16 +1449,56 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
         '</svg>'
         '<span class="feynman-brand-name">Feynman</span>'
         '</a>'
-        '<nav class="feynman-nav">'
-        f'<a href="{_esc(site_url)}/#/library">Library</a>'
-        f'<a href="{_esc(site_url)}/#/minds">Great Minds</a>'
-        f'<a class="feynman-cta feynman-cta-anon" href="{_esc(site_url)}/">Open Feynman →</a>'
-        f'<a class="feynman-cta feynman-cta-soft feynman-cta-auth feynman-account" href="{_esc(site_url)}/#/library" title="Back to app">'
-        '<span class="feynman-account-avatar" aria-hidden="true"></span>'
-        '<span class="feynman-account-name">Account</span>'
+    )
+
+    def _nav(href: str, label: str, paths: str) -> str:
+        return (
+            f'<a class="feynman-nav-link" href="{_esc(href)}">'
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+            'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            f'{paths}</svg><span class="feynman-nav-label">{label}</span></a>'
+        )
+
+    nav = (
+        _nav(f'{site_url}/', 'New Chat',
+             '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>')
+        + _nav(f'{site_url}/#/chats', 'Chats',
+               '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')
+        + _nav(f'{site_url}/#/library', 'Library',
+               '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>'
+               '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>')
+        + _nav(f'{site_url}/#/minds', 'Great Minds',
+               '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/>'
+               '<circle cx="8" cy="18" r="2.5"/><circle cx="18" cy="18" r="2"/>'
+               '<line x1="8.2" y1="7.2" x2="15.8" y2="7.2"/><line x1="7" y1="8.3" x2="7.5" y2="15.5"/>'
+               '<line x1="10.2" y1="17.2" x2="16" y2="17.8"/><line x1="16.5" y1="10.3" x2="17.5" y2="16"/>')
+    )
+
+    # Account slot — anonymous shows "Sign in" + a person glyph; the hydration
+    # script above swaps in the user's name/avatar when a session exists.
+    account = (
+        f'<a class="feynman-account" href="{s}/#/" title="Account">'
+        '<span class="feynman-account-avatar" aria-hidden="true">'
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+        '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'
+        '</span>'
+        '<span class="feynman-account-name">Sign in</span>'
         '</a>'
-        '</nav>'
-        '</header>'
+    )
+
+    # The SAME left sidebar as the product app + the public Library, so every
+    # public surface shares one chrome. position:fixed with a body padding
+    # offset (seo-landing.css) keeps page content a direct child of <body>, so
+    # existing content styles are untouched. SSR for crawlers; account hydrates.
+    return (
+        '<aside class="feynman-sidebar">'
+        f'{auth_script}'
+        f'<div class="feynman-sidebar-header">{brand}</div>'
+        f'<nav class="feynman-sidebar-nav">{nav}</nav>'
+        '<div class="feynman-sidebar-spacer"></div>'
+        f'<div class="feynman-sidebar-bottom">{account}</div>'
+        '</aside>'
     )
 
 
