@@ -6,12 +6,6 @@
       "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--reload"],
       "port": 8001
-    },
-    {
-      "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
-      "port": 3000
     }
   ]
 }

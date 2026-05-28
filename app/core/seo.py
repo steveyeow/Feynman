@@ -1419,28 +1419,45 @@ def render_landing_header(site_url: str, is_authenticated: bool = False) -> str:
         'var s=o&&(o.access_token?o:o.currentSession);'
         'if(s&&s.access_token){'
         'var t=(s.expires_at||0)*1000;'
-        "if(!t||t>Date.now()){document.documentElement.setAttribute('data-feynman-auth','1');}"
+        'if(!t||t>Date.now()){'
+        # Flag auth synchronously so the CSS swap is flicker-free, then fill
+        # the account chip with the user's name/avatar once it's parsed.
+        "document.documentElement.setAttribute('data-feynman-auth','1');"
+        'var u=s.user||{},m=u.user_metadata||{};'
+        "var nm=m.full_name||m.name||(u.email?u.email.split('@')[0]:'')||'Account';"
+        "var pic=m.avatar_url||m.picture||'';"
+        'var ap=function(){'
+        "var ne=document.querySelector('.feynman-account-name');if(ne)ne.textContent=nm;"
+        "var av=document.querySelector('.feynman-account-avatar');"
+        'if(av){if(pic){av.style.backgroundImage=\'url("\'+pic+\'")\';}else{av.textContent=(nm.charAt(0)||\'?\').toUpperCase();}}'
+        '};'
+        "if(document.readyState!=='loading')ap();else document.addEventListener('DOMContentLoaded',ap);"
+        '}'
         'break;}}}catch(e){}})();'
         '</script>'
     )
     return (
         '<header class="feynman-header">'
         f'{auth_script}'
-        f'<a class="feynman-brand" href="{_esc(site_url)}/">'
-        '<svg viewBox="0 0 280 64" xmlns="http://www.w3.org/2000/svg" aria-label="Feynman">'
-        '<line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
-        '<line x1="32" y1="30" x2="56" y2="58" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
-        '<line x1="20" y1="44" x2="44" y2="44" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>'
-        '<circle cx="32" cy="14" r="6" fill="currentColor"/>'
-        '<text x="76" y="42" font-family="Inter, -apple-system, sans-serif" '
-        'font-size="26" font-weight="600" fill="currentColor">Feynman</text>'
+        f'<a class="feynman-brand" href="{_esc(site_url)}/" aria-label="Feynman">'
+        # Same mark as the product app sidebar (app/static/index.html) so the
+        # brand is identical across SEO pages and the app — one logo, no drift.
+        '<svg class="feynman-brand-icon" width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden="true">'
+        '<line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+        '<line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
+        '<circle cx="32" cy="30" r="3.5" fill="currentColor"/>'
+        '<path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'
         '</svg>'
+        '<span class="feynman-brand-name">Feynman</span>'
         '</a>'
         '<nav class="feynman-nav">'
         f'<a href="{_esc(site_url)}/#/library">Library</a>'
         f'<a href="{_esc(site_url)}/#/minds">Great Minds</a>'
         f'<a class="feynman-cta feynman-cta-anon" href="{_esc(site_url)}/">Open Feynman →</a>'
-        f'<a class="feynman-cta feynman-cta-soft feynman-cta-auth" href="{_esc(site_url)}/#/library">Back to app →</a>'
+        f'<a class="feynman-cta feynman-cta-soft feynman-cta-auth feynman-account" href="{_esc(site_url)}/#/library" title="Back to app">'
+        '<span class="feynman-account-avatar" aria-hidden="true"></span>'
+        '<span class="feynman-account-name">Account</span>'
+        '</a>'
         '</nav>'
         '</header>'
     )

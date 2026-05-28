@@ -24,7 +24,7 @@
    Libre Baskerville serif here too — produced a "marketing brochure"
    feel that clashed with the rest of the product when a user
    actually arrived from inside the app. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
 
 :root {
   --feynman-text: #1d1d1f;
@@ -81,19 +81,27 @@ html, body {
   max-width: 1200px;
   margin: 0 auto;
 }
+/* Brand mark = the SAME logo as the product app sidebar (icon SVG +
+   "Feynman" wordmark in Libre Baskerville). Body/heading copy stays Inter;
+   only the wordmark is serif, matching app/static/index.html so the brand
+   reads identically across the SEO pages and the app. */
 .feynman-header a.feynman-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-decoration: none;
   color: var(--feynman-text);
-  font-weight: 600;
-  font-size: 19px;
-  letter-spacing: -0.01em;
 }
-.feynman-header a.feynman-brand svg {
-  height: 28px;
-  width: auto;
+.feynman-header a.feynman-brand .feynman-brand-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.feynman-header a.feynman-brand .feynman-brand-name {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 .feynman-header .feynman-nav {
   display: flex;
@@ -140,6 +148,33 @@ html, body {
 .feynman-header .feynman-nav a.feynman-cta-auth { display: none; }
 html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-cta-anon { display: none; }
 html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-cta-auth { display: inline-block; }
+
+/* Logged-in account chip — replaces the loud CTA with the user's real
+   identity (avatar + name), the same account they have in the app. The
+   inline header script fills name/avatar from the localStorage session;
+   this rule must follow the cta-auth rule above so inline-flex wins. */
+html[data-feynman-auth] .feynman-header .feynman-nav a.feynman-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 6px;
+}
+.feynman-header .feynman-nav a.feynman-account .feynman-account-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--feynman-accent, #0071e3);
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ─── Main content container ─────────────────────────────────────── */
 
