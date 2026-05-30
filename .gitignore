@@ -7,7 +7,7 @@ __pycache__/
 data/
 *.db
 .DS_Store
-web/
 SPEC-pro.md
 demo.html
 .vercel
+.gstack/

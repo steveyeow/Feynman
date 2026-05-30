@@ -1,0 +1,31 @@
+/* ChatView layout shell. The legacy used a flex row (.chat-layout) holding the
+   main column + the right "related" sidebar; we reproduce that here as a
+   co-located module so we don't touch the shared stylesheet. */
+
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Right-aligned share affordance row above the transcript. */
+.shareActions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 32px 0;
+}
+
+.shareBtn {
+  width: auto;
+  padding: 6px 12px;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.shareDot {
+  color: var(--accent);
+}
+
+.toastClose {
+  margin-left: 8px;
+}

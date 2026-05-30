@@ -1,0 +1,135 @@
+/* Net-new styles only. Toolbar / tooltip / tagline / .minds-graph sizing all
+   come from web/styles/app.css (base layout) + web/styles/liquid.css (glass).
+   This module covers the canvas host, empty/loading states, and the minimal
+   Upload-a-Mind / Expand-Network modal. */
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Centered status overlays (loading / empty / error) over the graph area. */
+.state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary, rgba(120, 130, 150, 0.8));
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.state strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.stateActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  pointer-events: auto;
+}
+
+/* ── Minimal modal (Upload a Mind / Expand Network) ─────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.32);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.modalCard {
+  width: min(460px, calc(100vw - 40px));
+  background: var(--glass-thick, var(--glass-bg-strong, #fff));
+  -webkit-backdrop-filter: blur(var(--blur-thick, 20px));
+  backdrop-filter: blur(var(--blur-thick, 20px));
+  border: 1px solid var(--glass-edge, var(--border));
+  border-radius: var(--r-window, 18px);
+  box-shadow: inset 0 1px 0 var(--glass-specular, rgba(255, 255, 255, 0.4)), var(--depth-3, 0 12px 40px rgba(0, 0, 0, 0.25));
+  padding: 22px 24px;
+}
+
+.modalCard h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.modalDesc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.modalField {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong, var(--border));
+  background: var(--bg-chat, transparent);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.modalField:focus { border-color: var(--accent); }
+.modalField:first-of-type { margin-top: 0; }
+
+textarea.modalField {
+  resize: vertical;
+  min-height: 88px;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btnGhost,
+.btnPrimary {
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+}
+.btnGhost {
+  background: transparent;
+  border-color: var(--border-strong, var(--border));
+  color: var(--text);
+}
+.btnGhost:hover { background: var(--hover-bg, rgba(127, 127, 127, 0.08)); }
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+}
+.btnPrimary:hover { opacity: 0.88; }
+.btnPrimary:disabled,
+.btnGhost:disabled { opacity: 0.5; cursor: default; }
+
+.modalError {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: #e5484d;
+}

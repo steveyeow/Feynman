@@ -1,0 +1,507 @@
+/* ============================================================
+   Landing page — ported from legacy .lp-* rules, re-skinned to
+   macOS Tahoe "Liquid Glass". Tokens come from styles/liquid.css.
+   Co-located CSS module (scoped class names).
+   ============================================================ */
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-home);
+  color: var(--text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Soft accent wash so the glass card has something to refract */
+.root::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60% 50% at 78% 18%, var(--accent-light), transparent 70%),
+    radial-gradient(55% 45% at 12% 88%, var(--accent-light), transparent 70%);
+}
+
+/* ---- Background minds graph ---- */
+.mindsBg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  color: var(--accent);
+  opacity: 0.5;
+}
+
+.mindsBg canvas,
+.mindsBg svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---- Topbar ---- */
+.topbar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px clamp(20px, 5vw, 56px);
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+}
+
+.brandMark {
+  color: var(--accent);
+  flex: none;
+}
+
+.brandName {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topbarActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.link {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: var(--r-control);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.link:hover {
+  color: var(--text);
+  background: var(--glass-clear);
+}
+
+.ctaSm {
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  box-shadow: var(--depth-1);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ctaSm:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--depth-2);
+}
+
+/* ---- Main layout: hero (left) + demo card (right) ---- */
+.main {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 96px);
+  padding: clamp(24px, 5vw, 64px) clamp(20px, 5vw, 72px) clamp(48px, 6vw, 80px);
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ---- Hero ---- */
+.hero {
+  max-width: 560px;
+}
+
+.heroTitle {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(40px, 5.2vw, 68px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+  color: var(--text);
+}
+
+.heroSub {
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 36px;
+  max-width: 30em;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 15px 28px;
+  box-shadow: var(--depth-2);
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cta:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--depth-3);
+}
+
+.ctaArrow {
+  font-size: 18px;
+  transition: transform 0.18s ease;
+}
+
+.cta:hover .ctaArrow {
+  transform: translateX(3px);
+}
+
+/* ---- Demo chat card (floating glass panel) ---- */
+.demo {
+  display: flex;
+  justify-content: center;
+}
+
+.chatCard {
+  width: 100%;
+  max-width: 440px;
+  height: 540px;
+  border-radius: var(--r-window);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+
+  /* Liquid glass material */
+  background: var(--glass-thick);
+  backdrop-filter: blur(var(--blur-thick)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--depth-3);
+}
+
+/* Inset specular highlight along the top edge */
+.chatCard::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(180deg, var(--glass-specular), transparent 38%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 1;
+}
+
+/* ---- Composer (shown while "typing the question") ---- */
+.composer {
+  position: relative;
+  z-index: 2;
+  margin: auto 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 14px 14px 18px;
+  border-radius: var(--r-control);
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--depth-1);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+/* When the card becomes active the composer collapses to the bottom */
+.chatCardActive .composer {
+  margin: auto 14px 14px;
+}
+
+.composerInput {
+  flex: 1;
+  min-height: 22px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.composerInput:empty::before {
+  content: "Ask anything\2026";
+  color: var(--text-muted);
+}
+
+/* Blinking caret while typing the question */
+.composerInputTyping::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1.05em;
+  margin-left: 1px;
+  vertical-align: -0.15em;
+  background: var(--accent);
+  animation: lpCaret 1s steps(1) infinite;
+}
+
+@keyframes lpCaret {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+.composerSend {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--depth-1);
+}
+
+/* ---- Messages ---- */
+.messages {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 18px;
+  /* Hidden until the card goes active, then the composer shrinks to the bottom */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chatCardActive .messages {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Custom thin scrollbar */
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: lpMsgIn 0.35s ease both;
+}
+
+@keyframes lpMsgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.msgUser {
+  align-items: flex-end;
+}
+
+.msgUser .bubble {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-right-radius: 5px;
+}
+
+.msgAssistant .bubble {
+  background: var(--glass-regular);
+  border: 1px solid var(--glass-edge);
+  color: var(--text);
+  border-bottom-left-radius: 5px;
+}
+
+.bubble {
+  max-width: 84%;
+  padding: 11px 14px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Source chips under assistant answers */
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 84%;
+}
+
+.sourceChip {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--accent-light);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+}
+
+/* "X joined the conversation" pill */
+.msgJoin {
+  align-items: center;
+}
+
+.joinPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-pill);
+  padding: 5px 12px 5px 5px;
+}
+
+.joinAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Mind message: avatar + bubble side by side */
+.msgMind {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.msgMind .bubble {
+  background: var(--glass-regular);
+  border: 1px solid var(--glass-edge);
+  color: var(--text);
+  border-top-left-radius: 5px;
+}
+
+.msgAvatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--depth-1);
+}
+
+/* ---- Decorative minds search box ---- */
+.searchWrap {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px clamp(32px, 5vw, 56px);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  padding: 12px 18px;
+  border-radius: var(--r-pill);
+  background: var(--glass-regular);
+  backdrop-filter: blur(var(--blur-regular)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(180%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--depth-1);
+  color: var(--text-muted);
+}
+
+.searchIcon { font-size: 15px; opacity: 0.7; }
+
+.searchInput {
+  flex: 1;
+  font-size: 14.5px;
+  color: var(--text-secondary);
+  min-height: 20px;
+}
+
+.searchInput::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -0.12em;
+  background: var(--accent);
+  animation: lpCaret 1s steps(1) infinite;
+}
+
+/* ---- Responsive: stack on narrow screens ---- */
+@media (max-width: 900px) {
+  .main {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    text-align: center;
+    padding-top: 8px;
+  }
+  .hero { max-width: 600px; margin: 0 auto; }
+  .heroSub { margin-left: auto; margin-right: auto; }
+  .chatCard { max-width: 420px; height: 480px; margin: 0 auto; }
+  .searchWrap { display: none; }
+}
+
+@media (max-width: 560px) {
+  .topbar { padding: 16px; }
+  .link { display: none; }
+  .chatCard { height: 440px; }
+}
+
+/* ---- Reduced motion: kill caret + entrance animations ---- */
+@media (prefers-reduced-motion: reduce) {
+  .composerInputTyping::after,
+  .searchInput::after { animation: none; }
+  .msg { animation: none; }
+  .cta, .ctaSm, .ctaArrow { transition: none; }
+}

@@ -1,0 +1,352 @@
+/* ============================================================================
+ * Liquid Glass — web approximation of the macOS Tahoe (macOS 26) design
+ * language. Loaded AFTER app.css so it re-skins the product by (1) overriding
+ * the existing CSS custom properties — every legacy component inherits the new
+ * palette/material for free — and (2) layering real glass treatments onto the
+ * control layer (sidebar, toolbars, composer, popovers, cards, tooltips).
+ *
+ * What's faithfully reproducible on the web vs. what isn't:
+ *   ✓ translucent frosted material   → backdrop-filter: blur() saturate()
+ *   ✓ specular edge + glass rim       → inset highlight + hairline border
+ *   ✓ depth / floating control layer  → elevation ramp + a depth-y app bg
+ *   ✓ concentric radii                → harmonized radius scale
+ *   ✗ true light refraction / lensing → OS-level GPU shader (native only)
+ *   ✗ sampling the desktop wallpaper  → needs a translucent NATIVE window
+ *     (Electron/Tauri vibrancy) — same frontend, packaged later.
+ *
+ * Legibility: mirrors Apple's own beta dial-back — glass is frosted (not
+ * barely-there), concentrated on chrome, and degrades to solid surfaces under
+ * prefers-reduced-transparency / prefers-contrast. Content/reading stays clean.
+ * ========================================================================== */
+
+/* ── Tokens: light ─────────────────────────────────────────────────────── */
+:root {
+  /* Warmed-neutral base (kept cool-leaning per brand, nudged warm + calm). */
+  --bg-home: #f4f2ee;
+  --bg-chat: #faf9f6;
+  --bg-sidebar: rgba(250, 249, 247, 0.62);
+  --bg-elev: #ffffff;
+  --text: #1d1d1f;
+  --text-secondary: #5f5f63;
+  --text-muted: #8a8a8f;
+  --border: rgba(0, 0, 0, 0.07);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --accent: #0071e3;
+  --accent-hover: #0058b3;
+  --accent-light: rgba(0, 113, 227, 0.10);
+
+  /* Glass material */
+  --glass-regular: rgba(250, 249, 247, 0.62);
+  --glass-clear: rgba(250, 249, 247, 0.40);
+  --glass-thick: rgba(248, 247, 244, 0.80);
+  --glass-edge: rgba(255, 255, 255, 0.55);
+  --glass-specular: rgba(255, 255, 255, 0.70);
+  --glass-inner-line: rgba(0, 0, 0, 0.04);
+  --glass-solid-fallback: #f4f2ee;
+
+  --blur-thin: 12px;
+  --blur-regular: 28px;
+  --blur-thick: 48px;
+  --glass-saturate: 180%;
+
+  /* Depth ramp (elevation shadows) */
+  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  --depth-3: 0 12px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-sm: var(--depth-1);
+  --shadow-md: var(--depth-2);
+  --shadow-lg: var(--depth-3);
+
+  /* Concentric radii */
+  --r-window: 18px;
+  --r-panel: 16px;
+  --r-control: 11px;
+  --r-pill: 999px;
+
+  /* Legacy glass vars used by app.css components → point at the new material */
+  --glass-bg: var(--glass-regular);
+  --glass-bg-strong: var(--glass-thick);
+  --glass-border: var(--glass-edge);
+}
+
+/* ── Tokens: dark (explicit class + system pref) ───────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg-home: #161618;
+    --bg-chat: #1c1c1e;
+    --bg-sidebar: rgba(34, 34, 37, 0.55);
+    --bg-elev: #242427;
+    --text: #f5f5f7;
+    --text-secondary: #a6a6ab;
+    --text-muted: #79797f;
+    --border: rgba(255, 255, 255, 0.09);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --accent-light: rgba(10, 132, 255, 0.16);
+
+    --glass-regular: rgba(34, 34, 37, 0.55);
+    --glass-clear: rgba(34, 34, 37, 0.35);
+    --glass-thick: rgba(28, 28, 30, 0.80);
+    --glass-edge: rgba(255, 255, 255, 0.10);
+    --glass-specular: rgba(255, 255, 255, 0.12);
+    --glass-inner-line: rgba(255, 255, 255, 0.04);
+    --glass-solid-fallback: #1c1c1e;
+
+    --depth-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.35);
+    --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+    --depth-3: 0 14px 44px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+}
+:root.dark {
+  --bg-home: #161618;
+  --bg-chat: #1c1c1e;
+  --bg-sidebar: rgba(34, 34, 37, 0.55);
+  --bg-elev: #242427;
+  --text: #f5f5f7;
+  --text-secondary: #a6a6ab;
+  --text-muted: #79797f;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --accent: #0a84ff;
+  --accent-hover: #409cff;
+  --accent-light: rgba(10, 132, 255, 0.16);
+  --glass-regular: rgba(34, 34, 37, 0.55);
+  --glass-clear: rgba(34, 34, 37, 0.35);
+  --glass-thick: rgba(28, 28, 30, 0.80);
+  --glass-edge: rgba(255, 255, 255, 0.10);
+  --glass-specular: rgba(255, 255, 255, 0.12);
+  --glass-inner-line: rgba(255, 255, 255, 0.04);
+  --glass-solid-fallback: #1c1c1e;
+  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.35);
+  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --depth-3: 0 14px 44px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Depth-y app background (what the glass refracts/blurs in-browser) ──── */
+body {
+  background-color: var(--bg-home);
+  background-image:
+    radial-gradient(at 14% 18%, rgba(0, 113, 227, 0.06), transparent 50%),
+    radial-gradient(at 86% 12%, rgba(255, 168, 120, 0.05), transparent 46%),
+    radial-gradient(at 72% 88%, rgba(120, 158, 255, 0.05), transparent 52%);
+  background-attachment: fixed;
+}
+:root.dark body,
+.dark body {
+  background-image:
+    radial-gradient(at 14% 18%, rgba(10, 132, 255, 0.12), transparent 50%),
+    radial-gradient(at 86% 12%, rgba(255, 140, 90, 0.06), transparent 46%),
+    radial-gradient(at 72% 88%, rgba(80, 120, 255, 0.08), transparent 52%);
+}
+
+/* ── Glass primitive (utility + the material recipe) ───────────────────── */
+.lg-glass {
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 0 0 0.5px var(--glass-inner-line),
+    var(--depth-2);
+}
+.lg-glass-clear { background: var(--glass-clear); }
+.lg-glass-thick { background: var(--glass-thick); -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate)); backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate)); }
+
+/* ── Control layer: re-skin the chrome to Liquid Glass ─────────────────── */
+
+/* Floating glass sidebar — the signature Tahoe element. */
+.app-sidebar {
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  border-right: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-specular), 1px 0 0 var(--glass-inner-line);
+}
+.app-main { background: transparent; }
+
+/* Composer — clear glass capsule that intensifies on focus. */
+.chat-composer {
+  background: var(--glass-clear);
+  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  border-radius: 26px;
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-2);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.chat-composer:focus-within {
+  background: var(--glass-thick);
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3), 0 0 0 3px rgba(0, 113, 227, 0.10);
+}
+
+/* Popovers / menus / tooltips / toolbars — floating glass. */
+.composer-popover,
+.minds-tooltip,
+.minds-graph-toolbar,
+.reader-topbar,
+.sidebar-user-menu,
+.share-modal-card,
+.publish-toast,
+.upload-toast {
+  background: var(--glass-thick) !important;
+  -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3);
+}
+
+/* Cards — content-surface glass with a hover lift + brighter specular. */
+.book-card {
+  background: var(--glass-clear);
+  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-panel);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.book-card:hover {
+  transform: translateY(-3px);
+  background: var(--glass-thick);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3);
+}
+
+/* Concentric radii on the larger surfaces. */
+.share-modal-card { border-radius: var(--r-window); }
+.composer-popover,
+.minds-tooltip,
+.minds-graph-toolbar { border-radius: var(--r-panel); }
+
+/* Buttons: keep a solid, readable accent against the glass. */
+.composer-send-btn {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--depth-1);
+}
+.composer-send-btn:hover { background: var(--accent-hover); opacity: 1; }
+
+/* Press feedback — a subtle "light response" on glass controls. */
+.sidebar-nav-link:active,
+.composer-icon-btn:active,
+.filter-tag:active { transform: scale(0.97); }
+
+/* ── Accessibility / legibility fallbacks (match Apple's dial-back) ─────── */
+@media (prefers-reduced-transparency: reduce) {
+  .app-sidebar,
+  .chat-composer,
+  .composer-popover,
+  .minds-tooltip,
+  .minds-graph-toolbar,
+  .reader-topbar,
+  .sidebar-user-menu,
+  .share-modal-card,
+  .publish-toast,
+  .upload-toast,
+  .book-card {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: var(--glass-solid-fallback) !important;
+  }
+  body { background-image: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --border: rgba(0, 0, 0, 0.2); --border-strong: rgba(0, 0, 0, 0.3); }
+  :root.dark { --border: rgba(255, 255, 255, 0.25); --border-strong: rgba(255, 255, 255, 0.4); }
+  .app-sidebar, .chat-composer, .book-card { background: var(--glass-thick); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .book-card, .chat-composer, .sidebar-nav-link, .composer-icon-btn, .filter-tag { transition: none; }
+  .book-card:hover { transform: none; }
+}
+
+/* ── Library helpers (new states not in the legacy stylesheet) ─────────── */
+.library-loading,
+.library-error { color: var(--text-secondary); padding: 24px 4px; font-size: 14px; }
+.library-error { color: var(--accent); }
+.library-discover-bar {
+  display: flex; align-items: center; gap: 14px;
+  margin: 8px 0 20px; padding: 14px 18px;
+  border-radius: var(--r-panel);
+  background: var(--glass-clear);
+  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-1);
+  font-size: 14px; color: var(--text-secondary);
+}
+.card-cover-wrap { cursor: pointer; }
+.card-cover-placeholder span {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 44px; font-weight: 700; color: rgba(255, 255, 255, 0.92);
+}
+
+/* ── SEO / reading content layer — clean, NOT glass ───────────────────── */
+.seo-page { padding: 40px 24px 72px; }
+.seo-content { max-width: 760px; margin: 0 auto; color: var(--text); font-size: 17px; line-height: 1.7; }
+.seo-content > h1 {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 0.4em;
+}
+.seo-content h2 {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+  margin: 1.8em 0 0.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border);
+}
+.seo-content h3 { font-size: 17px; font-weight: 700; margin: 1.4em 0 0.4em; }
+.seo-content p { margin: 0.7em 0; }
+.seo-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.seo-content a:hover { color: var(--accent-hover); }
+.seo-content ul, .seo-content ol { padding-left: 1.4em; }
+.seo-content li { margin: 0.25em 0; }
+.seo-content blockquote {
+  margin: 1em 0; padding: 14px 18px;
+  background: var(--bg-elev); border-left: 3px solid var(--border-strong); border-radius: 8px;
+}
+.seo-content .seo-author { color: var(--text-secondary); font-size: 18px; margin-top: 0; }
+.seo-content .seo-meta { color: var(--text-muted); font-size: 14px; }
+.seo-content small { color: var(--text-muted); font-size: 13px; }
+.seo-section { margin: 2em 0; }
+.seo-cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 1.6em 0; }
+.seo-cta-row a {
+  display: inline-block; padding: 11px 20px; border-radius: var(--r-control);
+  font-weight: 600; text-decoration: none;
+}
+.seo-cta-row a.primary { background: var(--accent); color: #fff; }
+.seo-cta-row a.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.seo-explore-footer {
+  margin-top: 3em; padding-top: 1.5em; border-top: 1px solid var(--border);
+  color: var(--text-muted); font-size: 14px;
+}
+.seo-explore-footer a { color: var(--text-secondary); }
+
+/* ── Auth / theme / account menu ──────────────────────────────────────── */
+.sidebar-user-wrap { position: relative; }
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+}
+.theme-toggle:hover { color: var(--text); background: var(--accent-light); }
+.profile-email {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 150px; color: var(--text-secondary); font-size: 13px;
+}
+.user-menu {
+  position: absolute; bottom: 54px; left: 8px; right: 8px;
+  padding: 8px; border-radius: var(--r-panel); z-index: 50;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.user-menu-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px; font-size: 13px; color: var(--text-secondary);
+}
+.user-menu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: 8px; border: none; background: transparent;
+  color: var(--text); font-size: 13px; cursor: pointer; text-decoration: none;
+}
+.user-menu-item:hover { background: var(--accent-light); }
+.user-menu-signout { color: var(--delete-color, #dc2626); }
+.login-page-wrap { min-height: 100%; padding: 24px; }

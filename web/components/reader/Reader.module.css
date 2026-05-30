@@ -1,0 +1,312 @@
+/* Reader — net-new layout/typography for the scrollable serif reading column.
+   Global glass classes (.reader-topbar, .reader-back-btn, .reader-topbar-*,
+   .chat-sidebar-right) come from styles/app.css + liquid.css; only the reading
+   surface and the question sidebar list are defined here. */
+
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  background: var(--bg-chat);
+  overflow: hidden;
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The scroll container for the reading column. */
+.stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+.dot {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.emptyAction {
+  margin: 0;
+  padding: 8px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: 500 13px/1 "Inter", sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.emptyAction:hover {
+  background: var(--bg-elev);
+  border-color: var(--accent);
+}
+
+/* ── The book: one comfortable measure, centered ───────────────────────── */
+.book {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 44px 48px 96px;
+  flex: 1 0 auto;
+}
+
+/* Cover block at the top of the scroll. */
+.cover {
+  text-align: center;
+  padding: 24px 0 40px;
+  margin-bottom: 36px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.coverTitle {
+  font: 700 30px/1.35 "Libre Baskerville", "Georgia", serif;
+  color: var(--text);
+  margin: 0;
+  max-width: 520px;
+}
+.coverSubtitle {
+  font: 400 14px/1.7 "Libre Baskerville", "Georgia", serif;
+  color: var(--text-secondary);
+  margin: 16px 0 0;
+  max-width: 440px;
+}
+.coverAuthor {
+  font: 400 13.5px/1.4 "Libre Baskerville", "Georgia", serif;
+  color: var(--text);
+  margin: 24px 0 0;
+  letter-spacing: 0.04em;
+}
+.coverStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font: 400 11px/1 "Inter", sans-serif;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+.dot2 {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.4;
+}
+.previewLabel {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  font: 600 11px/1.6 "Inter", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--card-badge-indexing-bg, var(--bg-elev));
+  color: var(--card-badge-indexing-color, var(--text-secondary));
+}
+
+/* ── Chapters / sections ──────────────────────────────────────────────── */
+.section {
+  scroll-margin-top: 20px;
+}
+.section + .section {
+  margin-top: 56px;
+}
+.chapterHeader {
+  margin-bottom: 24px;
+}
+.chapterNum {
+  display: block;
+  font: 600 11px/1 "Libre Baskerville", "Georgia", serif;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #6b5344;
+  margin-bottom: 10px;
+}
+:global(html.dark) .chapterNum {
+  color: #c4a882;
+}
+.chapterTitle {
+  font: 700 22px/1.35 "Libre Baskerville", "Georgia", serif;
+  color: var(--text);
+  margin: 0;
+}
+
+/* ── Reading prose — the text that must stay clean ─────────────────────── */
+.prose {
+  font: 400 17px/1.85 "Libre Baskerville", "Georgia", serif;
+  color: var(--text);
+  letter-spacing: -0.003em;
+}
+.prose :global(p) {
+  margin: 0 0 1.4em;
+}
+.prose :global(h2),
+.prose :global(h3),
+.prose :global(h4) {
+  font-family: "Inter", sans-serif;
+  color: var(--text);
+  margin: 1.6em 0 0.7em;
+}
+.prose :global(h2) {
+  font-size: 19px;
+  font-weight: 700;
+}
+.prose :global(h3) {
+  font-size: 16px;
+  font-weight: 600;
+}
+.prose :global(h4) {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.prose :global(strong) {
+  font-weight: 700;
+}
+.prose :global(em) {
+  font-style: italic;
+}
+
+/* ── End page ─────────────────────────────────────────────────────────── */
+.endPage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font: 400 13px/1.6 "Inter", sans-serif;
+  text-align: center;
+}
+.endSub {
+  font-size: 12px;
+  opacity: 0.85;
+  margin: 0;
+}
+.endChatBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 9px 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: 600 13px/1 "Inter", sans-serif;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.endChatBtn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.copyLinkInline {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.copyLinkInline:hover {
+  opacity: 0.85;
+}
+
+/* ── Right sidebar: related questions ─────────────────────────────────── */
+.sidebar {
+  /* .chat-sidebar-right.visible is display:block from app.css; widen a touch. */
+  width: 280px;
+}
+.questionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.questionBtn {
+  text-align: left;
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card, 12px);
+  background: var(--bg-chat);
+  color: var(--text-secondary);
+  font: 400 13px/1.45 "Inter", sans-serif;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
+}
+.questionBtn:hover {
+  background: var(--bg-elev);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.questionBtn:active {
+  transform: scale(0.99);
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 10px 24px;
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--bg-chat);
+  font: 500 13px/1 "Inter", sans-serif;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: var(--depth-3, 0 4px 20px rgba(0, 0, 0, 0.15));
+}
+.toastShow {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar {
+    display: none;
+  }
+  .book {
+    padding: 32px 22px 80px;
+  }
+  .prose {
+    font-size: 16px;
+  }
+  .coverTitle {
+    font-size: 25px;
+  }
+  .chapterTitle {
+    font-size: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .endChatBtn,
+  .questionBtn,
+  .toast {
+    transition: none;
+  }
+}

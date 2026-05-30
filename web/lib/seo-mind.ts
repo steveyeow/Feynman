@@ -1,0 +1,626 @@
+/**
+ * SEO/GEO helpers for the MIND / TOPIC / DISCUSSIONS landing pages.
+ *
+ * Faithful TypeScript port of the structured-data + slug primitives that
+ * used to live in `app/core/seo.py` (person_jsonld, collection_jsonld,
+ * mind_essay_jsonld, breadcrumb_jsonld, slugify, FAMOUS_MIND_SAMEAS /
+ * lookup_same_as) plus the fetch helpers each route needs.
+ *
+ * Design rules (mirroring the Python module):
+ *   - Builders take already-loaded data and return JSON-serializable dicts.
+ *     React's <JsonLd> handles serialization; we drop empty leaves here so
+ *     schema validators don't choke on `sameAs: []` etc.
+ *   - Every fetch helper try/catches and degrades gracefully — the API may
+ *     be down or empty in dev, and SSR must never crash the route.
+ *   - No HTML escaping here: JSX escapes text nodes automatically, unlike
+ *     the Python SSR which hand-escaped every string.
+ */
+
+import { get } from "@/lib/api";
+
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "https://feynman.wiki";
+
+// ─── Domain types (the JSON API strips `persona` from mind payloads) ────
+
+export interface MindDetail {
+  id: string;
+  name: string;
+  era?: string;
+  domain?: string;
+  bio_summary?: string;
+  thinking_style?: string;
+  typical_phrases?: string[];
+  /** Stripped by /api/minds and /api/minds/{id} — present only if the API
+   *  ever exposes it. We render it when available, omit it otherwise. */
+  persona?: string;
+  works?: string[];
+  created_at?: string;
+  [k: string]: unknown;
+}
+
+export interface AgentRowLite {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  source?: string;
+  meta?: {
+    author?: string;
+    category?: string;
+    description?: string;
+    [k: string]: unknown;
+  };
+  [k: string]: unknown;
+}
+
+export interface SimilarityLink {
+  source: string;
+  target: string;
+  strength?: number;
+}
+
+// ─── Slug generation (deterministic, ASCII-only — matches seo.py) ───────
+
+const SLUG_NON_ALNUM = /[^a-z0-9]+/g;
+const SLUG_TRIM = /^-+|-+$/g;
+
+/**
+ * Convert a title or name into a URL-safe kebab-case slug. Deterministic
+ * and ASCII-only — non-Latin scripts collapse to dashes. Mirrors the
+ * Python `slugify` exactly so slugs round-trip across the two stacks.
+ */
+export function slugify(text: string, maxLen = 80): string {
+  if (!text) return "untitled";
+  let s = text.toLowerCase().trim();
+  // Drop non-ASCII the same way the Python canonical does
+  // (`s.encode("ascii", "ignore")`): accented/ligature chars are removed
+  // entirely rather than folded, so slugs are byte-for-byte identical to the
+  // backend's sitemap/canonical URLs for the same entity. All TOPIC_TAGS are
+  // plain ASCII, so topic-slug round-tripping is unaffected either way.
+  // eslint-disable-next-line no-control-regex
+  s = s.replace(/[^\x00-\x7f]/g, "");
+  s = s.replace(SLUG_NON_ALNUM, "-");
+  s = s.replace(SLUG_TRIM, "");
+  if (!s) return "untitled";
+  if (s.length > maxLen) {
+    const cut = s.slice(0, maxLen);
+    const lastDash = cut.lastIndexOf("-");
+    s = lastDash > 0 ? cut.slice(0, lastDash) : cut;
+  }
+  return s;
+}
+
+/** Slug for a given topic name (alias kept for parity with seo.py). */
+export const topicSlug = (topic: string): string => slugify(topic);
+
+/** Absolute URL helper. */
+export function abs(path: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return SITE_URL.replace(/\/$/, "") + (path.startsWith("/") ? path : `/${path}`);
+}
+
+// ─── sameAs: curated Wikipedia/Wikidata identity links (from seo.py) ────
+
+export const FAMOUS_MIND_SAMEAS: Record<string, string[]> = {
+  "karl marx": [
+    "https://en.wikipedia.org/wiki/Karl_Marx",
+    "https://www.wikidata.org/wiki/Q9061",
+  ],
+  "friedrich engels": [
+    "https://en.wikipedia.org/wiki/Friedrich_Engels",
+    "https://www.wikidata.org/wiki/Q33760",
+  ],
+  "adam smith": [
+    "https://en.wikipedia.org/wiki/Adam_Smith",
+    "https://www.wikidata.org/wiki/Q9381",
+  ],
+  "john maynard keynes": [
+    "https://en.wikipedia.org/wiki/John_Maynard_Keynes",
+    "https://www.wikidata.org/wiki/Q9317",
+  ],
+  "richard feynman": [
+    "https://en.wikipedia.org/wiki/Richard_Feynman",
+    "https://www.wikidata.org/wiki/Q39246",
+  ],
+  "albert einstein": [
+    "https://en.wikipedia.org/wiki/Albert_Einstein",
+    "https://www.wikidata.org/wiki/Q937",
+  ],
+  "isaac newton": [
+    "https://en.wikipedia.org/wiki/Isaac_Newton",
+    "https://www.wikidata.org/wiki/Q935",
+  ],
+  "charles darwin": [
+    "https://en.wikipedia.org/wiki/Charles_Darwin",
+    "https://www.wikidata.org/wiki/Q1035",
+  ],
+  "sigmund freud": [
+    "https://en.wikipedia.org/wiki/Sigmund_Freud",
+    "https://www.wikidata.org/wiki/Q9215",
+  ],
+  "carl jung": [
+    "https://en.wikipedia.org/wiki/Carl_Jung",
+    "https://www.wikidata.org/wiki/Q41532",
+  ],
+  "friedrich nietzsche": [
+    "https://en.wikipedia.org/wiki/Friedrich_Nietzsche",
+    "https://www.wikidata.org/wiki/Q1141",
+  ],
+  aristotle: [
+    "https://en.wikipedia.org/wiki/Aristotle",
+    "https://www.wikidata.org/wiki/Q868",
+  ],
+  plato: [
+    "https://en.wikipedia.org/wiki/Plato",
+    "https://www.wikidata.org/wiki/Q859",
+  ],
+  socrates: [
+    "https://en.wikipedia.org/wiki/Socrates",
+    "https://www.wikidata.org/wiki/Q913",
+  ],
+  confucius: [
+    "https://en.wikipedia.org/wiki/Confucius",
+    "https://www.wikidata.org/wiki/Q4604",
+  ],
+  "immanuel kant": [
+    "https://en.wikipedia.org/wiki/Immanuel_Kant",
+    "https://www.wikidata.org/wiki/Q9312",
+  ],
+  "g.w.f. hegel": [
+    "https://en.wikipedia.org/wiki/Georg_Wilhelm_Friedrich_Hegel",
+    "https://www.wikidata.org/wiki/Q9235",
+  ],
+  "warren buffett": [
+    "https://en.wikipedia.org/wiki/Warren_Buffett",
+    "https://www.wikidata.org/wiki/Q47213",
+  ],
+  "charlie munger": [
+    "https://en.wikipedia.org/wiki/Charlie_Munger",
+    "https://www.wikidata.org/wiki/Q1066368",
+  ],
+  "peter drucker": [
+    "https://en.wikipedia.org/wiki/Peter_Drucker",
+    "https://www.wikidata.org/wiki/Q57139",
+  ],
+  "carl sagan": [
+    "https://en.wikipedia.org/wiki/Carl_Sagan",
+    "https://www.wikidata.org/wiki/Q34943",
+  ],
+  "stephen hawking": [
+    "https://en.wikipedia.org/wiki/Stephen_Hawking",
+    "https://www.wikidata.org/wiki/Q17714",
+  ],
+  "marie curie": [
+    "https://en.wikipedia.org/wiki/Marie_Curie",
+    "https://www.wikidata.org/wiki/Q7186",
+  ],
+  "nikola tesla": [
+    "https://en.wikipedia.org/wiki/Nikola_Tesla",
+    "https://www.wikidata.org/wiki/Q9036",
+  ],
+};
+
+/** Return curated authoritative URLs for a famous mind, or undefined. */
+export function lookupSameAs(mindName: string): string[] | undefined {
+  if (!mindName) return undefined;
+  return FAMOUS_MIND_SAMEAS[mindName.trim().toLowerCase()];
+}
+
+// ─── JSON-LD builders (drop empty leaves, matching jsonld_script) ───────
+
+type Json = Record<string, unknown>;
+
+/** Recursively drop null/""/[] leaves so validators don't choke. */
+export function dropNulls<T>(obj: T): T {
+  if (Array.isArray(obj)) {
+    return obj.map((x) => dropNulls(x)) as unknown as T;
+  }
+  if (obj && typeof obj === "object") {
+    const out: Json = {};
+    for (const [k, v] of Object.entries(obj as Json)) {
+      if (v === null || v === undefined || v === "") continue;
+      if (Array.isArray(v) && v.length === 0) continue;
+      out[k] = dropNulls(v);
+    }
+    return out as unknown as T;
+  }
+  return obj;
+}
+
+export function personJsonLd(opts: {
+  name: string;
+  description?: string;
+  domain?: string;
+  url: string;
+  image?: string;
+  sameAs?: string[] | null;
+  dateModified?: string;
+}): Json {
+  const out: Json = {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: opts.name,
+    description: opts.description || "",
+    url: opts.url,
+    image: opts.image || "",
+  };
+  const domain = (opts.domain || "").trim();
+  if (domain) {
+    const knows = domain
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    out.knowsAbout = knows.length ? knows : domain;
+  }
+  if (opts.sameAs && opts.sameAs.length) out.sameAs = opts.sameAs;
+  if (opts.dateModified) out.dateModified = opts.dateModified;
+  return dropNulls(out);
+}
+
+export function breadcrumbJsonLd(items: Array<[string, string]>): Json {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map(([name, url], i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name,
+      item: url,
+    })),
+  };
+}
+
+export function collectionJsonLd(opts: {
+  name: string;
+  description?: string;
+  url: string;
+  items: Array<{ name: string; url: string }>;
+  siteUrl?: string;
+}): Json {
+  const siteUrl = opts.siteUrl || SITE_URL;
+  return dropNulls({
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: opts.name,
+    description: opts.description || "",
+    url: opts.url,
+    isPartOf: { "@type": "WebSite", name: "Feynman", url: siteUrl },
+    mainEntity: {
+      "@type": "ItemList",
+      numberOfItems: opts.items.length,
+      itemListElement: opts.items.map((item, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        url: item.url,
+        name: item.name,
+      })),
+    },
+  });
+}
+
+/**
+ * Schema.org/Article for the imagined mind-on-topic essay. Author is
+ * Feynman (Organization) — the essay is our synthesis, not the mind's own
+ * writing. `about` ties it to the mind for topical clarity.
+ */
+export function mindEssayJsonLd(opts: {
+  mindName: string;
+  topic: string;
+  description?: string;
+  url: string;
+  mindUrl: string;
+  image?: string;
+  siteUrl?: string;
+}): Json {
+  const siteUrl = opts.siteUrl || SITE_URL;
+  return dropNulls({
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: `How ${opts.mindName} might approach ${opts.topic}`,
+    description: opts.description || "",
+    url: opts.url,
+    author: { "@type": "Organization", name: "Feynman", url: siteUrl },
+    about: { "@type": "Person", name: opts.mindName, url: opts.mindUrl },
+    publisher: { "@type": "Organization", name: "Feynman", url: siteUrl },
+    image: opts.image || "",
+  });
+}
+
+/**
+ * Schema.org/Article for the aggregated dialogues page. Author/publisher is
+ * Feynman; `about` is the mind. Ports `insights_article_jsonld` (Person
+ * variant) from seo.py.
+ */
+export function dialoguesArticleJsonLd(opts: {
+  headline: string;
+  description?: string;
+  url: string;
+  aboutUrl: string;
+  aboutName: string;
+  dateModified?: string;
+  siteUrl?: string;
+}): Json {
+  const siteUrl = opts.siteUrl || SITE_URL;
+  return dropNulls({
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: opts.headline,
+    description: opts.description || "",
+    url: opts.url,
+    author: { "@type": "Organization", name: "Feynman", url: siteUrl },
+    publisher: { "@type": "Organization", name: "Feynman", url: siteUrl },
+    about: { "@type": "Person", name: opts.aboutName, url: opts.aboutUrl },
+    dateModified: opts.dateModified || "",
+  });
+}
+
+/** Truncate to ~N chars on a word boundary with an ellipsis (matches seo.py). */
+export function truncate(text: string, maxChars: number): string {
+  const t = (text || "").trim();
+  if (t.length <= maxChars) return t;
+  const cut = t.slice(0, maxChars);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut) + "…";
+}
+
+/** Build a meta description, clamped to 200 chars on a word boundary. */
+export function metaDescription(text: string): string {
+  const t = (text || "").replace(/\s+/g, " ").trim();
+  if (t.length <= 200) return t;
+  return t.slice(0, 197).replace(/\s+\S*$/, "") + "...";
+}
+
+// ─── Topic-relevance matcher (port of qa.is_mind_topic_relevant) ────────
+//
+// Used to surface topic-hub links on a mind page and to gate which minds
+// appear on a topic page. Morphologically loose; false positives are fine.
+
+const MIND_ESSAY_MIN_DOMAIN_OVERLAP_CHARS = 3;
+const STEM_SKIP = new Set(["and", "the", "of", "in", "on", "for", "to", "&"]);
+
+/** Light morphological stem (matches qa._morphological_stem behavior). */
+function morphologicalStem(word: string): string {
+  let w = word.toLowerCase().trim();
+  if (w.length <= 4) return w;
+  for (const suf of ["ies", "ing", "ed", "es", "s", "al", "ic", "ical", "y"]) {
+    if (w.length - suf.length >= 3 && w.endsWith(suf)) {
+      w = w.slice(0, w.length - suf.length);
+      break;
+    }
+  }
+  return w;
+}
+
+export function isMindTopicRelevant(
+  mind: Pick<MindDetail, "domain">,
+  topic: string,
+): boolean {
+  if (!mind || !topic) return false;
+  const domain = (mind.domain || "").toLowerCase();
+  if (!domain) return false;
+  const domainStems = domain
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .map(morphologicalStem);
+  const domainBlob = domainStems.join(" ");
+
+  const topicLower = topic.toLowerCase();
+  if (domain.includes(topicLower)) return true;
+
+  for (const rawToken of topicLower.split(/[,\s&]+/)) {
+    if (
+      rawToken.length < MIND_ESSAY_MIN_DOMAIN_OVERLAP_CHARS ||
+      STEM_SKIP.has(rawToken)
+    )
+      continue;
+    const stem = morphologicalStem(rawToken);
+    if (stem.length < MIND_ESSAY_MIN_DOMAIN_OVERLAP_CHARS) continue;
+    if (domainBlob.includes(stem)) return true;
+  }
+  return false;
+}
+
+// ─── Fetch helpers (graceful degradation; never throw) ──────────────────
+
+/** All minds (persona stripped). Empty array on any failure. */
+export async function fetchMinds(): Promise<MindDetail[]> {
+  try {
+    const data = await get<MindDetail[]>("/api/minds", {
+      next: { revalidate: 86400 },
+    } as RequestInit);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Single mind by id (persona stripped by the API). null on failure/404. */
+export async function fetchMind(id: string): Promise<MindDetail | null> {
+  try {
+    const data = await get<MindDetail>(`/api/minds/${encodeURIComponent(id)}`, {
+      next: { revalidate: 86400 },
+    } as RequestInit);
+    return data && data.id ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** All agents (books). Empty array on failure. */
+export async function fetchAgents(): Promise<AgentRowLite[]> {
+  try {
+    const data = await get<AgentRowLite[]>("/api/agents", {
+      next: { revalidate: 86400 },
+    } as RequestInit);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Topic list. The API returns `{topics: string[]}`; older callers expected a
+ * bare array. Handle both shapes. Empty array on failure.
+ */
+export async function fetchTopics(): Promise<string[]> {
+  try {
+    const data = await get<string[] | { topics?: string[] }>("/api/topics", {
+      next: { revalidate: 86400 },
+    } as RequestInit);
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.topics)) return data.topics;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Similarity links between minds, used to derive "related minds" on a mind
+ * page (there is no direct related-minds JSON endpoint). Empty on failure.
+ */
+export async function fetchSimilarityLinks(): Promise<SimilarityLink[]> {
+  try {
+    const data = await get<{ links?: SimilarityLink[] }>(
+      "/api/minds/similarities",
+      { next: { revalidate: 86400 } } as RequestInit,
+    );
+    return data && Array.isArray(data.links) ? data.links : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Resolve a topic slug to its canonical topic name via the topic list. */
+export async function resolveTopicSlug(slug: string): Promise<string | null> {
+  const topics = await fetchTopics();
+  const target = slug.trim().toLowerCase();
+  for (const t of topics) {
+    if (slugify(t) === target) return t;
+  }
+  return null;
+}
+
+/**
+ * Derive related minds for a given mind from the similarity graph, falling
+ * back to same-domain minds when the graph has no entry (e.g. embeddings
+ * not yet computed). Returns at most `limit` minds, excluding self.
+ */
+export async function fetchRelatedMinds(
+  mind: MindDetail,
+  limit = 6,
+): Promise<MindDetail[]> {
+  const [allMinds, links] = await Promise.all([
+    fetchMinds(),
+    fetchSimilarityLinks(),
+  ]);
+  if (!allMinds.length) return [];
+  const byId = new Map(allMinds.map((m) => [m.id, m]));
+
+  // 1) Similarity-graph neighbors, strongest first.
+  const neighbors: Array<{ id: string; strength: number }> = [];
+  for (const l of links) {
+    if (l.source === mind.id && l.target)
+      neighbors.push({ id: l.target, strength: l.strength || 0 });
+    else if (l.target === mind.id && l.source)
+      neighbors.push({ id: l.source, strength: l.strength || 0 });
+  }
+  neighbors.sort((a, b) => b.strength - a.strength);
+
+  const seen = new Set<string>([mind.id]);
+  const out: MindDetail[] = [];
+  for (const n of neighbors) {
+    const m = byId.get(n.id);
+    if (m && !seen.has(m.id)) {
+      seen.add(m.id);
+      out.push(m);
+      if (out.length >= limit) return out;
+    }
+  }
+
+  // 2) Fallback: same primary domain token.
+  const domainKey = (mind.domain || "").split(",")[0]?.trim().toLowerCase();
+  if (domainKey) {
+    for (const m of allMinds) {
+      if (seen.has(m.id)) continue;
+      const md = (m.domain || "").toLowerCase();
+      if (md && md.includes(domainKey)) {
+        seen.add(m.id);
+        out.push(m);
+        if (out.length >= limit) break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Match a mind's notable-works titles against the book catalog so each work
+ * can deep-link to /book/{id} when we host it. Case-insensitive, with a
+ * substring fallback (handles subtitle / edition drift) — mirrors
+ * render_mind_works in seo.py. Returns a map of lowercased title → book id.
+ */
+export function buildWorkLinkIndex(
+  agents: AgentRowLite[],
+): Map<string, string> {
+  const idx = new Map<string, string>();
+  for (const a of agents) {
+    if (a.id && a.name) idx.set(a.name.toLowerCase(), a.id);
+  }
+  return idx;
+}
+
+/** Find a book id for a work title using exact then substring matching. */
+export function matchWorkToBook(
+  work: string,
+  idx: Map<string, string>,
+): string | null {
+  const wl = work.toLowerCase();
+  const exact = idx.get(wl);
+  if (exact) return exact;
+  for (const [name, id] of idx) {
+    if (name && (name.includes(wl) || wl.includes(name))) return id;
+  }
+  return null;
+}
+
+/** Books whose meta.category matches a topic name (case-insensitive). */
+export function filterBooksByTopic(
+  agents: AgentRowLite[],
+  topic: string,
+  limit = 30,
+): AgentRowLite[] {
+  const t = topic.toLowerCase();
+  const out: AgentRowLite[] = [];
+  for (const a of agents) {
+    if (a.status === "error" && a.type !== "ai_book") continue;
+    const cat = (a.meta?.category || "").toLowerCase();
+    if (cat && (cat === t || cat.includes(t) || t.includes(cat))) {
+      out.push(a);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+/** Minds whose domain is relevant to a topic (uses isMindTopicRelevant). */
+export function filterMindsByTopic(
+  minds: MindDetail[],
+  topic: string,
+  limit = 12,
+): MindDetail[] {
+  const out: MindDetail[] = [];
+  for (const m of minds) {
+    if (isMindTopicRelevant(m, topic)) {
+      out.push(m);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+/** Author / display name for a book agent (mirrors books.ts mapping). */
+export function bookAuthor(a: AgentRowLite): string {
+  return a.meta?.author || a.source || "";
+}

@@ -1,0 +1,66 @@
+.card {
+  width: min(400px, 92vw);
+  margin: 8vh auto 0;
+  padding: 32px 30px;
+  border-radius: var(--r-window);
+  border: 1px solid var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3);
+  text-align: center;
+}
+.title {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.brand { color: var(--accent); }
+.sub { color: var(--text-secondary); font-size: 14px; margin: 0 0 22px; }
+.note { color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-chat);
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.primary {
+  margin-top: 4px;
+  padding: 11px 16px;
+  border: none;
+  border-radius: var(--r-control);
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.primary:disabled { opacity: 0.6; cursor: default; }
+.oauth {
+  width: 100%;
+  margin-top: 12px;
+  padding: 11px 16px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.oauth:hover { background: var(--accent-light); }
+.error { color: var(--accent); font-size: 13px; margin: 2px 0 0; }
+.switch { color: var(--text-secondary); font-size: 13px; margin: 18px 0 0; }
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+}

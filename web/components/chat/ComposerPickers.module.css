@@ -1,0 +1,7 @@
+/* Positioning context for a composer icon button + its popover, so the
+   .composer-popover (position: absolute; bottom: 100%) anchors to the button
+   rather than the whole composer. */
+.anchor {
+  position: relative;
+  display: inline-flex;
+}
