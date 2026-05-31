@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { get } from "@/lib/api";
+import * as d3 from "d3";
 import styles from "./LandingPage.module.css";
 
 /* ════════════════════════════════════════════════════════════════════
@@ -141,6 +141,67 @@ function hexToRgb(hex: string): [number, number, number] {
     parseInt(hex.slice(5, 7), 16),
   ];
 }
+
+/* Background minds-graph seed data — VERBATIM from legacy app.js LP_MINDS
+   (lines 714-767). The legacy _renderLandingMindsGraph() builds nodes from this
+   hardcoded list (NOT the API), then derives `color` via _lpColor(name). Keeping
+   the same data + count is what makes the visual density/placement match. */
+const LP_MINDS: { name: string; domain: string; color: string }[] = (
+  [
+    { name: "Aristotle", domain: "ancient philosophy, logic, ethics, metaphysics, rhetoric" },
+    { name: "Socrates", domain: "ancient philosophy, ethics, epistemology, dialectic" },
+    { name: "Plato", domain: "ancient philosophy, metaphysics, political theory, epistemology" },
+    { name: "Marcus Aurelius", domain: "stoicism, ancient philosophy, ethics, leadership" },
+    { name: "Confucius", domain: "eastern philosophy, ethics, governance, education" },
+    { name: "Laozi", domain: "eastern philosophy, Taoism, metaphysics" },
+    { name: "Sun Tzu", domain: "eastern philosophy, military strategy, leadership, game theory" },
+    { name: "Friedrich Nietzsche", domain: "modern philosophy, existentialism, ethics, cultural criticism" },
+    { name: "Niccolò Machiavelli", domain: "political philosophy, statecraft, power, realism" },
+    { name: "Bertrand Russell", domain: "analytic philosophy, logic, mathematics, social criticism" },
+    { name: "Michel Foucault", domain: "modern philosophy, power, social theory, knowledge systems" },
+    { name: "Immanuel Kant", domain: "modern philosophy, epistemology, ethics, metaphysics" },
+    { name: "Richard Feynman", domain: "physics, quantum mechanics, science education" },
+    { name: "Albert Einstein", domain: "physics, relativity, philosophy of science" },
+    { name: "Isaac Newton", domain: "physics, mathematics, classical mechanics, optics" },
+    { name: "Nikola Tesla", domain: "physics, electrical engineering, invention" },
+    { name: "Stephen Hawking", domain: "physics, cosmology, science communication" },
+    { name: "John von Neumann", domain: "mathematics, computer science, game theory, quantum mechanics" },
+    { name: "Charles Darwin", domain: "biology, evolution, natural history" },
+    { name: "E.O. Wilson", domain: "biology, sociobiology, ecology, biodiversity" },
+    { name: "Adam Smith", domain: "economics, free markets, moral philosophy" },
+    { name: "John Maynard Keynes", domain: "economics, macroeconomics, fiscal policy" },
+    { name: "Charlie Munger", domain: "investing, mental models, multidisciplinary thinking" },
+    { name: "Warren Buffett", domain: "investing, value investing, business analysis" },
+    { name: "Ray Dalio", domain: "investing, macroeconomics, principles, systems thinking" },
+    { name: "Daniel Kahneman", domain: "cognitive psychology, behavioral economics, decision-making" },
+    { name: "Carl Jung", domain: "depth psychology, psychoanalysis, mythology, archetypes" },
+    { name: "Sigmund Freud", domain: "depth psychology, psychoanalysis, unconscious mind" },
+    { name: "Steven Pinker", domain: "cognitive psychology, linguistics, human nature, rationality" },
+    { name: "Fyodor Dostoevsky", domain: "literature, existentialism, human nature" },
+    { name: "Leo Tolstoy", domain: "literature, moral philosophy, pacifism" },
+    { name: "William Shakespeare", domain: "literature, drama, human nature, language" },
+    { name: "Jorge Luis Borges", domain: "literature, metaphysics, philosophy of mind" },
+    { name: "Winston Churchill", domain: "political leadership, history, wartime strategy, rhetoric" },
+    { name: "Leonardo da Vinci", domain: "art, engineering, anatomy, invention, polymathy" },
+    { name: "Steve Jobs", domain: "technology, product design, entrepreneurship, innovation" },
+    { name: "Elon Musk", domain: "technology, engineering, space, first principles thinking" },
+    { name: "Jensen Huang", domain: "technology, semiconductors, AI, computing" },
+    { name: "Jeff Bezos", domain: "technology, business strategy, customer obsession, e-commerce" },
+    { name: "Marc Andreessen", domain: "venture capital, software, startups, techno-optimism" },
+    { name: "Paul Graham", domain: "startups, programming, essays, venture capital" },
+    { name: "Peter Thiel", domain: "venture capital, contrarian thinking, startups, monopoly theory" },
+    { name: "Sam Altman", domain: "AI, startups, technology, venture capital" },
+    { name: "Peter Drucker", domain: "management, business strategy, leadership, knowledge work" },
+    { name: "Naval Ravikant", domain: "startups, personal philosophy, wealth, decision-making" },
+    { name: "Nassim Nicholas Taleb", domain: "risk, probability, antifragility, epistemology" },
+    { name: "Yuval Noah Harari", domain: "history, futurism, cognitive science, anthropology" },
+    { name: "Jordan Peterson", domain: "depth psychology, personal development, mythology, cultural criticism" },
+    { name: "Tim Ferriss", domain: "productivity, self-optimization, entrepreneurship, podcasting" },
+    { name: "James Clear", domain: "habits, behavioral psychology, productivity, self-improvement" },
+    { name: "Balaji Srinivasan", domain: "technology, network state, crypto, futurism" },
+    { name: "Tyler Cowen", domain: "economics, cultural commentary, innovation, blogging" },
+  ] as { name: string; domain: string }[]
+).map((m) => ({ ...m, color: lpColor(m.name) }));
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -174,16 +235,6 @@ function isDarkMode(): boolean {
   );
 }
 
-/* Extract an array from a payload that's either a bare array or { key: [...] }. */
-function pickArray<T>(payload: unknown, key: string): T[] {
-  if (Array.isArray(payload)) return payload as T[];
-  if (payload && typeof payload === "object") {
-    const v = (payload as Record<string, unknown>)[key];
-    if (Array.isArray(v)) return v as T[];
-  }
-  return [];
-}
-
 /* Build a mind-avatar <span> (ports _mindAvatar). */
 function mindAvatarEl(name: string, color: string): HTMLSpanElement {
   const span = document.createElement("span");
@@ -194,38 +245,39 @@ function mindAvatarEl(name: string, color: string): HTMLSpanElement {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   Background minds force-graph (ports _renderLandingMindsGraph).
+   Background minds force-graph — FAITHFUL d3-force port of the legacy
+   _renderLandingMindsGraph() (app/static/app.js 1112-1436).
 
-   Reads the live API: /api/minds (bare array of {id,name,domain}) and
-   /api/minds/similarities → { links: [{source,target,strength}], layout }.
-   Links use the `links` key + source/target/strength (mind ids). Nodes
-   are colored via the legacy palette. Drawn faint on canvas behind
-   everything. No d3 — a small force sim, kept low-opacity.
+   Nodes come from the hardcoded LP_MINDS list (exactly like the legacy,
+   which never hit the API for this background). Links are derived from
+   shared domain tokens. A real d3.forceSimulation runs the same forces
+   the legacy used (link / charge / center / collide / x / y) plus the
+   hero-text + chat-card "avoid" clear-zones so nodes never cover the
+   foreground. Full-color node circles, the legacy link-alpha formula
+   (rgba(160,170,190, 0.12 + strength*0.08)) and subtle particles flowing
+   along links. prefers-reduced-motion settles synchronously, draws one
+   frame, and starts no rAF / particles.
    ════════════════════════════════════════════════════════════════════ */
-type GNode = {
+type GNode = d3.SimulationNodeDatum & {
   id: string;
   name: string;
   initials: string;
   color: string;
+  domain: string;
   tokens: string[];
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
 };
-type GLink = { source: GNode; target: GNode; strength: number };
-
-interface GraphMind {
-  id?: string | number;
-  name?: string;
-  domain?: string;
-}
-interface GraphSim {
-  source?: string | number;
-  target?: string | number;
-  strength?: number;
-}
+type GLink = d3.SimulationLinkDatum<GNode> & {
+  source: GNode | string;
+  target: GNode | string;
+  strength: number;
+};
+type GParticle = {
+  link: GLink;
+  t: number;
+  speed: number;
+  size: number;
+  opacity: number;
+};
 
 export function LandingPage({
   ctaLabel,
@@ -249,6 +301,7 @@ export function LandingPage({
   const chatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const graphRAF = useRef<number | null>(null);
+  const graphSim = useRef<d3.Simulation<GNode, GLink> | null>(null);
   const graphCleanup = useRef<(() => void) | null>(null);
   const aborted = useRef(false);
 
@@ -601,80 +654,50 @@ export function LandingPage({
     searchTimer.current = setTimeout(runCycle, 3000);
   }, []);
 
-  /* ---- Background minds graph: ports _renderLandingMindsGraph ---- */
-  const startMindsGraph = useCallback(async () => {
+  /* ---- Background minds graph: faithful d3-force port of
+         _renderLandingMindsGraph (app.js 1112-1436) ---- */
+  const startMindsGraph = useCallback(() => {
     const container = bgRef.current;
     if (!container) return;
 
-    let minds: GraphMind[] = [];
-    let sims: GraphSim[] = [];
-    try {
-      const [m, s] = await Promise.all([
-        get<unknown>("/api/minds"),
-        get<unknown>("/api/minds/similarities"),
-      ]);
-      minds = pickArray<GraphMind>(m, "minds");
-      // /api/minds/similarities → { links: [{source,target,strength}], layout }
-      sims = pickArray<GraphSim>(s, "links");
-    } catch {
-      minds = [];
+    // Nodes from the hardcoded LP_MINDS list (legacy 1116-1122). Never throws on
+    // empty data — the sim simply renders nothing.
+    const nodes: GNode[] = LP_MINDS.map((m, i) => ({
+      id: "lp_" + i,
+      name: m.name,
+      domain: m.domain,
+      color: m.color,
+      initials: initials(m.name),
+      tokens: tokensOf(m.domain),
+    }));
+    if (!nodes.length) {
+      container.innerHTML = "";
+      return;
     }
-    if (aborted.current || !container.isConnected) return;
+
+    // Links from shared domain tokens (legacy 1123-1132); star-fallback if none.
+    const links: GLink[] = [];
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const shared = nodes[i].tokens.filter((t) =>
+          nodes[j].tokens.some((u) => t === u || t.includes(u) || u.includes(t))
+        );
+        if (shared.length > 0)
+          links.push({ source: nodes[i].id, target: nodes[j].id, strength: shared.length });
+      }
+    }
+    if (!links.length && nodes.length > 1) {
+      for (let i = 1; i < nodes.length; i++)
+        links.push({ source: nodes[0].id, target: nodes[i].id, strength: 0.3 });
+    }
 
     const reduced = prefersReducedMotion();
     const W = container.clientWidth || 1200;
     const H = container.clientHeight || 800;
     const dpr =
       typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 2) : 1;
-
-    // Build nodes (cap to keep the background light); derive color from name.
-    const capped = minds.slice(0, 60);
-    const nodes: GNode[] = capped.map((m, i) => {
-      const name = String(m.name || "");
-      const angle = (i / Math.max(1, capped.length)) * Math.PI * 2;
-      const rad = Math.min(W, H) * (0.18 + 0.12 * Math.random());
-      return {
-        id: String(m.id ?? m.name ?? i),
-        name,
-        initials: initials(name),
-        color: lpColor(name),
-        tokens: tokensOf(String(m.domain || "")),
-        x: W / 2 + Math.cos(angle) * rad,
-        y: H / 2 + Math.sin(angle) * rad,
-        vx: 0,
-        vy: 0,
-        r: 3 + Math.random() * 4,
-      };
-    });
-    if (!nodes.length) return;
-
-    const byId: Record<string, GNode> = {};
-    nodes.forEach((n) => (byId[n.id] = n));
-
-    // Links: read the `links` key with source/target/strength (mind ids).
-    let links: GLink[] = sims
-      .map((l) => {
-        const src = byId[String(l.source ?? "")];
-        const tgt = byId[String(l.target ?? "")];
-        const strength = Number(l.strength ?? 0.5);
-        return src && tgt ? { source: src, target: tgt, strength } : null;
-      })
-      .filter((l): l is GLink => !!l);
-
-    // Fallback: derive links from shared domain tokens (legacy heuristic) when
-    // the similarities endpoint returns nothing useful.
-    if (!links.length && nodes.length > 1) {
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const shared = nodes[i].tokens.filter((t) =>
-            nodes[j].tokens.some((u) => t === u || t.includes(u) || u.includes(t))
-          );
-          if (shared.length > 0)
-            links.push({ source: nodes[i], target: nodes[j], strength: shared.length });
-        }
-      }
-      links = links.slice(0, 120);
-    }
+    // Node radius shrinks as the set grows (legacy 1141).
+    const BASE_R = Math.max(20, Math.min(30, W / (nodes.length * 2)));
 
     const canvas = document.createElement("canvas");
     canvas.width = W * dpr;
@@ -687,115 +710,203 @@ export function LandingPage({
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    let alpha = 1;
-    const linkDist = (l: GLink) => Math.max(80, 280 - l.strength * 70);
-
-    function tickSim() {
-      // Many-body repulsion.
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i];
-          const b = nodes[j];
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          let d2 = dx * dx + dy * dy;
-          if (d2 < 1) d2 = 1;
-          const force = (60 * alpha) / d2;
-          const d = Math.sqrt(d2);
-          const fx = (dx / d) * force * 6;
-          const fy = (dy / d) * force * 6;
-          a.vx += fx;
-          a.vy += fy;
-          b.vx -= fx;
-          b.vy -= fy;
-        }
-      }
-      // Link springs toward the strength-weighted distance.
+    // Particles flowing along links (legacy 1152-1158); skipped under reduced.
+    const particles: GParticle[] = [];
+    if (!reduced) {
       links.forEach((l) => {
-        const dx = l.target.x - l.source.x;
-        const dy = l.target.y - l.source.y;
-        const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        const k = ((d - linkDist(l)) / d) * 0.04 * alpha;
-        const fx = dx * k;
-        const fy = dy * k;
-        l.source.vx += fx;
-        l.source.vy += fy;
-        l.target.vx -= fx;
-        l.target.vy -= fy;
+        const count = Math.max(1, Math.round(l.strength * 1.5));
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            link: l,
+            t: Math.random(),
+            speed: 0.001 + Math.random() * 0.003,
+            size: 1 + Math.random() * 1.5,
+            opacity: 0.3 + Math.random() * 0.5,
+          });
+        }
       });
-      // Gentle centering + velocity decay.
-      nodes.forEach((n) => {
-        n.vx += (W / 2 - n.x) * 0.0015 * alpha;
-        n.vy += (H / 2 - n.y) * 0.0015 * alpha;
-        n.vx *= 0.9;
-        n.vy *= 0.9;
-        n.x += n.vx;
-        n.y += n.vy;
-      });
-      alpha *= 0.99;
     }
+
+    // ── Hero-text (left) + chat-card (right) clear-zones (legacy 1167-1180).
+    //    Nodes are pushed out of these so they never cover the foreground. ──
+    const heroW = 300,
+      heroH = 200;
+    const heroCx = W * 0.06 + heroW / 2,
+      heroCy = H / 2;
+    const heroHalfW = heroW / 2 + 30,
+      heroHalfH = heroH / 2 + 10;
+
+    const cardW = Math.min(620, W * 0.55);
+    const cardH = Math.min(520, H - 120);
+    const cardCx = W - W * 0.04 - cardW / 2,
+      cardCy = H / 2;
+    const cardHalfW = cardW / 2 + 50,
+      cardHalfH = cardH / 2 + 40;
+
+    const clearZones = [
+      { cx: heroCx, cy: heroCy, hw: heroHalfW, hh: heroHalfH },
+      { cx: cardCx, cy: cardCy, hw: cardHalfW, hh: cardHalfH },
+    ];
+
+    // Custom force: shove any node out of a clear-zone along its shallower
+    // overlap axis (legacy makeAvoidForce, 1182-1207).
+    function makeAvoidForce(): d3.Force<GNode, GLink> {
+      let ns: GNode[] = [];
+      const force = () => {
+        for (const n of ns) {
+          for (const z of clearZones) {
+            const dx = (n.x ?? 0) - z.cx,
+              dy = (n.y ?? 0) - z.cy;
+            const overlapX = z.hw - Math.abs(dx);
+            const overlapY = z.hh - Math.abs(dy);
+            if (overlapX > 0 && overlapY > 0) {
+              if (overlapX < overlapY) {
+                const sign = dx >= 0 ? 1 : -1;
+                n.vx = (n.vx ?? 0) + sign * overlapX * 0.08;
+                n.vx *= 0.85;
+              } else {
+                const sign = dy >= 0 ? 1 : -1;
+                n.vy = (n.vy ?? 0) + sign * overlapY * 0.08;
+                n.vy *= 0.85;
+              }
+            }
+          }
+        }
+      };
+      (force as d3.Force<GNode, GLink>).initialize = (n) => {
+        ns = n as GNode[];
+      };
+      return force as d3.Force<GNode, GLink>;
+    }
+
+    // ── Forces: identical to legacy 1209-1219 ──
+    const graphCx = W * 0.55;
+    const sim = d3
+      .forceSimulation<GNode, GLink>(nodes)
+      .force(
+        "link",
+        d3
+          .forceLink<GNode, GLink>(links)
+          .id((d) => d.id)
+          .distance((d) => Math.max(80, 280 - d.strength * 70))
+          .strength((d) => 0.08 + d.strength * 0.15)
+      )
+      .force("charge", d3.forceManyBody<GNode>().strength(-600).distanceMax(800))
+      .force("center", d3.forceCenter<GNode>(graphCx, H / 2).strength(0.02))
+      .force("collision", d3.forceCollide<GNode>().radius(BASE_R + 20))
+      .force("x", d3.forceX<GNode>(graphCx).strength(0.01))
+      .force("y", d3.forceY<GNode>(H / 2).strength(0.01))
+      .force("avoid", makeAvoidForce())
+      .alphaDecay(0.03)
+      .velocityDecay(0.35);
+    graphSim.current = sim;
 
     function draw() {
       if (!ctx) return;
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
       ctx.clearRect(0, 0, W, H);
       const dk = isDarkMode();
 
-      // Links — faint.
+      // Links — legacy alpha formula (1252-1262).
       for (const l of links) {
-        const a = 0.12 + Math.min(1, l.strength) * 0.08;
+        const s = l.source as GNode;
+        const t = l.target as GNode;
+        const alpha = 0.12 + l.strength * 0.08;
         ctx.beginPath();
-        ctx.moveTo(l.source.x, l.source.y);
-        ctx.lineTo(l.target.x, l.target.y);
-        ctx.strokeStyle = `rgba(160,170,190,${a})`;
-        ctx.lineWidth = 0.6 + Math.min(2, l.strength) * 0.4;
+        ctx.moveTo(s.x ?? 0, s.y ?? 0);
+        ctx.lineTo(t.x ?? 0, t.y ?? 0);
+        ctx.strokeStyle = `rgba(160,170,190,${alpha})`;
+        ctx.lineWidth = 0.6 + l.strength * 0.4;
         ctx.stroke();
       }
 
-      // Nodes — colored dots, kept low-opacity behind the foreground.
+      // Particles flowing along links (legacy 1264-1276).
+      for (const p of particles) {
+        p.t += p.speed;
+        if (p.t > 1) p.t -= 1;
+        const s = p.link.source as GNode;
+        const t = p.link.target as GNode;
+        const px = (s.x ?? 0) + ((t.x ?? 0) - (s.x ?? 0)) * p.t;
+        const py = (s.y ?? 0) + ((t.y ?? 0) - (s.y ?? 0)) * p.t;
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(130,150,200,${p.opacity * 0.45})`;
+        ctx.fill();
+      }
+
+      // Nodes — full-color circles with glow, initials, name, domain (legacy
+      // 1291-1427, minus the interactive hover/highlight/NEW/add-node states).
       for (const n of nodes) {
+        const nx = n.x ?? 0,
+          ny = n.y ?? 0;
+        const pulse = 1 + Math.sin(now * 0.002 + n.name.length) * 0.04;
+        const rr = BASE_R * pulse;
         const [cr, cg, cb] = hexToRgb(n.color);
-        const glowR = n.r * 4;
-        const grad = ctx.createRadialGradient(n.x, n.y, n.r, n.x, n.y, glowR);
-        grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.06)`);
+
+        const glowR = rr * 2.5;
+        const grad = ctx.createRadialGradient(nx, ny, rr * 0.5, nx, ny, glowR);
+        grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.05)`);
         grad.addColorStop(1, "rgba(255,255,255,0)");
         ctx.beginPath();
-        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+        ctx.arc(nx, ny, glowR, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
 
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.arc(nx, ny, rr, 0, Math.PI * 2);
         ctx.fillStyle = n.color;
-        ctx.globalAlpha = 0.55;
         ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = dk ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.25)";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(255,255,255,0.25)";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.font = `700 ${rr * 0.6}px Inter, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(n.initials, nx, ny);
+
+        ctx.fillStyle = dk ? "rgba(245,245,247,0.8)" : "rgba(30,35,50,0.7)";
+        ctx.font = "600 11px 'Libre Baskerville', Georgia, serif";
+        ctx.fillText(n.name, nx, ny + rr + 14);
+
+        ctx.fillStyle = dk ? "rgba(200,200,210,0.6)" : "rgba(100,110,130,0.6)";
+        ctx.font = "400 9px Inter, sans-serif";
+        const domainLabel =
+          n.domain.length > 30 ? n.domain.slice(0, 28) + "…" : n.domain;
+        ctx.fillText(domainLabel, nx, ny + rr + 27);
       }
     }
 
-    if (reduced) {
-      for (let i = 0; i < 160; i++) tickSim();
+    // Keep the canvas backing store sized to the host (legacy used a fixed
+    // canvas; we add a resize so the bg tracks viewport changes). On resize we
+    // only repaint — under reduced-motion the sim is already settled.
+    const onResize = () => {
+      if (aborted.current || !ctx) return;
+      const w = container.clientWidth || W;
+      const h = container.clientHeight || H;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       draw();
-      const onResize = () => {
-        const w = container.clientWidth || W;
-        const h = container.clientHeight || H;
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
-        canvas.style.width = w + "px";
-        canvas.style.height = h + "px";
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        draw();
-      };
-      window.addEventListener("resize", onResize);
-      graphCleanup.current = () => window.removeEventListener("resize", onResize);
+    };
+    window.addEventListener("resize", onResize);
+    graphCleanup.current = () => window.removeEventListener("resize", onResize);
+
+    if (reduced) {
+      // Settle synchronously, draw one frame, no rAF / particles.
+      sim.stop();
+      sim.tick(180);
+      draw();
       return;
     }
 
+    // The sim ticks itself; the rAF only drives canvas repaints + particles.
+    sim.on("tick", () => {});
     const loop = () => {
       if (aborted.current) return;
-      tickSim();
       draw();
       graphRAF.current = requestAnimationFrame(loop);
     };
@@ -837,6 +948,11 @@ export function LandingPage({
       if (graphRAF.current) {
         cancelAnimationFrame(graphRAF.current);
         graphRAF.current = null;
+      }
+      if (graphSim.current) {
+        graphSim.current.on("tick", null);
+        graphSim.current.stop();
+        graphSim.current = null;
       }
       if (graphCleanup.current) {
         graphCleanup.current();

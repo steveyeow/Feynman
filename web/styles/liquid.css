@@ -19,126 +19,78 @@
  * prefers-reduced-transparency / prefers-contrast. Content/reading stays clean.
  * ========================================================================== */
 
-/* ── Tokens: light ─────────────────────────────────────────────────────── */
+/* ── Material tokens ONLY ───────────────────────────────────────────────
+ * The COLOR palette (--bg-home/--bg-chat/--text/--border/--accent/…) is
+ * intentionally NOT redefined here — it comes from app.css (the verbatim
+ * production styles.css), so the product keeps its exact production colors.
+ * liquid.css adds only the *material* layer: glass surfaces, blur, specular
+ * highlight, depth shadows, and concentric radii. This is the one rule that
+ * keeps "glass UI" from drifting the brand color. ───────────────────────── */
 :root {
-  /* Warmed-neutral base (kept cool-leaning per brand, nudged warm + calm). */
-  --bg-home: #f4f2ee;
-  --bg-chat: #faf9f6;
-  --bg-sidebar: rgba(250, 249, 247, 0.62);
-  --bg-elev: #ffffff;
-  --text: #1d1d1f;
-  --text-secondary: #5f5f63;
-  --text-muted: #8a8a8f;
-  --border: rgba(0, 0, 0, 0.07);
-  --border-strong: rgba(0, 0, 0, 0.12);
-  --accent: #0071e3;
-  --accent-hover: #0058b3;
-  --accent-light: rgba(0, 113, 227, 0.10);
-
-  /* Glass material */
-  --glass-regular: rgba(250, 249, 247, 0.62);
-  --glass-clear: rgba(250, 249, 247, 0.40);
-  --glass-thick: rgba(248, 247, 244, 0.80);
-  --glass-edge: rgba(255, 255, 255, 0.55);
+  /* Glass surfaces derived from the production whites (translucent, not tinted). */
+  --glass-regular: rgba(255, 255, 255, 0.62);
+  --glass-clear: rgba(255, 255, 255, 0.42);
+  --glass-thick: rgba(255, 255, 255, 0.80);
+  --glass-edge: rgba(255, 255, 255, 0.60);
   --glass-specular: rgba(255, 255, 255, 0.70);
   --glass-inner-line: rgba(0, 0, 0, 0.04);
-  --glass-solid-fallback: #f4f2ee;
+  --glass-solid-fallback: #f5f5f7; /* = production --bg-home */
 
   --blur-thin: 12px;
-  --blur-regular: 28px;
-  --blur-thick: 48px;
-  --glass-saturate: 180%;
+  --blur-regular: 24px;
+  --blur-thick: 40px;
+  --glass-saturate: 160%;
 
-  /* Depth ramp (elevation shadows) */
-  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.05);
-  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
-  --depth-3: 0 12px 40px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-sm: var(--depth-1);
-  --shadow-md: var(--depth-2);
-  --shadow-lg: var(--depth-3);
+  /* Depth ramp — keep production shadow feel (soft, low-contrast). */
+  --depth-1: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --depth-3: 0 12px 40px rgba(0, 0, 0, 0.12);
 
-  /* Concentric radii */
+  /* Concentric radii. */
   --r-window: 18px;
   --r-panel: 16px;
   --r-control: 11px;
   --r-pill: 999px;
 
-  /* Legacy glass vars used by app.css components → point at the new material */
+  /* Legacy glass vars used by app.css components → point at the new material. */
   --glass-bg: var(--glass-regular);
   --glass-bg-strong: var(--glass-thick);
   --glass-border: var(--glass-edge);
 }
 
-/* ── Tokens: dark (explicit class + system pref) ───────────────────────── */
+/* Dark material — surfaces from the production dark bgs, not tinted. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --bg-home: #161618;
-    --bg-chat: #1c1c1e;
-    --bg-sidebar: rgba(34, 34, 37, 0.55);
-    --bg-elev: #242427;
-    --text: #f5f5f7;
-    --text-secondary: #a6a6ab;
-    --text-muted: #79797f;
-    --border: rgba(255, 255, 255, 0.09);
-    --border-strong: rgba(255, 255, 255, 0.16);
-    --accent: #0a84ff;
-    --accent-hover: #409cff;
-    --accent-light: rgba(10, 132, 255, 0.16);
-
-    --glass-regular: rgba(34, 34, 37, 0.55);
-    --glass-clear: rgba(34, 34, 37, 0.35);
-    --glass-thick: rgba(28, 28, 30, 0.80);
+    --glass-regular: rgba(44, 44, 46, 0.60);
+    --glass-clear: rgba(44, 44, 46, 0.40);
+    --glass-thick: rgba(28, 28, 30, 0.82);
     --glass-edge: rgba(255, 255, 255, 0.10);
-    --glass-specular: rgba(255, 255, 255, 0.12);
+    --glass-specular: rgba(255, 255, 255, 0.10);
     --glass-inner-line: rgba(255, 255, 255, 0.04);
     --glass-solid-fallback: #1c1c1e;
-
-    --depth-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.35);
-    --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-    --depth-3: 0 14px 44px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --depth-1: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --depth-3: 0 12px 40px rgba(0, 0, 0, 0.5);
   }
 }
 :root.dark {
-  --bg-home: #161618;
-  --bg-chat: #1c1c1e;
-  --bg-sidebar: rgba(34, 34, 37, 0.55);
-  --bg-elev: #242427;
-  --text: #f5f5f7;
-  --text-secondary: #a6a6ab;
-  --text-muted: #79797f;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --accent: #0a84ff;
-  --accent-hover: #409cff;
-  --accent-light: rgba(10, 132, 255, 0.16);
-  --glass-regular: rgba(34, 34, 37, 0.55);
-  --glass-clear: rgba(34, 34, 37, 0.35);
-  --glass-thick: rgba(28, 28, 30, 0.80);
+  --glass-regular: rgba(44, 44, 46, 0.60);
+  --glass-clear: rgba(44, 44, 46, 0.40);
+  --glass-thick: rgba(28, 28, 30, 0.82);
   --glass-edge: rgba(255, 255, 255, 0.10);
-  --glass-specular: rgba(255, 255, 255, 0.12);
+  --glass-specular: rgba(255, 255, 255, 0.10);
   --glass-inner-line: rgba(255, 255, 255, 0.04);
   --glass-solid-fallback: #1c1c1e;
-  --depth-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.35);
-  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --depth-3: 0 14px 44px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --depth-1: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --depth-3: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* ── Depth-y app background (what the glass refracts/blurs in-browser) ──── */
-body {
-  background-color: var(--bg-home);
-  background-image:
-    radial-gradient(at 14% 18%, rgba(0, 113, 227, 0.06), transparent 50%),
-    radial-gradient(at 86% 12%, rgba(255, 168, 120, 0.05), transparent 46%),
-    radial-gradient(at 72% 88%, rgba(120, 158, 255, 0.05), transparent 52%);
-  background-attachment: fixed;
-}
-:root.dark body,
-.dark body {
-  background-image:
-    radial-gradient(at 14% 18%, rgba(10, 132, 255, 0.12), transparent 50%),
-    radial-gradient(at 86% 12%, rgba(255, 140, 90, 0.06), transparent 46%),
-    radial-gradient(at 72% 88%, rgba(80, 120, 255, 0.08), transparent 52%);
-}
+/* NOTE: no body background-image override — the body keeps the production
+ * --bg-home flat color (clean cool-grey #f5f5f7 / dark #1c1c1e). The earlier
+ * warm radial-gradient is removed; it was the source of the "tinted/dirty"
+ * look that diverged from production. Glass reads against the real app
+ * surfaces behind it, which is enough on the web. */
 
 /* ── Glass primitive (utility + the material recipe) ───────────────────── */
 .lg-glass {
