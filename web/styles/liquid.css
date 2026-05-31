@@ -106,112 +106,89 @@
 .lg-glass-clear { background: var(--glass-clear); }
 .lg-glass-thick { background: var(--glass-thick); -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate)); backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate)); }
 
-/* ── Control layer: re-skin the chrome to Liquid Glass ─────────────────── */
+/* ── Control layer ──────────────────────────────────────────────────────
+ * IMPORTANT: glass is applied ONLY to genuinely-floating elements that sit
+ * ON TOP of content (popovers, tooltips, menus, modals, toasts, the minds
+ * toolbar). The sidebar, cards, and page surfaces keep their FLAT production
+ * colors (--bg-sidebar / --bg-chat) — making those glass tinted the whole app
+ * and diverged from production. This matches Tahoe too: the window body is
+ * opaque; only overlays are glass. ─────────────────────────────────────── */
 
-/* Floating glass sidebar — the signature Tahoe element. */
-.app-sidebar {
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
-  border-right: 1px solid var(--glass-edge);
-  box-shadow: inset 0 1px 0 var(--glass-specular), 1px 0 0 var(--glass-inner-line);
-}
-.app-main { background: transparent; }
+/* Underline reset — production renders no underlines on app chrome/control
+ * links. next/link emits real <a> (browser-default underlined). We reset the
+ * chrome + interactive surfaces explicitly; SEO prose links (.seo-content a)
+ * keep their underline since they're scoped separately. Includes :hover so the
+ * hover state doesn't re-introduce an underline. */
+.app-sidebar a, .app-sidebar a:hover,
+.sidebar-nav-link, .sidebar-nav-link:hover,
+.new-chat-action, .new-chat-action:hover,
+.sidebar-logo, .sidebar-logo:hover,
+.card-title,
+.card-author,
+.book-card a, .book-card a:hover,
+.card-body, .card-body:hover,
+.chats-new-btn, .chats-new-btn:hover,
+.chats-list-item, .chats-list-item:hover,
+.card-chat-btn, .card-chat-btn:hover,
+.user-menu-item, .user-menu-item:hover { text-decoration: none; }
 
-/* Composer — clear glass capsule that intensifies on focus. */
-.chat-composer {
-  background: var(--glass-clear);
-  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
-  border: 1px solid var(--glass-edge);
-  border-radius: 26px;
-  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-2);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-.chat-composer:focus-within {
-  background: var(--glass-thick);
-  border-color: rgba(0, 113, 227, 0.35);
-  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3), 0 0 0 3px rgba(0, 113, 227, 0.10);
-}
-
-/* Popovers / menus / tooltips / toolbars — floating glass. */
+/* Floating overlays — glass. */
 .composer-popover,
 .minds-tooltip,
 .minds-graph-toolbar,
-.reader-topbar,
 .sidebar-user-menu,
+.user-menu,
 .share-modal-card,
 .publish-toast,
-.upload-toast {
-  background: var(--glass-thick) !important;
+.upload-toast,
+.pro-overlay-card {
   -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
-  border: 1px solid var(--glass-edge);
-  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3);
-}
-
-/* Cards — content-surface glass with a hover lift + brighter specular. */
-.book-card {
-  background: var(--glass-clear);
-  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--r-panel);
-  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-.book-card:hover {
-  transform: translateY(-3px);
   background: var(--glass-thick);
+  border: 1px solid var(--glass-edge);
   box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-3);
 }
-
-/* Concentric radii on the larger surfaces. */
-.share-modal-card { border-radius: var(--r-window); }
 .composer-popover,
 .minds-tooltip,
 .minds-graph-toolbar { border-radius: var(--r-panel); }
+.share-modal-card,
+.pro-overlay-card { border-radius: var(--r-window); }
 
-/* Buttons: keep a solid, readable accent against the glass. */
-.composer-send-btn {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: var(--depth-1);
+/* Composer — a subtle frosted capsule (it floats above the home/chat surface),
+ * but keep it close to production: light glass, production radius, accent focus. */
+.chat-composer {
+  -webkit-backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-regular)) saturate(var(--glass-saturate));
+  background: var(--glass-thick);
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-1);
 }
-.composer-send-btn:hover { background: var(--accent-hover); opacity: 1; }
+.chat-composer:focus-within {
+  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-2), 0 0 0 3px var(--accent-light);
+}
 
-/* Press feedback — a subtle "light response" on glass controls. */
-.sidebar-nav-link:active,
+/* Press feedback on glass controls. */
 .composer-icon-btn:active,
 .filter-tag:active { transform: scale(0.97); }
 
-/* ── Accessibility / legibility fallbacks (match Apple's dial-back) ─────── */
+/* ── Accessibility fallbacks (degrade glass to solid) ─────────────────── */
 @media (prefers-reduced-transparency: reduce) {
-  .app-sidebar,
-  .chat-composer,
   .composer-popover,
   .minds-tooltip,
   .minds-graph-toolbar,
-  .reader-topbar,
   .sidebar-user-menu,
+  .user-menu,
   .share-modal-card,
   .publish-toast,
   .upload-toast,
-  .book-card {
+  .pro-overlay-card,
+  .chat-composer {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     background: var(--glass-solid-fallback) !important;
   }
-  body { background-image: none; }
-}
-@media (prefers-contrast: more) {
-  :root { --border: rgba(0, 0, 0, 0.2); --border-strong: rgba(0, 0, 0, 0.3); }
-  :root.dark { --border: rgba(255, 255, 255, 0.25); --border-strong: rgba(255, 255, 255, 0.4); }
-  .app-sidebar, .chat-composer, .book-card { background: var(--glass-thick); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .book-card, .chat-composer, .sidebar-nav-link, .composer-icon-btn, .filter-tag { transition: none; }
-  .book-card:hover { transform: none; }
+  .chat-composer, .composer-icon-btn, .filter-tag { transition: none; }
 }
 
 /* ── Library helpers (new states not in the legacy stylesheet) ─────────── */
@@ -221,18 +198,11 @@
 .library-discover-bar {
   display: flex; align-items: center; gap: 14px;
   margin: 8px 0 20px; padding: 14px 18px;
-  border-radius: var(--r-panel);
-  background: var(--glass-clear);
-  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  border: 1px solid var(--glass-edge);
-  box-shadow: inset 0 1px 0 var(--glass-specular), var(--depth-1);
+  border-radius: 12px;
+  background: var(--bg-chat);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
   font-size: 14px; color: var(--text-secondary);
-}
-.card-cover-wrap { cursor: pointer; }
-.card-cover-placeholder span {
-  font-family: 'Libre Baskerville', Georgia, serif;
-  font-size: 44px; font-weight: 700; color: rgba(255, 255, 255, 0.92);
 }
 
 /* ── SEO / reading content layer — clean, NOT glass ───────────────────── */
@@ -273,34 +243,26 @@
 }
 .seo-explore-footer a { color: var(--text-secondary); }
 
-/* ── Auth / theme / account menu ──────────────────────────────────────── */
+/* ── Auth / theme / account menu ──────────────────────────────────────────
+ * Production styles .sidebar-user-menu / .user-menu-item / .profile-chevron in
+ * app.css. We only (a) anchor the popup to the sidebar (production positions it
+ * in JS via fixed coords; here it's absolute within the relative wrap) and
+ * (b) give the inline theme toggle a compact look. */
 .sidebar-user-wrap { position: relative; }
-.theme-toggle {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-strong);
-  background: transparent; color: var(--text-secondary); cursor: pointer;
+.sidebar-user-menu {
+  position: absolute !important;
+  animation: none !important;
 }
-.theme-toggle:hover { color: var(--text); background: var(--accent-light); }
 .profile-email {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  max-width: 150px; color: var(--text-secondary); font-size: 13px;
+  flex: 1; min-width: 0; color: var(--text); font-size: 13px;
 }
-.user-menu {
-  position: absolute; bottom: 54px; left: 8px; right: 8px;
-  padding: 8px; border-radius: var(--r-panel); z-index: 50;
-  display: flex; flex-direction: column; gap: 2px;
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: transparent; color: var(--text-secondary); cursor: pointer;
 }
-.user-menu-row {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; font-size: 13px; color: var(--text-secondary);
-}
-.user-menu-item {
-  display: block; width: 100%; text-align: left;
-  padding: 8px 10px; border-radius: 8px; border: none; background: transparent;
-  color: var(--text); font-size: 13px; cursor: pointer; text-decoration: none;
-}
-.user-menu-item:hover { background: var(--accent-light); }
-.user-menu-signout { color: var(--delete-color, #dc2626); }
+.theme-toggle:hover { color: var(--text); background: rgba(128,128,128,0.12); }
 .login-page-wrap { min-height: 100%; padding: 24px; }
 
 /* ── Public discussion thread (/discussions/[id]) ─────────────────────── */
@@ -310,34 +272,13 @@
   display: block; font-size: 12px; font-weight: 600;
   color: var(--text-muted); margin-bottom: 4px;
 }
-.discussion-user { background: var(--bg-elev); }
+.discussion-user { background: var(--bg-chat); }
 .discussion-assistant {
   background: var(--accent-light);
   border: 1px solid var(--border);
 }
 .discussion-msg p { margin: 0; }
 
-/* ── /chats list page ─────────────────────────────────────────────────── */
-.chats-content { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
-.chats-title-row {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
-}
-.chats-new-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 14px; border-radius: var(--r-control);
-  background: var(--accent); color: #fff; text-decoration: none;
-  font-size: 14px; font-weight: 600;
-}
-.chats-list { display: flex; flex-direction: column; gap: 6px; }
-.chats-list-item {
-  display: flex; align-items: center; gap: 6px;
-  padding: 12px 16px; border-radius: var(--r-control);
-  background: var(--glass-clear);
-  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
-  border: 1px solid var(--glass-edge);
-  color: var(--text); text-decoration: none; font-size: 15px;
-  transition: background 0.15s ease;
-}
-.chats-list-item:hover { background: var(--glass-thick); }
-.chats-empty { color: var(--text-muted); padding: 40px 4px; font-size: 14px; }
+/* NOTE: .chats-content/.chats-title-row/.chats-new-btn/.chats-list/.chats-list-item/
+ * .chats-empty are styled by production app.css — do NOT redefine them here
+ * (the earlier glass versions diverged from production). */

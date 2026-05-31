@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * Full-page chat list at /chats (the legacy #/chats surface). Mirrors the
- * sidebar ChatHistory but as a primary page with the standard page-title
- * chrome + empty state. Fetches once auth has resolved (so the bearer token
- * is set on the hosted build before the authed /api/sessions call fires).
+ * Full-page chat list at /chats — faithful to the legacy #page-chats DOM
+ * (index.html): title-row (h1 + New Chat button with + icon), a search header
+ * (chats-search), the list, and the empty state. Fetches once auth resolves so
+ * the bearer token is set before the authed /api/sessions call (hosted build).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { listSessions, type Session } from "@/lib/chat";
@@ -15,6 +15,7 @@ import { listSessions, type Session } from "@/lib/chat";
 export default function ChatsList() {
   const { ready } = useAuth();
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!ready) return;
@@ -31,17 +32,36 @@ export default function ChatsList() {
     };
   }, [ready]);
 
-  const chats = (sessions || []).filter(
-    (s) => s.sessionType === "chat" || s.sessionType === "write_book",
-  );
+  const chats = useMemo(() => {
+    const base = (sessions || []).filter(
+      (s) => s.sessionType === "chat" || s.sessionType === "write_book",
+    );
+    const q = query.trim().toLowerCase();
+    return q ? base.filter((s) => (s.title || "").toLowerCase().includes(q)) : base;
+  }, [sessions, query]);
 
   return (
     <div className="chats-content">
       <div className="chats-title-row">
         <h1 className="page-title">Chats</h1>
-        <Link className="chats-new-btn" href="/">
+        <Link className="chats-new-btn" href="/" title="New Chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           New Chat
         </Link>
+      </div>
+
+      <div className="chats-header">
+        <input
+          type="text"
+          className="chats-search"
+          placeholder="Search chats..."
+          autoComplete="off"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
       </div>
 
       {sessions === null ? (
@@ -52,7 +72,7 @@ export default function ChatsList() {
         <div className="chats-list">
           {chats.map((s) => (
             <Link key={s.id} href={`/chat/${s.id}`} className="chats-list-item">
-              <span className="chats-list-title">{s.title}</span>
+              <span className="chat-item-title">{s.title}</span>
               {s.publicStatus === "approved" && (
                 <span className="history-public-dot" title="Public">
                   {" ●"}

@@ -26,6 +26,7 @@ export default function UserMenu() {
 
   const email = user?.email ?? "";
   const initial = email ? email[0]!.toUpperCase() : "";
+  const label = email || (authEnabled ? "Account" : "Guest");
 
   return (
     <div className="sidebar-user-wrap" ref={wrapRef}>
@@ -45,28 +46,36 @@ export default function UserMenu() {
             </svg>
           )}
         </div>
-        <span className="sidebar-label profile-email">{email || (authEnabled ? "Account" : "Guest")}</span>
+        <span className="sidebar-label profile-email">{label}</span>
+        <svg className="sidebar-label profile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </div>
 
-      {open && (
-        <div className="user-menu lg-glass-thick">
-          <div className="user-menu-row">
-            <span>Theme</span>
-            <ThemeToggle />
-          </div>
-          {authEnabled && user && (
-            <Link className="user-menu-item" href="/subscription" onClick={() => setOpen(false)}>
-              Subscription
-            </Link>
-          )}
-          {authEnabled && user && <SignOutItem onDone={() => setOpen(false)} />}
-          {authEnabled && !user && (
-            <Link className="user-menu-item" href="/login" onClick={() => setOpen(false)}>
-              Sign in
-            </Link>
-          )}
+      {/* Production structure: .sidebar-user-menu (.open) with header + divider
+          + .user-menu-item rows. Positioned above the profile, bottom-left. */}
+      <div className={`sidebar-user-menu${open ? " open" : ""}`} style={{ left: 12, bottom: 60, right: 12 }}>
+        <div className="user-menu-header">
+          <span className="user-menu-name">{authEnabled && user ? "Signed in" : "Guest"}</span>
+          {email && <span className="user-menu-email">{email}</span>}
         </div>
-      )}
+        <div className="user-menu-divider" />
+        <button type="button" className="user-menu-item" onClick={(e) => e.stopPropagation()}>
+          <span>Theme</span>
+          <span style={{ marginLeft: "auto" }}><ThemeToggle /></span>
+        </button>
+        {authEnabled && user && (
+          <Link className="user-menu-item" href="/subscription" onClick={() => setOpen(false)}>
+            Subscription
+          </Link>
+        )}
+        {authEnabled && user && <SignOutItem onDone={() => setOpen(false)} />}
+        {authEnabled && !user && (
+          <Link className="user-menu-item" href="/login" onClick={() => setOpen(false)}>
+            Sign in
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

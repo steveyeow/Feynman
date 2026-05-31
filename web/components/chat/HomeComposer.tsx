@@ -35,6 +35,57 @@ import {
 
 const PENDING_KEY = "feynman:pendingChat";
 
+// Default starter prompts (legacy generateStarters fallback when no books are
+// loaded — app.js 1988-1995). When books are selected the legacy regenerates
+// these from titles; the static fallback set is faithful for the empty state.
+const DEFAULT_STARTERS = [
+  "Learn quantitative trading from scratch",
+  "Teach me the fundamentals of philosophy",
+  "Best books on cognitive psychology?",
+  "Help me understand machine learning",
+];
+
+/** Pixel-art book logo — verbatim from index.html (greeting-logo). */
+function BookLogo({ size = 42 }: { size?: number }) {
+  return (
+    <svg className="greeting-logo" width={size} height={size} viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="24" y="0" width="8" height="4" fill="#FDCB6E" />
+      <rect x="26" y="4" width="4" height="4" fill="#B8B8B8" />
+      <rect x="8" y="8" width="40" height="28" fill="#DA7756" />
+      <rect x="12" y="12" width="32" height="20" fill="#FFF1E0" />
+      <rect x="16" y="16" width="8" height="8" fill="#2D3436" />
+      <rect x="32" y="16" width="8" height="8" fill="#2D3436" />
+      <rect x="18" y="18" width="4" height="4" fill="#fff" />
+      <rect x="34" y="18" width="4" height="4" fill="#fff" />
+      <rect x="22" y="28" width="12" height="2" fill="#C45E3E" />
+      <rect x="18" y="38" width="4" height="8" fill="#B8B8B8" />
+      <rect x="34" y="38" width="4" height="8" fill="#B8B8B8" />
+    </svg>
+  );
+}
+
+/** Feynman-diagram logo — verbatim from index.html (greeting-feynman-logo). */
+function FeynmanLogo({ size = 42 }: { size?: number }) {
+  return (
+    <svg className="greeting-feynman-logo" width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="32" cy="30" r="3.5" fill="currentColor" />
+      <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Write-book (pencil) icon — verbatim from index.html (home-write-book-btn). */
+function WriteBookIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
 export default function HomeComposer() {
   const router = useRouter();
   const params = useSearchParams();
@@ -46,8 +97,58 @@ export default function HomeComposer() {
   const [booksOpen, setBooksOpen] = useState(false);
   const [mindsOpen, setMindsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Time-based greeting (legacy app.js 665-667: "Good morning/afternoon/evening
+  // [, FirstName]"). Computed client-side after mount to avoid SSR/hydration
+  // drift (the hour + the localStorage userName are client-only).
+  const [greeting, setGreeting] = useState("");
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const prefilled = useRef(false);
+
+  useEffect(() => {
+    const h = new Date().getHours();
+    let g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    let name = "";
+    try {
+      name = localStorage.getItem("userName") || "";
+    } catch {
+      /* ignore */
+    }
+    if (name) g += ", " + name.split(/\s+/)[0];
+    setGreeting(g);
+  }, []);
+
+  // Starters mirror the book context: with a single selected book they become
+  // title-specific (legacy generateStarters); with none, the default set.
+  const starters = (() => {
+    const sel = [...books.values()];
+    const short = (t: string, max = 30) =>
+      t.length <= max ? t : t.slice(0, max - 1).trimEnd() + "…";
+    if (sel.length === 1) {
+      const t = short(sel[0].title);
+      return [
+        `What are the key ideas in "${t}"?`,
+        `Summarize the core argument of "${t}"`,
+        `What makes "${t}" unique?`,
+        `Quiz me on "${t}"`,
+      ];
+    }
+    if (sel.length >= 2) {
+      const a = short(sel[0].title);
+      const b = short(sel[1].title);
+      return [
+        `Compare "${a}" and "${b}"`,
+        `What do "${a}" and "${b}" have in common?`,
+        `Key ideas in "${a}"?`,
+        sel.length > 2 ? `What do these ${sel.length} books cover together?` : `Key ideas in "${b}"?`,
+      ];
+    }
+    return DEFAULT_STARTERS;
+  })();
+
+  const pickStarter = (q: string) => {
+    setValue(q);
+    taRef.current?.focus();
+  };
 
   // ── Preselect a book + prefill a question on mount ──
   // Two sources, in priority order:
@@ -191,7 +292,26 @@ export default function HomeComposer() {
     : "Ask about books or topics — great minds will join in...";
 
   return (
-    <div className="chat-composer">
+    <div className="home-center" id="home-center-main">
+      <div className="greeting-row">
+        <div
+          className="greeting-logo-wrap"
+          onClick={(e) => {
+            // Logo easter-egg — ports app.js:7714-7719: bounce, then swap the
+            // pixel-book ↔ Feynman-diagram logo mid-bounce.
+            const wrap = e.currentTarget;
+            wrap.classList.add("bounce");
+            window.setTimeout(() => wrap.classList.toggle("swap"), 200);
+            wrap.addEventListener("animationend", () => wrap.classList.remove("bounce"), { once: true });
+          }}
+        >
+          <BookLogo />
+          <FeynmanLogo />
+        </div>
+        <h1 className="greeting">{greeting}</h1>
+      </div>
+
+      <div className="chat-composer">
       <SelectedChips
         books={books}
         minds={minds}
@@ -263,6 +383,15 @@ export default function HomeComposer() {
               onClose={() => setMindsOpen(false)}
             />
           </PopoverAnchor>
+          <button
+            type="button"
+            className="composer-icon-btn"
+            title="Write the book you need, on-demand"
+            aria-label="Write the book you need"
+            onClick={() => router.push("/write")}
+          >
+            <WriteBookIcon />
+          </button>
         </div>
         <button
           type="button"
@@ -274,6 +403,15 @@ export default function HomeComposer() {
         >
           <SendIcon />
         </button>
+      </div>
+      </div>
+
+      <div className="home-starters" id="home-starters">
+        {starters.map((q) => (
+          <button key={q} type="button" className="starter-pill" onClick={() => pickStarter(q)}>
+            {q}
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -2,12 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "feynman-backend",
-      "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8001", "--reload"],
-      "port": 8001
-    },
-    {
       "name": "web",
       "runtimeExecutable": "/Users/steveyao/.nvm/versions/node/v18.17.0/bin/node",
       "runtimeArgs": [
@@ -30,6 +24,12 @@
         "3000"
       ],
       "port": 3000
+    },
+    {
+      "name": "feynman-backend",
+      "runtimeExecutable": "/opt/homebrew/bin/python3",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8001"],
+      "port": 8001
     }
   ]
 }
