@@ -30,9 +30,11 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { useIsProUser } from "@/lib/pro";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth";
+import { setQuotaHandler, setAuthRequiredHandler } from "@/lib/api";
 import PlanCards from "@/components/subscription/PlanCards";
 import styles from "./ProOverlay.module.css";
 
@@ -45,6 +47,7 @@ const ProOverlayContext = createContext<ProOverlayContextValue | null>(null);
 
 export function ProOverlayProvider({ children }: { children: React.ReactNode }) {
   const { isPro } = useAuth();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [visible, setVisible] = useState(false); // drives the fade-in transition
 
@@ -54,6 +57,27 @@ export function ProOverlayProvider({ children }: { children: React.ReactNode }) 
   }, [isPro]);
 
   const hideProOverlay = useCallback(() => setOpen(false), []);
+
+  // Wire the non-React api.ts interceptors (ports app.js api() 429/401):
+  //   429 quota_exceeded/upload_limit_reached → quota_hit analytics + upgrade
+  //   overlay (except generate_mind, which production excludes); 401
+  //   auth_required → bounce to /login.
+  useEffect(() => {
+    setQuotaHandler(({ action, code, message }) => {
+      track("quota_hit", { action, code, message: message || "" });
+      if (action !== "generate_mind") {
+        track("upgrade_prompt_shown", { tier: isPro ? "pro" : "free" });
+        setOpen(true);
+      }
+    });
+    setAuthRequiredHandler(() => {
+      router.push("/login");
+    });
+    return () => {
+      setQuotaHandler(null);
+      setAuthRequiredHandler(null);
+    };
+  }, [isPro, router]);
 
   // Fade in on next frame after mount (mirrors the legacy rAF → .visible).
   useEffect(() => {

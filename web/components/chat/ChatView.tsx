@@ -33,10 +33,12 @@ import {
 } from "@/lib/chat";
 import {
   suggestMinds,
+  generateMind,
   panelChat,
   isRealMindReply,
   type MindResponse,
 } from "@/lib/minds-chat";
+import { listMinds } from "@/lib/api";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { track } from "@/lib/analytics";
 import MessageList from "./MessageList";
@@ -374,10 +376,43 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         }
         if (genRef.current !== gen) return;
 
-        // Keep only suggestions that carry an id and aren't already active.
-        const fresh = suggested.filter(
-          (s) => s.id && !activeMindsRef.current.has(s.id),
-        ) as { id: string; name: string }[];
+        // The suggest endpoint returns NO id — each suggestion must be
+        // materialized via /api/minds/generate to get a real mind id before it
+        // can join. (Without this the whole "minds join in" auto-flow silently
+        // never fired.) Mirror production's suggest→generate fan-out.
+        const fresh: { id: string; name: string }[] = [];
+        for (const s of suggested) {
+          if (genRef.current !== gen) return;
+          const m = await generateMind(s);
+          if (m && !activeMindsRef.current.has(m.id)) {
+            fresh.push(m);
+          }
+        }
+
+        // Fallback: if generate produced nothing, pick from existing seed minds
+        // (scored by topic-word overlap) so the flow isn't silent — production
+        // does the same.
+        if (!fresh.length) {
+          try {
+            const all = await listMinds();
+            if (genRef.current !== gen) return;
+            const topic = (bookCtx[0]?.title || message || "").toLowerCase();
+            const words = topic.split(/\s+/).filter((w) => w.length > 3);
+            const scored = all
+              .filter((m) => m.id && !activeMindsRef.current.has(m.id))
+              .map((m) => {
+                const hay = `${m.domain || ""} ${m.era || ""} ${m.name || ""}`.toLowerCase();
+                return { m, score: words.reduce((acc, w) => acc + (hay.includes(w) ? 1 : 0), 0) };
+              })
+              .sort((a, b) => b.score - a.score);
+            for (const { m } of scored.slice(0, 2)) {
+              fresh.push({ id: m.id, name: m.name });
+            }
+          } catch {
+            /* seed fallback best-effort */
+          }
+        }
+
         if (!fresh.length) {
           setMindsBusy(false);
           return;

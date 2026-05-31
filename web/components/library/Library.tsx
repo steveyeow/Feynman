@@ -27,10 +27,12 @@ export default function Library() {
     try {
       const [agents, tops] = await Promise.all([
         get<AgentRow[]>("/api/agents"),
-        get<string[]>("/api/topics").catch(() => [] as string[]),
+        // /api/topics returns { topics: [...] } — unwrap it (was read as a bare
+        // array, so the tag row never rendered).
+        get<{ topics?: string[] } | string[]>("/api/topics").catch(() => ({ topics: [] })),
       ]);
       setBooks(mapAgentsToBooks(agents));
-      setTopics(tops);
+      setTopics(Array.isArray(tops) ? tops : tops.topics || []);
     } catch (e) {
       setError("Couldn't load the library. Is the API running?");
     } finally {
@@ -68,14 +70,16 @@ export default function Library() {
   }
 
   async function discover() {
-    const title = query.trim();
-    if (!title) return;
+    const q = query.trim();
+    if (!q) return;
     setDiscovering(true);
     try {
-      await post("/api/search-book", { title });
+      // Backend SearchBookRequest requires `query` (min_length 2), not `title`
+      // — sending `title` 422'd, so find-&-add never worked.
+      await post("/api/search-book", { query: q });
       await load();
     } catch {
-      setError(`Couldn't add "${title}". Try again.`);
+      setError(`Couldn't add "${q}". Try again.`);
     } finally {
       setDiscovering(false);
     }

@@ -49,6 +49,33 @@ export async function suggestMinds(
   return data.minds || [];
 }
 
+export interface MaterializedMind {
+  id: string;
+  name: string;
+}
+
+/**
+ * POST /api/minds/generate → mint a real mind (with an id) from a suggestion's
+ * {name, era, domain}. The suggest endpoint returns NO id, so each suggestion
+ * must be materialized here before it can join a panel-chat. Returns null on
+ * failure (the caller then falls back to a seed mind). `link_works:false`
+ * mirrors the production call (don't attach books during auto-join).
+ */
+export async function generateMind(s: SuggestedMind): Promise<MaterializedMind | null> {
+  try {
+    const m = await post<{ id?: string; name?: string }>("/api/minds/generate", {
+      name: s.name,
+      era: s.era || "",
+      domain: s.domain || "",
+      link_works: false,
+    });
+    if (m?.id && m.name) return { id: m.id, name: m.name };
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PanelChatArgs {
   message: string;
   mindIds: string[];

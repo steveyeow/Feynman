@@ -28,11 +28,36 @@ export function setAuthToken(token: string | null) {
 export class ApiError extends Error {
   status: number;
   body: unknown;
+  /** Server-provided human message (from {detail:{message}}), when present. */
+  detailMessage?: string;
+  /** Server error code, e.g. quota_exceeded / upload_limit_reached / auth_required. */
+  code?: string;
   constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.status = status;
     this.body = body;
+    const detail = (body as { detail?: unknown } | null)?.detail;
+    if (detail && typeof detail === "object") {
+      this.code = (detail as { code?: string }).code;
+      this.detailMessage = (detail as { message?: string }).message;
+    }
   }
+}
+
+// ── Quota / auth interceptors ───────────────────────────────────────────
+// api.ts is not a React module, so the overlay trigger, analytics, and login
+// redirect are injected by the app shell (ProOverlay provider) at mount. This
+// ports app.js's api() 429/401 handling: a daily-limit 429 opens the upgrade
+// overlay (the ONLY way the paywall surfaces on the hosted build); a 401
+// auth_required bounces to login.
+type QuotaHandler = (info: { action: string; code: string; message?: string }) => void;
+let _onQuota: QuotaHandler | null = null;
+let _onAuthRequired: (() => void) | null = null;
+export function setQuotaHandler(fn: QuotaHandler | null) {
+  _onQuota = fn;
+}
+export function setAuthRequiredHandler(fn: (() => void) | null) {
+  _onAuthRequired = fn;
 }
 
 export async function apiFetch<T = unknown>(
@@ -55,7 +80,17 @@ export async function apiFetch<T = unknown>(
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, `API ${res.status} on ${path}`, body);
+    const err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
+    // Browser-only interceptors (ports app.js api() 429/401 handling).
+    if (!isServer) {
+      if (res.status === 429 && (err.code === "quota_exceeded" || err.code === "upload_limit_reached")) {
+        const action = (body as { detail?: { action?: string } } | null)?.detail?.action || "";
+        _onQuota?.({ action, code: err.code, message: err.detailMessage });
+      } else if (res.status === 401 && err.code === "auth_required") {
+        _onAuthRequired?.();
+      }
+    }
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -93,4 +128,7 @@ export const listAgents = () => get<Agent[]>("/api/agents");
 export const getAgent = (id: string) => get<Agent>(`/api/agents/${encodeURIComponent(id)}`);
 export const listMinds = () => get<Mind[]>("/api/minds");
 export const getMind = (id: string) => get<Mind>(`/api/minds/${encodeURIComponent(id)}`);
-export const listTopics = () => get<string[]>("/api/topics");
+export const listTopics = () =>
+  get<{ topics?: string[] } | string[]>("/api/topics").then((r) =>
+    Array.isArray(r) ? r : r.topics || [],
+  );
