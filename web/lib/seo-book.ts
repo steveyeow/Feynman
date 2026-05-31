@@ -559,6 +559,7 @@ export interface RelatedMind {
   name: string;
   era?: string;
   domain?: string;
+  activity?: { count: number; last_seen?: string };
 }
 
 /**

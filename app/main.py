@@ -3964,9 +3964,102 @@ def api_agent_related(agent_id: str) -> JSONResponse:
         )
     except Exception:
         related_books = []
+    # Activity overlay: minds that have ACTUALLY discussed this book in real
+    # chats get a {count,last_seen} badge (seo.py render_minds_for_book). Keyed
+    # by lowercase mind name. Pure additive signal; merge onto related_minds.
+    try:
+        activity = list_minds_active_for_agent(agent_id) or {}
+    except Exception:
+        activity = {}
+    for m in related_minds:
+        act = activity.get((m.get("name") or "").lower())
+        if act and act.get("count", 0) > 0:
+            m["activity"] = {"count": act["count"], "last_seen": act.get("last_seen", "")}
     return JSONResponse(
         content={"books": related_books, "minds": related_minds},
         headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/library")
+def api_mind_library(mind_id: str) -> JSONResponse:
+    """Books in this mind's library (mirrors render_books_for_mind). Distinct
+    from the persona-listed 'notable works' — these are agents linked via
+    mind_works. Used for the cross-link section on /mind/{id}."""
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    try:
+        books = list_books_for_mind(mind_id)
+    except Exception:
+        books = []
+    return JSONResponse(
+        content={"books": books},
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/themes")
+def api_mind_themes(mind_id: str) -> JSONResponse:
+    """Community-emergent recent themes (mirrors render_mind_recent_themes):
+    topics readers have actually discussed with this mind, aggregated from
+    anonymized chat memory. Each item is {topic, count, last_seen}."""
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    try:
+        themes = list_mind_recent_topics(mind_id)
+    except Exception:
+        themes = []
+    return JSONResponse(
+        content={"themes": themes},
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=1800"},
+    )
+
+
+def _public_session_card(s: dict[str, Any]) -> dict[str, Any]:
+    """Compact preview of an approved public session for the discussions list."""
+    return {
+        "id": s.get("id"),
+        "title": s.get("public_title") or s.get("title") or "Discussion",
+        "handle": s.get("public_handle") or "Anonymous",
+        "approved_at": s.get("approved_at") or s.get("consent_at") or "",
+    }
+
+
+@app.get("/api/agents/{agent_id}/discussions")
+def api_agent_discussions(agent_id: str) -> JSONResponse:
+    """Approved public chat sessions about this book (mirrors the
+    /book/{id}/discussions aggregation page). 404 when UGC is disabled."""
+    _require_ugc_enabled()
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    try:
+        sessions = [_public_session_card(s) for s in list_public_sessions_for_agent(agent_id)]
+    except Exception:
+        sessions = []
+    return JSONResponse(
+        content={"discussions": sessions, "entity_name": agent.get("name", "")},
+        headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/discussions")
+def api_mind_discussions(mind_id: str) -> JSONResponse:
+    """Approved public chat sessions with this mind (mirrors the
+    /mind/{id}/discussions aggregation page). 404 when UGC is disabled."""
+    _require_ugc_enabled()
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    try:
+        sessions = [_public_session_card(s) for s in list_public_sessions_for_mind(mind_id)]
+    except Exception:
+        sessions = []
+    return JSONResponse(
+        content={"discussions": sessions, "entity_name": mind.get("name", "")},
+        headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
 
 

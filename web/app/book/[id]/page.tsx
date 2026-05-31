@@ -166,6 +166,11 @@ export default async function BookLandingPage({ params }: PageProps) {
             {related.minds.map((m) => (
               <li key={m.id}>
                 <Link href={`/mind/${m.id}`}>{m.name}</Link>
+                {m.activity && m.activity.count > 0 ? (
+                  <span className="activity-badge" title="Active in real reader conversations about this book">
+                    {" "}● {m.activity.count} {m.activity.count === 1 ? "chat" : "chats"}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

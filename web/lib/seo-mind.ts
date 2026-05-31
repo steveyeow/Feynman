@@ -706,3 +706,73 @@ export async function fetchPublicDiscussion(id: string): Promise<PublicDiscussio
     return null;
   }
 }
+
+// ─── Content-density sections: mind library / themes / discussions list ───
+
+export interface LibraryBook {
+  id: string;
+  name: string;
+  type?: string;
+  author?: string;
+}
+
+/** Books in this mind's library (GET /api/minds/{id}/library) — cross-links
+ *  distinct from persona "notable works". Empty array on failure. */
+export async function fetchMindLibrary(id: string): Promise<LibraryBook[]> {
+  try {
+    const res = await get<{ books?: LibraryBook[] }>(
+      `/api/minds/${encodeURIComponent(id)}/library`,
+      { next: { revalidate: 86400 } },
+    );
+    return Array.isArray(res?.books) ? res.books : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface MindTheme {
+  topic: string;
+  count: number;
+  last_seen?: string;
+}
+
+/** Community-emergent recent themes (GET /api/minds/{id}/themes) — what
+ *  readers actually discuss with this mind. Empty array on failure. */
+export async function fetchMindThemes(id: string): Promise<MindTheme[]> {
+  try {
+    const res = await get<{ themes?: MindTheme[] }>(
+      `/api/minds/${encodeURIComponent(id)}/themes`,
+      { next: { revalidate: 1800 } },
+    );
+    return Array.isArray(res?.themes) ? res.themes : [];
+  } catch {
+    return [];
+  }
+}
+
+export interface DiscussionCard {
+  id: string;
+  title: string;
+  handle: string;
+  approved_at: string;
+}
+
+/** Approved public discussions for an entity (book or mind). Returns the list
+ *  + the entity name. Empty list when UGC disabled / none approved. */
+export async function fetchEntityDiscussions(
+  kind: "agents" | "minds",
+  id: string,
+): Promise<{ discussions: DiscussionCard[]; entityName: string }> {
+  try {
+    const res = await get<{ discussions?: DiscussionCard[]; entity_name?: string }>(
+      `/api/${kind}/${encodeURIComponent(id)}/discussions`,
+      { next: { revalidate: 600 } },
+    );
+    return {
+      discussions: Array.isArray(res?.discussions) ? res.discussions : [],
+      entityName: res?.entity_name || "",
+    };
+  } catch {
+    return { discussions: [], entityName: "" };
+  }
+}

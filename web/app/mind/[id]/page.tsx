@@ -20,6 +20,8 @@ import {
   fetchMind,
   fetchRelatedMinds,
   fetchTopics,
+  fetchMindLibrary,
+  fetchMindThemes,
   isMindTopicRelevant,
   lookupSameAs,
   metaDescription,
@@ -84,13 +86,20 @@ export default async function MindPage({
   if (!mind) notFound();
 
   // Enrichment in parallel; each degrades to empty on failure.
-  const [agents, related, topics] = await Promise.all([
+  const [agents, related, topics, library, themes] = await Promise.all([
     fetchAgents(),
     fetchRelatedMinds(mind),
     fetchTopics(),
+    fetchMindLibrary(params.id),
+    fetchMindThemes(params.id),
   ]);
 
   const matchingTopics = topics.filter((t) => isMindTopicRelevant(mind, t));
+
+  // "Books in this mind's library" = linked books NOT already in Notable Works
+  // (dedupe by case-insensitive title), per render_books_for_mind.
+  const workTitles = new Set((mind.works || []).map((w) => w.toLowerCase().trim()));
+  const libraryExtra = library.filter((b) => !workTitles.has((b.name || "").toLowerCase().trim()));
 
   const canonical = abs(`/mind/${params.id}`);
   const ogImage = abs(`/mind/${params.id}/og.png`);
@@ -168,6 +177,38 @@ export default async function MindPage({
       {/* persona is stripped by the JSON API — renders only if ever present */}
       <MindPersonaExcerpt persona={mind.persona} />
       <MindWorks works={mind.works} agents={agents} />
+
+      {libraryExtra.length ? (
+        <section className="seo-section">
+          <h2>Books in {mind.name}&apos;s library</h2>
+          <ul className="related-books">
+            {libraryExtra.map((b) => (
+              <li key={b.id}>
+                <Link href={`/book/${b.id}`}>{b.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {themes.length ? (
+        <section className="seo-section">
+          <h2>Recent themes in conversations</h2>
+          <p className="seo-meta">
+            Topics readers have actually been discussing with {mind.name} on
+            Feynman, aggregated across sessions. Updates as new conversations happen.
+          </p>
+          <ul className="theme-list">
+            {themes.map((t) => (
+              <li key={t.topic} className="theme-chip">
+                {t.topic}
+                {t.count > 1 ? <span className="theme-count"> ×{t.count}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <DialoguesLink mindId={params.id} name={mind.name} />
     </EntityLayout>
   );

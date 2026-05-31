@@ -86,11 +86,14 @@
   --depth-3: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* NOTE: no body background-image override — the body keeps the production
- * --bg-home flat color (clean cool-grey #f5f5f7 / dark #1c1c1e). The earlier
- * warm radial-gradient is removed; it was the source of the "tinted/dirty"
- * look that diverged from production. Glass reads against the real app
- * surfaces behind it, which is enough on the web. */
+/* App canvas background. The legacy `body` rule sets NO background-color (in
+ * production each page-view painted its own), so without this the body is
+ * transparent — in dark mode that showed through as a light/!=card mismatch
+ * (dark cards on a pale page). Paint the frame explicitly with the flat
+ * production --bg-home; this fixes dark mode across every surface at once.
+ * No warm gradient (that was the earlier "tinted" divergence). */
+body { background-color: var(--bg-home); }
+.app-main { background-color: var(--bg-home); }
 
 /* ── Glass primitive (utility + the material recipe) ───────────────────── */
 .lg-glass {
@@ -297,6 +300,39 @@
   color: var(--text-muted); font-size: 14px;
 }
 .seo-explore-footer a { color: var(--text-secondary); }
+
+/* Content-density sections (related lists, themes, activity, discussions). */
+.seo-content .related-books,
+.seo-content .related-minds { list-style: none; padding: 0; margin: 0.6em 0; }
+.seo-content .related-books li,
+.seo-content .related-minds li { margin: 0.4em 0; }
+.seo-content .related-books a,
+.seo-content .related-minds a { color: var(--accent); text-decoration: none; }
+.seo-content .related-books a:hover,
+.seo-content .related-minds a:hover { text-decoration: underline; }
+
+.theme-list { list-style: none; padding: 0; margin: 0.8em 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: var(--r-pill);
+  background: var(--bg-chat); border: 1px solid var(--border);
+  font-size: 13px; color: var(--text-secondary);
+}
+.theme-chip .theme-count { color: var(--text-muted); font-size: 12px; }
+
+.activity-badge { color: #15803d; font-size: 12px; white-space: nowrap; }
+:root.dark .activity-badge { color: #4ade80; }
+
+.discussion-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.discussion-list-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-chat); border: 1px solid var(--border);
+  text-decoration: none !important;
+}
+.discussion-list-item:hover { border-color: var(--border-strong); }
+.discussion-list-title { color: var(--text); font-weight: 600; font-size: 15px; }
+.discussion-list-by { color: var(--text-muted); font-size: 13px; }
 
 /* Legacy single-column CTA row (kept for q/insights pages that still use it). */
 .seo-cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 1.6em 0; }
