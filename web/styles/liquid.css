@@ -134,6 +134,7 @@ body { background-color: var(--bg-home); }
 .chats-new-btn, .chats-new-btn:hover,
 .chats-list-item, .chats-list-item:hover,
 .card-chat-btn, .card-chat-btn:hover,
+.seo-action, .seo-action:hover,
 .user-menu-item, .user-menu-item:hover { text-decoration: none; }
 
 /* Floating overlays — glass. */
@@ -252,6 +253,16 @@ body { background-color: var(--bg-home); }
 .seo-grid { display: block; }
 .seo-grid.has-rail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; align-items: start; }
 .seo-content { min-width: 0; color: var(--text); font-size: 17px; line-height: 1.7; }
+/* h1 inside content (single-column SeoColumn pages put the title in-content,
+   whereas EntityLayout pages put it in the hero). */
+.seo-content > h1 {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;
+  margin: 0.2em 0 0.4em; color: var(--text);
+}
+.seo-content .seo-author { color: var(--text-secondary); font-size: 18px; margin: 0 0 2px; }
+.seo-content .seo-meta { color: var(--text-muted); font-size: 14px; }
+.seo-content .seo-backlink { display: inline-block; color: var(--text-muted); font-size: 14px; margin-bottom: 10px; }
 .seo-content h2 {
   font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
   margin: 1.8em 0 0.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border);

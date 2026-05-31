@@ -42,7 +42,8 @@ export default async function MindDiscussionsPage({
   const { discussions } = await fetchEntityDiscussions("minds", params.id);
 
   const canonical = abs(`/mind/${params.id}/discussions`);
-  const chatHref = `/?mind=${encodeURIComponent(params.id)}`;
+  // Dedicated 1:1 chat page (not the multi-mind home composer).
+  const chatHref = `/mind/${encodeURIComponent(params.id)}/chat`;
   const actions: EntityAction[] = [
     { label: `Chat with ${mind.name}`, href: chatHref, variant: "primary" },
     { label: `About ${mind.name}`, href: `/mind/${params.id}`, variant: "secondary" },

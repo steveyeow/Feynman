@@ -688,10 +688,11 @@ export default function MindsGraph() {
                 className="tt-chat-icon-btn"
                 title={`Chat with ${tooltip.node.name}`}
                 // Chatting with a single mind is pro-gated (legacy app.js 6807);
-                // the Profile button above stays free.
+                // the Profile button above stays free. Routes to the dedicated
+                // 1:1 chat page (legacy #/mind/{id} WAS this chat surface).
                 onClick={() =>
                   requirePro(() =>
-                    router.push(`/mind/${encodeURIComponent(tooltip.node.id)}`),
+                    router.push(`/mind/${encodeURIComponent(tooltip.node.id)}/chat`),
                   )
                 }
               >

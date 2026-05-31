@@ -103,9 +103,10 @@ export default async function MindPage({
 
   const canonical = abs(`/mind/${params.id}`);
   const ogImage = abs(`/mind/${params.id}/og.png`);
-  // Chat with a single mind → the conversational surface, preselecting the mind
-  // (real path, not the dead /#/mind hash). The Chat action lives at the TOP.
-  const chatHref = `/?mind=${encodeURIComponent(params.id)}`;
+  // Chat with a single mind → the DEDICATED 1:1 chat page (not the multi-mind
+  // home composer, which would treat the mind as an invited participant). The
+  // Chat action lives at the TOP.
+  const chatHref = `/mind/${encodeURIComponent(params.id)}/chat`;
 
   const eraDomain = [mind.era, mind.domain].filter(Boolean).join(" · ");
 

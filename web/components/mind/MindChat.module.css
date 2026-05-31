@@ -1,0 +1,85 @@
+/**
+ * Net-new bits for the dedicated single-mind chat page. The structural classes
+ * (.mind-detail-layout, .chat-main, .chat-messages, .chat-sidebar-right,
+ * .mind-avatar, .mind-domain-tag, .mind-share-*, .sidebar-title) all live in
+ * styles/app.css and are reused verbatim — this module only adds the few helpers
+ * the legacy expressed with inline styles, plus the sign-in fallback panel.
+ */
+
+/* App-frame wrapper so the flex layout fills the shell like the legacy
+   #page-mind did (height:100vh, flex column). The shell already provides the
+   surrounding chrome; we just claim the available height. */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-chat);
+}
+
+/* Center the avatar + name + era block (legacy used inline margin/text-align). */
+.metaAvatar {
+  width: 64px;
+  height: 64px;
+  font-size: 28px;
+  margin: 0 auto 12px;
+}
+.metaName {
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.metaEra {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 8px;
+}
+.metaProfileRow {
+  text-align: center;
+  margin-bottom: 12px;
+}
+.metaBio {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.metaTags {
+  margin-bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.metaWorks {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-left: 16px;
+  margin: 0;
+}
+.metaWorks li {
+  margin-bottom: 4px;
+}
+.metaCount {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+/* Sign-in / not-found fallback shown in the messages column (port of the legacy
+   inline-styled "Sign in to chat with …" block). */
+.fallback {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.fallback p {
+  margin-bottom: 12px;
+}
+.fallbackLink {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
