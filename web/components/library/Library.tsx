@@ -6,36 +6,39 @@ import { AgentRow, Book, mapAgentsToBooks, mergeVotes } from "@/lib/books";
 import BookCard from "./BookCard";
 
 /**
- * Library — client island. Faithful to the legacy flow: load /api/agents,
- * derive Books, client-side search + topic-tag filter + Recent/All, and the
- * real-time "we'll find and add it" discovery bar (POST /api/search-book) when
- * a search has no local match.
+ * Library — faithful port of the legacy library surface:
+ *   • Topic tags (.topic-tag): toggle active, "Clear all", loading state.
+ *   • Discover-more bar: when a topic is active (and not searching), offers
+ *     "+ Discover 1–3 more" → POST /api/discover {topic,count} to grow the
+ *     catalog (port of renderDiscoverBar + discoverMore).
+ *   • Real-time "find & add": a search with no local match → POST
+ *     /api/search-book {query}.
+ *   • All/Recent filter tabs; vote counts merged onto cards.
  */
 export default function Library() {
   const [books, setBooks] = useState<Book[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [activeTopics, setActiveTopics] = useState<Set<string>>(new Set());
+  const [loadingTopics, setLoadingTopics] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"recent" | "all">("recent");
   const [loading, setLoading] = useState(true);
   const [discovering, setDiscovering] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const [agents, tops, votes] = await Promise.all([
         get<AgentRow[]>("/api/agents"),
-        // /api/topics returns { topics: [...] } — unwrap it (was read as a bare
-        // array, so the tag row never rendered).
         get<{ topics?: string[] } | string[]>("/api/topics").catch(() => ({ topics: [] })),
-        // Vote counts merged into Book.upvotes (port of buildBookList).
         listVotes().catch(() => []),
       ]);
       setBooks(mergeVotes(mapAgentsToBooks(agents), votes));
       setTopics(Array.isArray(tops) ? tops : tops.topics || []);
-    } catch (e) {
+    } catch {
       setError("Couldn't load the library. Is the API running?");
     } finally {
       setLoading(false);
@@ -46,9 +49,11 @@ export default function Library() {
     load();
   }, [load]);
 
-  // Remove a deleted book from the list immediately (BookCard already DELETEd
-  // the agent). Port of deleteBook's loadAgents()+renderLibraryGrid refresh,
-  // done as an optimistic filter so the card disappears without a refetch.
+  function showToast(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2600);
+  }
+
   const handleDeleted = useCallback((agentId: string) => {
     setBooks((prev) => prev.filter((b) => b.agentId !== agentId));
   }, []);
@@ -71,6 +76,7 @@ export default function Library() {
   }, [books, query, activeTopics, filter]);
 
   function toggleTopic(t: string) {
+    if (loadingTopics.has(t)) return;
     setActiveTopics((prev) => {
       const next = new Set(prev);
       next.has(t) ? next.delete(t) : next.add(t);
@@ -78,23 +84,55 @@ export default function Library() {
     });
   }
 
-  async function discover() {
-    const q = query.trim();
-    if (!q) return;
+  // Topic-driven discovery: grow the catalog for the active topics (port of
+  // discoverMore → POST /api/discover {topic,count}).
+  async function discoverMore() {
+    const topicList = [...activeTopics];
+    if (!topicList.length || discovering) return;
     setDiscovering(true);
+    setLoadingTopics(new Set(topicList));
     try {
-      // Backend SearchBookRequest requires `query` (min_length 2), not `title`
-      // — sending `title` 422'd, so find-&-add never worked.
+      let added = 0;
+      for (const topic of topicList) {
+        const count = Math.floor(Math.random() * 3) + 1;
+        const data = await post<{ books?: { new?: boolean }[] }>("/api/discover", {
+          topic,
+          count,
+        });
+        added += (data.books || []).filter((b) => b.new).length;
+      }
+      await load();
+      showToast(
+        added > 0
+          ? `Added ${added} new book${added > 1 ? "s" : ""}`
+          : "These books are already in your library — try a different topic",
+      );
+    } catch {
+      showToast("Discovery failed. Try again.");
+    } finally {
+      setLoadingTopics(new Set());
+      setDiscovering(false);
+    }
+  }
+
+  // Real-time "find & add" when a search has no local match.
+  async function findAndAdd() {
+    const q = query.trim();
+    if (q.length < 2 || adding) return;
+    setAdding(true);
+    try {
       await post("/api/search-book", { query: q });
       await load();
     } catch {
       setError(`Couldn't add "${q}". Try again.`);
     } finally {
-      setDiscovering(false);
+      setAdding(false);
     }
   }
 
-  const noMatch = query.trim().length > 0 && !loading && filtered.length === 0;
+  const searching = query.trim().length > 0;
+  const noMatch = searching && !loading && filtered.length === 0;
+  const showDiscoverBar = activeTopics.size > 0 && !searching;
 
   return (
     <div className="library-content">
@@ -132,27 +170,56 @@ export default function Library() {
         </div>
       </div>
 
+      {/* Topic tags (.topic-tag) — toggle active + Clear all, like production. */}
       {topics.length > 0 && (
         <div className="topic-tags-grid">
-          {topics.map((t) => (
+          {activeTopics.size > 0 && (
             <button
-              key={t}
-              className={`filter-tag${activeTopics.has(t) ? " active" : ""}`}
-              onClick={() => toggleTopic(t)}
+              className="topic-tag topic-tag-clear"
+              onClick={() => setActiveTopics(new Set())}
             >
-              {t}
+              Clear all ×
             </button>
-          ))}
+          )}
+          {topics.map((t) => {
+            const isLoading = loadingTopics.has(t);
+            const isActive = activeTopics.has(t);
+            return (
+              <button
+                key={t}
+                className={`topic-tag${isLoading ? " loading" : isActive ? " active" : ""}`}
+                onClick={() => toggleTopic(t)}
+              >
+                {isLoading ? "… " : ""}
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Discover-more bar: grow the catalog for the active topic(s). */}
+      {showDiscoverBar && (
+        <div className="library-discover-bar">
+          <span className="discover-bar-text">
+            Want more books on <strong>{[...activeTopics].join(", ")}</strong>?
+          </span>
+          <button className="discover-bar-btn" onClick={discoverMore} disabled={discovering}>
+            {discovering ? "Discovering…" : "+ Discover 1–3 more"}
+          </button>
         </div>
       )}
 
       {error && <p className="library-error">{error}</p>}
 
+      {/* Real-time find & add when a search has no local match. */}
       {noMatch && (
         <div className="library-discover-bar">
-          <span>Can&apos;t find &ldquo;{query.trim()}&rdquo;?</span>
-          <button className="card-chat-btn" onClick={discover} disabled={discovering}>
-            {discovering ? "Adding…" : `Find & add "${query.trim()}"`}
+          <span className="discover-bar-text">
+            Can&apos;t find &ldquo;{query.trim()}&rdquo; in your library?
+          </span>
+          <button className="discover-bar-btn" onClick={findAndAdd} disabled={adding}>
+            {adding ? "Adding…" : `Find & add it`}
           </button>
         </div>
       )}
@@ -166,6 +233,8 @@ export default function Library() {
           ))}
         </div>
       )}
+
+      {toast && <div className="library-toast">{toast}</div>}
     </div>
   );
 }

@@ -7,18 +7,15 @@ import { Book, coverStyle, coverInitials, statusBadge } from "@/lib/books";
 import { upvote, deleteAgent } from "@/lib/api";
 
 /**
- * Library book card — faithful to production selectBookForChat:
- *   • Cover click  → CHAT (/?book={id}, preselects the book in the composer),
- *                    exactly like production's card click. The Read/Preview
- *                    OVERLAY button (only when the book has content) is the
- *                    sole path to the reader.
- *   • Chat button  → CHAT (/?book={id}).
- *   • Title/author → the Details (SEO) page.
- *   • Upvote (▲)   → POST /api/votes {title} (port of handleUpvote), optimistic.
- *   • Delete (×)   → DELETE /api/agents/{id} for uploaded/catalog/AI books only
- *                    (mirrors the production deleteBtn condition), with confirm.
- * No /read dead-ends: a catalog stub (no readable content) never routes to the
- * reader; its cover and Chat both go to the conversational composer.
+ * Library book card — faithful to production:
+ *   • Cover color-block  → READ (full text) / PREVIEW (ready, no full text) via
+ *                          /read/{id}; for a catalog stub (no content) it has no
+ *                          read/preview affordance and instead opens chat.
+ *   • Chat button (left) → CHAT (/?book={id}, preselects the book — production
+ *                          selectBookForChat). NEVER the reader.
+ *   • Details (ⓘ icon)   → the /book/{id} SEO detail page.
+ *   • Upvote (▲)         → POST /api/votes {title}, optimistic.
+ *   • Delete (×)         → DELETE /api/agents/{id}, uploaded/catalog/AI only.
  */
 export default function BookCard({
   book,
@@ -35,33 +32,29 @@ export default function BookCard({
   const detailHref = `/book/${encodeURIComponent(book.agentId)}`;
   const readHref = `/read/${encodeURIComponent(book.agentId)}`;
   const chatHref = `/?book=${encodeURIComponent(book.agentId)}`;
+  // The cover block reads/previews when there's content; a catalog stub has
+  // nothing to read, so its cover opens chat instead (never a /read dead-end).
+  const coverHref = overlay ? readHref : chatHref;
 
-  // Optimistic upvote count (incremented on click; reconciled with the server
-  // count when the POST resolves).
   const [upvotes, setUpvotes] = useState(book.upvotes || 0);
   const [voting, setVoting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Production condition: only uploaded / catalog / AI-generated books with an
-  // agent id are deletable.
   const canDelete =
     (book.isUploaded || book.isCatalog || book.isAIGenerated) && !!book.agentId;
-  // Failed/errored AI books always show the delete affordance (production
-  // _alwaysShowDelete); others reveal it on hover via .book-card:hover css.
   const alwaysShowDelete =
     book.isAIGenerated && (book.status === "failed" || book.status === "error");
 
   async function handleUpvote(e: React.MouseEvent) {
-    // Don't trigger the cover→chat navigation.
     e.stopPropagation();
     if (voting) return;
     setVoting(true);
-    setUpvotes((n) => n + 1); // optimistic
+    setUpvotes((n) => n + 1);
     try {
       const res = await upvote(book.title);
       if (res && typeof res.count === "number") setUpvotes(res.count);
     } catch {
-      // Keep the optimistic increment (matches production's catch path).
+      /* keep optimistic */
     } finally {
       setVoting(false);
     }
@@ -96,39 +89,32 @@ export default function BookCard({
           ×
         </button>
       )}
+      {/* Cover color-block → Read / Preview (full text) or chat (stub). */}
       <div
         className="card-cover-wrap"
         role="link"
         tabIndex={0}
-        aria-label={`Chat about ${book.title}`}
-        onClick={() => router.push(chatHref)}
+        aria-label={overlay ? `${overlay} ${book.title}` : `Chat about ${book.title}`}
+        onClick={() => router.push(coverHref)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(chatHref);
+          if (e.key === "Enter") router.push(coverHref);
         }}
       >
         <div className="card-cover-gen" style={{ background: coverStyle(book) }}>
           <span>{coverInitials(book.title)}</span>
         </div>
         {overlay && (
-          <button
-            type="button"
-            className="card-cover-overlay"
-            aria-label={`${overlay} ${book.title}`}
-            onClick={(e) => {
-              // Overlay is the ONLY path to the reader (book has content).
-              e.stopPropagation();
-              router.push(readHref);
-            }}
-          >
+          <div className="card-cover-overlay">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
             </svg>
             <span>{overlay}</span>
-          </button>
+          </div>
         )}
       </div>
-      <Link href={detailHref} className="card-body" title={`About ${book.title}`}>
+      {/* Title/author: plain text (details is the ⓘ in the footer, not here). */}
+      <div className="card-body">
         <h3 className="card-title">{book.title}</h3>
         <p className="card-author">
           {book.isAIGenerated
@@ -137,12 +123,25 @@ export default function BookCard({
               : "AI-generated"
             : book.author}
         </p>
-      </Link>
+      </div>
       <div className="card-footer">
         <Link className="card-chat-btn" href={chatHref}>
           Chat
         </Link>
         {badge && <span className={`card-badge ${badge.cls}`}>{badge.text}</span>}
+        <Link
+          className="card-details-btn"
+          href={detailHref}
+          title="Book details"
+          aria-label={`Details about ${book.title}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+        </Link>
         <button
           type="button"
           className="upvote-btn"
