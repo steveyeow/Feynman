@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Book, coverStyle, statusBadge } from "@/lib/books";
+import { Book, coverStyle, coverInitials, statusBadge } from "@/lib/books";
 
 /**
  * Library book card. Faithful to the legacy card, with the #6 entry-point fix:
@@ -37,8 +37,8 @@ export default function BookCard({ book }: { book: Book }) {
           if (e.key === "Enter") router.push(coverHref);
         }}
       >
-        <div className="card-cover-placeholder" style={{ background: coverStyle(book) }}>
-          {!book.isAIGenerated && <span>{book.title.slice(0, 1).toUpperCase()}</span>}
+        <div className="card-cover-gen" style={{ background: coverStyle(book) }}>
+          <span>{coverInitials(book.title)}</span>
         </div>
         {overlay && (
           <div className="card-cover-overlay">

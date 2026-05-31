@@ -73,16 +73,35 @@ export function mapAgentsToBooks(agents: AgentRow[]): Book[] {
     });
 }
 
-/** Deterministic gradient cover (legacy coverColor): stable hue from the title. */
+// Verbatim from legacy app.js: fixed palette + FNV-ish hash (NOT an HSL hash),
+// so a given title maps to the exact same cover color as production.
+const COVER_COLORS = [
+  "#264653", "#2a9d8f", "#e76f51", "#457b9d", "#6d597a",
+  "#355070", "#b56576", "#0077b6", "#588157", "#9b2226",
+];
+
+/** Deterministic cover background. AI books → the purple gradient; everything
+ *  else → a solid color from COVER_COLORS keyed on the title (legacy coverColor). */
 export function coverStyle(book: Book): string {
   if (book.isAIGenerated) {
     return "linear-gradient(135deg,#667eea 0%,#764ba2 100%)";
   }
   let h = 0;
   for (let i = 0; i < book.title.length; i++) {
-    h = (h * 31 + book.title.charCodeAt(i)) % 360;
+    h = ((h << 5) - h + book.title.charCodeAt(i)) | 0;
   }
-  return `linear-gradient(135deg, hsl(${h} 42% 60%), hsl(${(h + 38) % 360} 44% 48%))`;
+  return COVER_COLORS[Math.abs(h) % COVER_COLORS.length];
+}
+
+/** Cover initials — first letters of up to TWO words longer than 2 chars
+ *  (legacy coverInitials). "Induction motor" → "IM", "Tesla coil" → "TC". */
+export function coverInitials(title: string): string {
+  return title
+    .split(/[\s:—]+/)
+    .filter((w) => w.length > 2)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
 }
 
 /** Status badge text, or null when the book is ready/normal. */

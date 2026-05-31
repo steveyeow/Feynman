@@ -127,6 +127,7 @@
 .card-author,
 .book-card a, .book-card a:hover,
 .card-body, .card-body:hover,
+.card-cover-wrap, .card-cover-wrap:hover,
 .chats-new-btn, .chats-new-btn:hover,
 .chats-list-item, .chats-list-item:hover,
 .card-chat-btn, .card-chat-btn:hover,
@@ -192,6 +193,11 @@
 }
 
 /* ── Library helpers (new states not in the legacy stylesheet) ─────────── */
+/* card-body is an <a> (Details link), so its children inherit the link color.
+ * Production card titles are --text and authors --text-muted — restate them so
+ * the title doesn't render accent-blue. */
+.card-body .card-title { color: var(--text); }
+.card-body .card-author { color: var(--text-muted); }
 .library-loading,
 .library-error { color: var(--text-secondary); padding: 24px 4px; font-size: 14px; }
 .library-error { color: var(--accent); }
@@ -205,13 +211,44 @@
   font-size: 14px; color: var(--text-secondary);
 }
 
-/* ── SEO / reading content layer — clean, NOT glass ───────────────────── */
-.seo-page { padding: 40px 24px 72px; }
-.seo-content { max-width: 760px; margin: 0 auto; color: var(--text); font-size: 17px; line-height: 1.7; }
-.seo-content > h1 {
+/* ── SEO entity pages — clean content + top actions + right rail ──────────
+ * The page scrolls as ONE document inside .seo-scroll (the only scroll
+ * container besides the app shell — fixes the prior nested-scroll trap where
+ * inner panes couldn't reach their content). NOT glass — clean reading. */
+.seo-scroll { height: 100%; overflow-y: auto; }
+.seo-entity { max-width: 1100px; margin: 0 auto; padding: 36px 32px 96px; }
+
+/* Hero: title + subtitle + the prominent top action bar. */
+.seo-hero { margin-bottom: 24px; }
+.seo-hero h1 {
   font-family: 'Libre Baskerville', Georgia, serif;
-  font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; margin: 0 0 0.4em;
+  font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;
+  margin: 0 0 0.25em; color: var(--text);
 }
+.seo-hero .seo-author { color: var(--text-secondary); font-size: 18px; margin: 0 0 2px; }
+.seo-hero .seo-meta { color: var(--text-muted); font-size: 14px; margin: 0; }
+.seo-hero .seo-backlink { display: inline-block; color: var(--text-muted); font-size: 14px; margin-bottom: 12px; }
+
+/* Top action bar — Read / Preview / Chat / Share, prominent, above the fold. */
+.seo-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.seo-action {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 20px; border-radius: var(--r-control);
+  font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  border: 1px solid transparent; transition: opacity 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.seo-action.primary { background: var(--accent); color: #fff; }
+.seo-action.primary:hover { opacity: 0.9; }
+.seo-action.secondary { background: var(--bg-chat); color: var(--text); border-color: var(--border-strong); }
+.seo-action.secondary:hover { background: rgba(128,128,128,0.08); }
+.seo-action.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }
+.seo-action.ghost:hover { color: var(--text); background: rgba(128,128,128,0.08); }
+
+/* Two-column: main content + right info rail (desktop); stacks on mobile. */
+.seo-grid { display: block; }
+.seo-grid.has-rail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; align-items: start; }
+.seo-content { min-width: 0; color: var(--text); font-size: 17px; line-height: 1.7; }
 .seo-content h2 {
   font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
   margin: 1.8em 0 0.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--border);
@@ -224,12 +261,44 @@
 .seo-content li { margin: 0.25em 0; }
 .seo-content blockquote {
   margin: 1em 0; padding: 14px 18px;
-  background: var(--bg-elev); border-left: 3px solid var(--border-strong); border-radius: 8px;
+  background: var(--bg-chat); border-left: 3px solid var(--border-strong); border-radius: 8px;
 }
-.seo-content .seo-author { color: var(--text-secondary); font-size: 18px; margin-top: 0; }
-.seo-content .seo-meta { color: var(--text-muted); font-size: 14px; }
 .seo-content small { color: var(--text-muted); font-size: 13px; }
 .seo-section { margin: 2em 0; }
+.seo-section:first-child { margin-top: 0; }
+
+/* SEO empty-state (catalog stub) — left-aligned card, NOT the centered
+ * library-loading .empty-state from app.css. */
+.seo-content .empty-state {
+  text-align: left; padding: 18px 20px; min-height: 0;
+  background: var(--bg-chat); border: 1px solid var(--border); border-radius: 12px;
+}
+.seo-content .empty-state-headline { font-weight: 600; margin: 0 0 8px; color: var(--text); }
+.seo-content .book-about { font-size: 18px; line-height: 1.6; color: var(--text-secondary); }
+
+/* Right info rail — meta card + related links. */
+.seo-rail { display: flex; flex-direction: column; gap: 20px; position: sticky; top: 24px; }
+.seo-rail-card {
+  background: var(--bg-chat); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow-sm);
+}
+.seo-rail-card h3 {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted); margin: 0 0 10px;
+}
+.seo-rail-card p { margin: 4px 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.seo-rail-card ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.seo-rail-card li { font-size: 14px; }
+.seo-rail-card a { color: var(--accent); text-decoration: none; }
+.seo-rail-card a:hover { text-decoration: underline; }
+
+.seo-explore-footer {
+  margin-top: 3em; padding-top: 1.5em; border-top: 1px solid var(--border);
+  color: var(--text-muted); font-size: 14px;
+}
+.seo-explore-footer a { color: var(--text-secondary); }
+
+/* Legacy single-column CTA row (kept for q/insights pages that still use it). */
 .seo-cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 1.6em 0; }
 .seo-cta-row a {
   display: inline-block; padding: 11px 20px; border-radius: var(--r-control);
@@ -237,11 +306,13 @@
 }
 .seo-cta-row a.primary { background: var(--accent); color: #fff; }
 .seo-cta-row a.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-.seo-explore-footer {
-  margin-top: 3em; padding-top: 1.5em; border-top: 1px solid var(--border);
-  color: var(--text-muted); font-size: 14px;
+
+@media (max-width: 860px) {
+  .seo-grid.has-rail { grid-template-columns: 1fr; }
+  .seo-rail { position: static; flex-direction: row; flex-wrap: wrap; }
+  .seo-rail-card { flex: 1 1 240px; }
+  .seo-entity { padding: 24px 18px 80px; }
 }
-.seo-explore-footer a { color: var(--text-secondary); }
 
 /* ── Auth / theme / account menu ──────────────────────────────────────────
  * Production styles .sidebar-user-menu / .user-menu-item / .profile-chevron in

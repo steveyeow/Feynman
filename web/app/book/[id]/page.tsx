@@ -2,20 +2,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 
-import BookMeta from "@/components/seo/book/BookMeta";
 import BookEmptyState from "@/components/seo/book/BookEmptyState";
 import AboutBook from "@/components/seo/book/AboutBook";
 import SamplePassages from "@/components/seo/book/SamplePassages";
 import TableOfContents from "@/components/seo/book/TableOfContents";
 import PopularQuestions from "@/components/seo/book/PopularQuestions";
-import CtaRow from "@/components/seo/book/CtaRow";
 import LiveContentLink from "@/components/seo/book/LiveContentLink";
-import ExploreFooter, {
-  type ExploreItem,
-} from "@/components/seo/book/ExploreFooter";
 
 import {
   SITE_URL,
@@ -126,29 +122,85 @@ export default async function BookLandingPage({ params }: PageProps) {
     ? faqJsonld(questions.filter(Boolean).map((q) => ({ question: q, answer: deflect })))
     : null;
 
-  // ── Explore footer: topic hub + first 2 questions as neighborhood ──────
-  // Related books/minds for a book have no JSON endpoint (see report), so we
-  // build the neighborhood from the data we do have: the topic hub.
-  const exploreItems: ExploreItem[] = [];
-  if (data.category) {
-    exploreItems.push({
-      label: `More on ${data.category}`,
-      href: `/topic/${slugify(data.category)}`,
-    });
+  // ── Top actions (per product direction) ───────────────────────────────
+  // Chat ALWAYS available → routes to the conversational surface (home
+  // composer preselects the book), NOT the reader — so catalog stubs with no
+  // readable text still start a chat (fixes the dead-end). Read/Preview appear
+  // only when the book actually has content, and go to the reader.
+  const chatHref = `/?book=${encodeURIComponent(id)}`;
+  const actions: EntityAction[] = [];
+  if (caps.read) {
+    actions.push({ label: `Read`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
+    actions.push({ label: `Chat about this book`, href: chatHref, variant: "secondary" });
+  } else if (caps.preview) {
+    actions.push({ label: `Preview`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
+    actions.push({ label: `Chat about this book`, href: chatHref, variant: "secondary" });
+  } else {
+    actions.push({ label: `Chat about this book`, href: chatHref, variant: "primary" });
   }
 
+  const metaBits: string[] = [];
+  if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
+  if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
+
+  const hero = (
+    <>
+      <p className="seo-meta">Book{data.category ? ` · ${data.category}` : ""}</p>
+      <h1>{data.title}</h1>
+      {data.author ? <p className="seo-author">by {data.author}</p> : null}
+      {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
+      <EntityActions
+        actions={actions}
+        shareUrl={canonical}
+        shareTitle={data.title}
+      />
+    </>
+  );
+
+  const rail = (
+    <>
+      {related.minds.length ? (
+        <div className="seo-rail-card">
+          <h3>Great minds on this book</h3>
+          <ul>
+            {related.minds.map((m) => (
+              <li key={m.id}>
+                <Link href={`/mind/${m.id}`}>{m.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {related.books.length ? (
+        <div className="seo-rail-card">
+          <h3>Related books</h3>
+          <ul>
+            {related.books.map((b) => (
+              <li key={b.id}>
+                <Link href={`/book/${b.id}`}>{b.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {data.category ? (
+        <div className="seo-rail-card">
+          <h3>Topic</h3>
+          <ul>
+            <li>
+              <Link href={`/topic/${slugify(data.category)}`}>More on {data.category}</Link>
+            </li>
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
-    <SeoColumn>
+    <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={bookLd} />
       <JsonLd data={breadcrumbLd} />
       {faqLd ? <JsonLd data={faqLd} /> : null}
-
-      <h1>{data.title}</h1>
-      <BookMeta
-        author={data.author}
-        totalWords={data.totalWords}
-        chapterCount={chapterCount}
-      />
 
       {isStub ? (
         <BookEmptyState title={data.title} author={data.author} />
@@ -159,47 +211,7 @@ export default async function BookLandingPage({ params }: PageProps) {
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
       <PopularQuestions questions={questions} bookId={id} />
-
-      <CtaRow caps={caps} bookId={id} title={data.title} />
-
       <LiveContentLink entityName={data.title} bookId={id} />
-
-      {related.minds.length ? (
-        <section className="seo-section">
-          <h2>Great minds who discuss this book</h2>
-          <ul className="related-minds">
-            {related.minds.map((m) => (
-              <li key={m.id}>
-                <Link href={`/mind/${m.id}`}>{m.name}</Link>
-                {m.domain ? ` — ${m.domain}` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {related.books.length ? (
-        <section className="seo-section">
-          <h2>Related books</h2>
-          <ul className="related-books">
-            {related.books.map((b) => (
-              <li key={b.id}>
-                <Link href={`/book/${b.id}`}>{b.name}</Link>
-                {b.author ? ` — ${b.author}` : ""}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {data.category ? (
-        <p className="topic-link-back">
-          More on{" "}
-          <Link href={`/topic/${slugify(data.category)}`}>{data.category}</Link>
-        </p>
-      ) : null}
-
-      <ExploreFooter items={exploreItems} />
-    </SeoColumn>
+    </EntityLayout>
   );
 }

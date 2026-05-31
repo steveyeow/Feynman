@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { get, getAgent, type Agent } from "@/lib/api";
+import { get, getAgent, getMind, type Agent, type Mind } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow } from "@/lib/books";
 import { createSession } from "@/lib/chat";
 import { useProGate } from "@/components/pro/ProOverlay";
@@ -162,10 +162,12 @@ export default function HomeComposer() {
     prefilled.current = true;
     const q = params.get("q");
     const bookId = params.get("book");
+    const mindId = params.get("mind");
 
-    if (q || bookId) {
+    if (q || bookId || mindId) {
       if (q) setValue(q);
       if (bookId) preselectBook(bookId);
+      if (mindId) preselectMind(mindId);
       return;
     }
 
@@ -217,6 +219,19 @@ export default function HomeComposer() {
       })
       .catch(() => {
         /* book preselect is best-effort */
+      });
+  };
+
+  // Preselect a mind chip from a /?mind={id} link (the SEO mind page's Chat).
+  const preselectMind = (mindId: string) => {
+    getMind(mindId)
+      .then((m: Mind) => {
+        if (m?.id) {
+          setMinds(new Map([[m.id, { id: m.id, name: m.name }]]));
+        }
+      })
+      .catch(() => {
+        /* mind preselect is best-effort */
       });
   };
 

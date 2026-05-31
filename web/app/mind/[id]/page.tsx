@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import SeoColumn from "@/components/seo/SeoColumn";
+import Link from "next/link";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 import {
   DialoguesLink,
-  ExploreFooter,
   MindBio,
   MindPersonaExcerpt,
   MindPhrases,
   MindThinkingStyle,
   MindWorks,
-  RelatedMinds,
-  TopicLinksForMind,
 } from "@/components/seo/mind/MindSections";
 import {
   SITE_URL,
@@ -95,19 +94,9 @@ export default async function MindPage({
 
   const canonical = abs(`/mind/${params.id}`);
   const ogImage = abs(`/mind/${params.id}/og.png`);
-  const readerUrl = `${SITE_URL}/#/mind/${params.id}`;
-
-  // Explore footer: first matching topic + top related minds + first works' book.
-  const exploreItems: Array<{ label: string; href: string }> = [];
-  if (matchingTopics.length) {
-    exploreItems.push({
-      label: `More on ${matchingTopics[0]}`,
-      href: `/topic/${topicSlug(matchingTopics[0])}`,
-    });
-  }
-  for (const rm of related.slice(0, 2)) {
-    if (rm.id && rm.name) exploreItems.push({ label: rm.name, href: `/mind/${rm.id}` });
-  }
+  // Chat with a single mind → the conversational surface, preselecting the mind
+  // (real path, not the dead /#/mind hash). The Chat action lives at the TOP.
+  const chatHref = `/?mind=${encodeURIComponent(params.id)}`;
 
   const eraDomain = [mind.era, mind.domain].filter(Boolean).join(" · ");
 
@@ -126,13 +115,52 @@ export default async function MindPage({
     [mind.name, canonical],
   ]);
 
-  return (
-    <SeoColumn>
-      <JsonLd data={personLd} />
-      <JsonLd data={breadcrumbLd} />
+  const actions: EntityAction[] = [
+    { label: `Chat with ${mind.name}`, href: chatHref, variant: "primary" },
+  ];
 
+  const hero = (
+    <>
+      <p className="seo-meta">Great mind</p>
       <h1>{mind.name}</h1>
       {eraDomain ? <p className="seo-meta">{eraDomain}</p> : null}
+      <EntityActions actions={actions} shareUrl={canonical} shareTitle={mind.name} />
+    </>
+  );
+
+  const rail = (
+    <>
+      {related.length ? (
+        <div className="seo-rail-card">
+          <h3>Related minds</h3>
+          <ul>
+            {related.slice(0, 8).map((rm) => (
+              <li key={rm.id}>
+                <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {matchingTopics.length ? (
+        <div className="seo-rail-card">
+          <h3>Topics</h3>
+          <ul>
+            {matchingTopics.slice(0, 6).map((t) => (
+              <li key={t}>
+                <Link href={`/topic/${topicSlug(t)}`}>{t}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <EntityLayout hero={hero} rail={rail}>
+      <JsonLd data={personLd} />
+      <JsonLd data={breadcrumbLd} />
 
       <MindBio bio={mind.bio_summary} />
       <MindThinkingStyle style={mind.thinking_style} />
@@ -140,17 +168,7 @@ export default async function MindPage({
       {/* persona is stripped by the JSON API — renders only if ever present */}
       <MindPersonaExcerpt persona={mind.persona} />
       <MindWorks works={mind.works} agents={agents} />
-      <RelatedMinds minds={related} />
-      <TopicLinksForMind topics={matchingTopics} />
       <DialoguesLink mindId={params.id} name={mind.name} />
-
-      <p className="seo-cta-row">
-        <a className="primary" href={readerUrl}>
-          Chat with {mind.name} on Feynman →
-        </a>
-      </p>
-
-      <ExploreFooter items={exploreItems} />
-    </SeoColumn>
+    </EntityLayout>
   );
 }
