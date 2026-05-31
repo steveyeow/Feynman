@@ -7,8 +7,6 @@ import EntityActions, { type EntityAction } from "@/components/seo/EntityActions
 import JsonLd from "@/components/seo/JsonLd";
 import { coverStyleFromTitle, coverInitials } from "@/lib/books";
 
-import BookEmptyState from "@/components/seo/book/BookEmptyState";
-import AboutBook from "@/components/seo/book/AboutBook";
 import SamplePassages from "@/components/seo/book/SamplePassages";
 import TableOfContents from "@/components/seo/book/TableOfContents";
 import PopularQuestions from "@/components/seo/book/PopularQuestions";
@@ -208,17 +206,39 @@ export default async function BookLandingPage({ params }: PageProps) {
     </>
   );
 
+  // A substantive opening line that's always present (even for catalog stubs):
+  // prefer the real subtitle, else synthesize from author/topic so the page
+  // never opens empty.
+  const aboutLine =
+    data.subtitle?.trim() ||
+    [
+      data.author ? `${data.title} by ${data.author}` : data.title,
+      data.category ? `a work on ${data.category}` : "",
+    ]
+      .filter(Boolean)
+      .join(" — ") +
+      ". Chat with it on Feynman to explore its ideas, ask questions, and discuss with the great minds connected to it.";
+
   return (
     <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={bookLd} />
       <JsonLd data={breadcrumbLd} />
       {faqLd ? <JsonLd data={faqLd} /> : null}
 
-      {isStub ? (
-        <BookEmptyState title={data.title} author={data.author} />
-      ) : (
-        <AboutBook subtitle={data.subtitle} />
-      )}
+      <section className="seo-section">
+        <p className="book-about">{aboutLine}</p>
+        {isStub ? (
+          <p className="seo-availability">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Full text isn&apos;t indexed yet — chat still works, drawing on general
+            knowledge and the book&apos;s metadata.
+          </p>
+        ) : null}
+      </section>
 
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
