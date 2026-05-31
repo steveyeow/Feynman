@@ -211,6 +211,29 @@ export async function renameSession(id: string, title: string): Promise<void> {
   }
 }
 
+/**
+ * PATCH /api/sessions/{id} {title?, meta?}. General-purpose update used by the
+ * write-book flow to stamp `meta:{write_book, ai_book_id, agent_id}` so a reopen
+ * can rehydrate the book (port of the PATCH calls in app.js startWriteBook /
+ * _handleWriteBookMessage). Unlike renameSession this AWAITS + rethrows so
+ * callers that depend on the persisted meta (resume) can react to failure.
+ *
+ * NOTE: the backend replaces meta_json wholesale (it does not merge), so callers
+ * must pass the COMPLETE meta object they want persisted.
+ */
+export async function updateSession(
+  id: string,
+  patch: { title?: string; meta?: Record<string, unknown> },
+): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (patch.title !== undefined) body.title = patch.title;
+  if (patch.meta !== undefined) body.meta = patch.meta;
+  await apiFetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 /** GET /api/sessions/{id}/messages → flattened Message[] (port of switchToSession). */
 export async function loadMessages(id: string): Promise<Message[]> {
   const rows = await get<MessageRow[]>(

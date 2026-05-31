@@ -46,6 +46,8 @@ import MessageList from "./MessageList";
 import Composer from "./Composer";
 import MindConsent from "./MindConsent";
 import RelatedBooks from "./RelatedBooks";
+import BookCanvas from "./BookCanvas";
+import { useWriteBook } from "./useWriteBook";
 import { ShareModal, PublishToast } from "./ShareModal";
 import {
   bookToContext,
@@ -55,6 +57,12 @@ import {
 import styles from "./ChatView.module.css";
 
 const PENDING_KEY = "feynman:pendingChat";
+
+// Stable empty selections passed to the Composer in write-book mode (the book/
+// mind popovers don't drive the ai-books flow). Module-level so the Composer
+// doesn't see a new Map identity each render.
+const EMPTY_BOOKS: Map<string, SelectedBook> = new Map();
+const EMPTY_MINDS: Map<string, SelectedMind> = new Map();
 
 interface PendingChat {
   sessionId: string;
@@ -125,6 +133,12 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   const sessionRef = useRef<Session>(stubSession(sessionId));
 
   const [messages, setMessages] = useState<Message[]>([]);
+  // Write-book detection: set once the session row loads (sessionType
+  // 'write_book' OR meta.write_book — port of _isWriteBookSession). When true,
+  // the composer routes through the ai-books flow + the book-canvas renders
+  // instead of the Related sidebar.
+  const [isWriteBook, setIsWriteBook] = useState(false);
+  const [writeMeta, setWriteMeta] = useState<Record<string, unknown> | null>(null);
   const [books, setBooks] = useState<Map<string, SelectedBook>>(new Map());
   const [minds, setMinds] = useState<Map<string, SelectedMind>>(new Map());
   // Minds already active in this conversation (chips + auto-suggested that the
@@ -170,6 +184,12 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         setPublicTitle(s.publicTitle);
         setPublicHandle(s.publicHandle);
         if (s.publicStatus === "approved") setPublicUrl(`/discussions/${sessionId}`);
+        // Classify write-book sessions (port of _isWriteBookSession). The
+        // useWriteBook hook reads writeMeta.ai_book_id to resume.
+        if (s.sessionType === "write_book" || s.meta?.write_book) {
+          setIsWriteBook(true);
+          setWriteMeta(s.meta || {});
+        }
       })
       .catch((e) => {
         // Non-fatal — keep the stub (title "New chat", private). Common in dev /
@@ -641,6 +661,55 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
     [books, minds, messages, sessionId, buildHistory, inviteMinds, requirePro],
   );
 
+  // ── Write-book flow (ai-books pipeline for write_book sessions) ──
+  // The hook owns start/refine/confirm/poll/cancel/retry/resume; it calls back
+  // here to append + persist the AI's outline/refine replies as normal
+  // assistant messages (mirrors production's appendMsg + _queueSessionMessage).
+  const appendWriteAssistant = useCallback(
+    (content: string) => {
+      setMessages((m) => [...m, { role: "assistant", content }]);
+      queueSaveMessage(sessionId, "assistant", content);
+    },
+    [sessionId],
+  );
+  const appendWriteUser = useCallback(
+    (content: string) => {
+      setMessages((m) => [...m, { role: "user", content }]);
+      queueSaveMessage(sessionId, "user", content);
+    },
+    [sessionId],
+  );
+  const setWriteTitle = useCallback((title: string) => {
+    sessionRef.current.title = title;
+  }, []);
+
+  const writeBook = useWriteBook({
+    sessionId,
+    active: isWriteBook,
+    initialMeta: writeMeta,
+    onAssistant: appendWriteAssistant,
+    onUser: appendWriteUser,
+    onTitle: setWriteTitle,
+    // Refine context: reuse buildHistory (user/assistant turns only). Read at
+    // send time so it reflects the current transcript.
+    getHistory: () => buildHistory(messages),
+  });
+
+  // The composer's send is routed to the ai-books flow for write_book sessions,
+  // and to the normal /api/chat + minds flow otherwise.
+  const onComposerSend = useCallback(
+    (message: string) => {
+      if (isWriteBook) {
+        // Pro gate is enforced at the write-book ENTRY (startWriteBook); inside
+        // an existing write session every send just drives the flow.
+        void writeBook.send(message);
+      } else {
+        void handleSend(message);
+      }
+    },
+    [isWriteBook, writeBook, handleSend],
+  );
+
   // ── First-message handoff from HomeComposer ──
   useEffect(() => {
     if (sentPendingRef.current) return;
@@ -696,11 +765,20 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   }, [messages]);
 
   // ── Share eligibility: feature on + ≥3 messages (matches backend gate) ──
-  const shareEligible = featuresOn && messages.length >= 3;
+  // Write-book sessions are never share-eligible (they aren't discussions).
+  const shareEligible = !isWriteBook && featuresOn && messages.length >= 3;
   const isPublic = publicStatus === "approved";
 
+  // Show the book-canvas once there's an outline (after /start) or a writing
+  // status to display — matches production's _showBookCanvas timing (before the
+  // first message the chat is full-width, no canvas).
+  const showCanvas = isWriteBook && (!!writeBook.outline || !!writeBook.status);
+
+  // Use the production .chat-with-sidebar wrapper so the global
+  // `:has(.book-canvas.visible) .chat-main` rule shrinks the chat column when
+  // the canvas is open.
   return (
-    <div className={`chat-main-layout ${styles.layout}`}>
+    <div className={`chat-with-sidebar ${styles.layout}`}>
       <div className="chat-main">
         {shareEligible && (
           <div className={`chat-session-actions ${styles.shareActions}`} id="chat-session-actions">
@@ -727,6 +805,13 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
               <span className="loading-dot">Thinking...</span>
             </div>
           )}
+          {isWriteBook && writeBook.busy && (
+            <div className="chat-message assistant">
+              <span className="loading-dot">
+                {writeBook.outline ? "Updating the outline..." : "Building your book outline..."}
+              </span>
+            </div>
+          )}
           {mindsBusy && (
             <div className="chat-system-notice minds-loading-notice">
               <div className="join-notice-inner">
@@ -747,10 +832,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
 
         <div className="chat-input-area">
           <Composer
-            books={books}
-            minds={minds}
-            disabled={sending}
-            onSend={handleSend}
+            books={isWriteBook ? EMPTY_BOOKS : books}
+            minds={isWriteBook ? EMPTY_MINDS : minds}
+            disabled={isWriteBook ? writeBook.busy : sending}
+            onSend={onComposerSend}
             onToggleBook={toggleBook}
             onToggleMind={toggleMind}
             onRemoveBook={removeBook}
@@ -759,7 +844,21 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         </div>
       </div>
 
-      <RelatedBooks sources={sidebarSources} />
+      {showCanvas ? (
+        <BookCanvas
+          phase={writeBook.phase}
+          outline={writeBook.outline}
+          status={writeBook.status}
+          agentId={writeBook.agentId}
+          confirming={writeBook.confirming}
+          error={writeBook.error}
+          onConfirm={writeBook.confirm}
+          onCancel={writeBook.cancel}
+          onRetry={writeBook.retry}
+        />
+      ) : (
+        !isWriteBook && <RelatedBooks sources={sidebarSources} />
+      )}
 
       {shareOpen && (
         <ShareModal

@@ -18,6 +18,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { get, getAgent, getMind, type Agent, type Mind } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow } from "@/lib/books";
 import { createSession } from "@/lib/chat";
+import { startWriteBook } from "@/lib/writeBook";
+import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { restorePendingBookIntent } from "@/lib/pendingIntent";
 import { track } from "@/lib/analytics";
@@ -89,6 +91,7 @@ function WriteBookIcon() {
 export default function HomeComposer() {
   const router = useRouter();
   const params = useSearchParams();
+  const { authEnabled, user } = useAuth();
   const { requirePro } = useProGate();
 
   const [value, setValue] = useState("");
@@ -403,7 +406,7 @@ export default function HomeComposer() {
             className="composer-icon-btn"
             title="Write the book you need, on-demand"
             aria-label="Write the book you need"
-            onClick={() => router.push("/write")}
+            onClick={() => startWriteBook(router, { authEnabled, user, requirePro })}
           >
             <WriteBookIcon />
           </button>

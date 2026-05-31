@@ -3477,6 +3477,12 @@ html.dark .canvas-share-opt:hover { background: rgba(255,255,255,0.08); }
 /* Writing progress in canvas reuses existing progress-ch styles */
 .book-canvas .writing-progress-chapters { padding: 0; }
 .book-canvas .progress-ch { padding: 8px 4px; }
+/* Inline error banner inside the canvas (write-book flow failures). */
+.canvas-error {
+  margin-top: 18px; padding: 10px 14px; border-radius: 10px;
+  background: var(--bg-elev); border: 1px solid var(--border);
+  font: 400 13px/1.5 'Inter', sans-serif; color: var(--accent);
+}
 
 @media (max-width: 900px) {
   .book-canvas, .book-canvas-resize { display: none !important; }
