@@ -80,7 +80,7 @@ export default async function MindOnTopicPage({
 
   const canonical = abs(`/mind/${params.id}/on/${params.slug}`);
   const mindUrl = abs(`/mind/${params.id}`);
-  const readerUrl = `${SITE_URL}/#/mind/${params.id}`;
+  const readerUrl = `/mind/${params.id}/chat`;
   const desc = `An imagined perspective on ${topic}, grounded in ${mind.name}'s recorded ideas and methods.`;
 
   // Generated essay (may be null when the feature is off / generation fails →

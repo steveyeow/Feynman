@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { Book, coverStyle, coverInitials, statusBadge } from "@/lib/books";
 
 /**
- * Library book card. Faithful to the legacy card, with the #6 entry-point fix:
- *   • Cover  → Read (full text) / Preview (ready) when the book HAS content;
- *              for a catalog stub (no content) the cover falls back to Details.
- *   • Title/author (body) → the Details (SEO) page — the dedicated "more info"
- *              entry, distinct from the cover's read/preview action.
- *   • Chat (footer) → the reader, which carries the chat.
- * Real paths, no hash.
+ * Library book card — faithful to production selectBookForChat:
+ *   • Cover click  → CHAT (/?book={id}, preselects the book in the composer),
+ *                    exactly like production's card click. The Read/Preview
+ *                    OVERLAY button (only when the book has content) is the
+ *                    sole path to the reader.
+ *   • Chat button  → CHAT (/?book={id}).
+ *   • Title/author → the Details (SEO) page.
+ * No /read dead-ends: a catalog stub (no readable content) never routes to the
+ * reader; its cover and Chat both go to the conversational composer.
  */
 export default function BookCard({ book }: { book: Book }) {
   const router = useRouter();
@@ -21,9 +23,7 @@ export default function BookCard({ book }: { book: Book }) {
   const overlay = canRead ? "Read" : canPreview ? "Preview" : "";
   const detailHref = `/book/${encodeURIComponent(book.agentId)}`;
   const readHref = `/read/${encodeURIComponent(book.agentId)}`;
-  // Cover goes to the reader when there's something to read/preview; otherwise
-  // (catalog stub) there's nothing to read, so it opens the details page.
-  const coverHref = overlay ? readHref : detailHref;
+  const chatHref = `/?book=${encodeURIComponent(book.agentId)}`;
 
   return (
     <div className="book-card">
@@ -31,23 +31,32 @@ export default function BookCard({ book }: { book: Book }) {
         className="card-cover-wrap"
         role="link"
         tabIndex={0}
-        aria-label={overlay ? `${overlay} ${book.title}` : book.title}
-        onClick={() => router.push(coverHref)}
+        aria-label={`Chat about ${book.title}`}
+        onClick={() => router.push(chatHref)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") router.push(coverHref);
+          if (e.key === "Enter") router.push(chatHref);
         }}
       >
         <div className="card-cover-gen" style={{ background: coverStyle(book) }}>
           <span>{coverInitials(book.title)}</span>
         </div>
         {overlay && (
-          <div className="card-cover-overlay">
+          <button
+            type="button"
+            className="card-cover-overlay"
+            aria-label={`${overlay} ${book.title}`}
+            onClick={(e) => {
+              // Overlay is the ONLY path to the reader (book has content).
+              e.stopPropagation();
+              router.push(readHref);
+            }}
+          >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
               <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
             </svg>
             <span>{overlay}</span>
-          </div>
+          </button>
         )}
       </div>
       <Link href={detailHref} className="card-body" title={`About ${book.title}`}>
@@ -61,7 +70,7 @@ export default function BookCard({ book }: { book: Book }) {
         </p>
       </Link>
       <div className="card-footer">
-        <Link className="card-chat-btn" href={readHref}>
+        <Link className="card-chat-btn" href={chatHref}>
           Chat
         </Link>
         {badge && <span className={`card-badge ${badge.cls}`}>{badge.text}</span>}

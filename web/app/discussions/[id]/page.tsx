@@ -104,12 +104,14 @@ export default async function PublicDiscussionPage({
       : disc.entity_id
         ? `/mind/${disc.entity_id}`
         : null;
+  // "Start your own conversation" → the chat surface (real paths, not dead
+  // /#/ hashes): a book → composer preselected; a mind → its 1:1 chat page.
   const readerHref =
     disc.entity_id && disc.session_type === "book"
-      ? `${SITE_URL}/#/read/${disc.entity_id}`
+      ? `/?book=${encodeURIComponent(disc.entity_id)}`
       : disc.entity_id
-        ? `${SITE_URL}/#/mind/${disc.entity_id}`
-        : `${SITE_URL}/`;
+        ? `/mind/${encodeURIComponent(disc.entity_id)}/chat`
+        : `/`;
 
   const forumLd = {
     "@context": "https://schema.org",
