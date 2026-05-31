@@ -7,14 +7,20 @@
  * Ported from renderSelectedChips, renderPopoverBookList, renderPopoverMindList
  * in app.js. Reuses the legacy classes (.selected-chips, .book-chip,
  * .mind-chip, .composer-popover, .popover-search, .popover-book-item,
- * .popover-mind-item …). Pro-gating is intentionally omitted here — auth lands
- * in a later phase; until then minds are freely selectable.
+ * .popover-mind-item …).
+ *
+ * Pro-gating (hosted build): selecting a mind to invite is a pro feature
+ * (legacy app.js 4804). When auth is enabled and the user isn't pro, mind items
+ * render with a `.locked` class and a click opens the upgrade overlay instead
+ * of selecting. On the open-source build (auth off) every mind is freely
+ * selectable — isProUser is always true there.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { get } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow, type Book } from "@/lib/books";
 import { listMinds, type Mind } from "@/lib/api";
+import { useProGate } from "@/components/pro/ProOverlay";
 import { mindColor, mindInitials } from "./markdown";
 import styles from "./ComposerPickers.module.css";
 
@@ -231,6 +237,8 @@ export function MindsPopover({
   const [state, setState] = useState<LoadState>("idle");
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
+  // Inviting minds is a pro feature on the hosted build (legacy app.js 4804).
+  const { isProUser, showProOverlay } = useProGate();
 
   useEffect(() => {
     if (!open || state !== "idle") return;
@@ -310,10 +318,17 @@ export function MindsPopover({
             return (
               <div
                 key={m.id}
-                className={`popover-mind-item${sel ? " selected" : ""}`}
-                onClick={() =>
-                  onToggle({ id: m.id, name: m.name, domain: m.domain, era: m.era })
-                }
+                className={`popover-mind-item${sel ? " selected" : ""}${!isProUser ? " locked" : ""}`}
+                onClick={() => {
+                  // Hosted build: non-pro users get the upgrade overlay instead
+                  // of selecting (legacy: closeAllPopovers(); showProOverlay()).
+                  if (!isProUser) {
+                    onClose();
+                    showProOverlay();
+                    return;
+                  }
+                  onToggle({ id: m.id, name: m.name, domain: m.domain, era: m.era });
+                }}
               >
                 <div className="popover-mind-check">{sel ? "✓" : ""}</div>
                 <div className="popover-mind-avatar" style={{ background: mindColor(m.name) }}>

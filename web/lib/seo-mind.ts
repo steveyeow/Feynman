@@ -624,3 +624,85 @@ export function filterMindsByTopic(
 export function bookAuthor(a: AgentRowLite): string {
   return a.meta?.author || a.source || "";
 }
+
+// ─── JSON endpoints added for parity (mirror the SSR mind surfaces) ─────
+
+export interface DialogueCard {
+  text: string;
+  created_at: string;
+}
+
+/**
+ * Public, server-sanitized AI dialogue cards for /mind/{id}/dialogues
+ * (GET /api/minds/{id}/dialogues). 404 when the insights flag is off →
+ * treated as empty so the page shows its empty state.
+ */
+export async function fetchMindDialogues(id: string, limit = 10): Promise<DialogueCard[]> {
+  try {
+    const res = await get<{ dialogues?: DialogueCard[] }>(
+      `/api/minds/${encodeURIComponent(id)}/dialogues`,
+      // ISR, not no-store: no-store would opt the whole /mind/[id]/dialogues
+      // route into per-request dynamic rendering, defeating `revalidate` and
+      // letting crawlers drive uncapped function invocations + backend egress.
+      { next: { revalidate: 600 } },
+    );
+    const cards = Array.isArray(res?.dialogues) ? res.dialogues : [];
+    return cards.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export interface MindOnTopic {
+  mind_name: string;
+  topic: string;
+  essay: string;
+}
+
+/**
+ * The imagined mind-on-topic essay for /mind/{id}/on/{slug}
+ * (GET /api/minds/{id}/on/{slug}). The endpoint applies the same relevance
+ * gate as the SSR page and 404s irrelevant pairs / disabled feature — we
+ * return null so the page can notFound() or render its minimal fallback.
+ */
+export async function fetchMindOnTopic(id: string, slug: string): Promise<MindOnTopic | null> {
+  try {
+    const res = await get<MindOnTopic>(
+      `/api/minds/${encodeURIComponent(id)}/on/${encodeURIComponent(slug)}`,
+    );
+    if (!res || !res.essay) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+export interface PublicDiscussion {
+  id: string;
+  title: string;
+  handle: string;
+  session_type: string;
+  entity_id: string;
+  approved_at: string;
+  messages: Array<{ role: string; content: string }>;
+}
+
+/**
+ * One approved, PII-scrubbed public discussion for /discussions/{id}
+ * (GET /api/public-discussions/{id}). 404 unless the feature flag is on AND
+ * the session is approved — returns null so the page can notFound().
+ */
+export async function fetchPublicDiscussion(id: string): Promise<PublicDiscussion | null> {
+  try {
+    const res = await get<PublicDiscussion>(
+      `/api/public-discussions/${encodeURIComponent(id)}`,
+      // ISR (see fetchMindDialogues): keep /discussions/[id] cacheable so
+      // shareable permalinks don't render per-request on every crawl.
+      { next: { revalidate: 600 } },
+    );
+    if (!res || !res.id) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}

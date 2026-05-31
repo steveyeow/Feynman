@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import {
   listSessions,
   deleteSession as apiDeleteSession,
@@ -29,11 +30,21 @@ function WriteBookIcon() {
 }
 
 export default function ChatHistory() {
+  const { ready, authEnabled, user } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const pathname = usePathname() || "";
   const router = useRouter();
 
+  // On the hosted build, sessions are per-user — don't issue the authed
+  // /api/sessions call until auth has resolved AND a user is signed in. This
+  // avoids (a) the token race (request before setAuthToken) and (b) a wasted
+  // Supabase read on every anonymous SEO pageview (the sidebar is global).
+  // On the open-source build (authEnabled=false) sessions are anonymous, so
+  // we still load.
+  const canLoad = ready && (!authEnabled || !!user);
+
   const load = useCallback(() => {
+    if (!canLoad) return;
     listSessions()
       .then(setSessions)
       .catch((e) => {
@@ -42,7 +53,7 @@ export default function ChatHistory() {
         console.warn("Failed to load sessions:", e);
         setSessions([]);
       });
-  }, []);
+  }, [canLoad]);
 
   useEffect(() => {
     load();
@@ -51,8 +62,8 @@ export default function ChatHistory() {
   // Re-fetch when navigating between chats so a freshly created session and
   // updated titles show up without a full reload.
   useEffect(() => {
-    if (pathname.startsWith("/chat/")) load();
-  }, [pathname, load]);
+    if (canLoad && pathname.startsWith("/chat/")) load();
+  }, [pathname, load, canLoad]);
 
   const onDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();

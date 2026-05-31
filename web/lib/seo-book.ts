@@ -493,55 +493,93 @@ export interface InsightCard {
   created_at: string;
 }
 
-interface MessageRow {
-  role?: string;
-  content?: string;
-  created_at?: string;
-}
-
 /**
  * Fetch publishable AI insight cards for /book/{id}/insights.
  *
- * NOTE: the legacy `book_insights_page` uses
- * `list_assistant_messages_for_agent` + `insights_module.select_publishable`
- * (PII-sanitized, deduped). Neither has a JSON endpoint. The only reachable
- * endpoint is GET /api/agents/{id}/messages, which (a) requires an
- * authenticated user_id server-side and returns [] otherwise, and (b)
- * returns RAW {role,content,created_at} rows with no sanitization.
- *
- * For SSR (unauthenticated) this will almost always be empty, so the page
- * renders its empty state. We still filter to role=assistant + light dedupe
- * so that if an authenticated render ever occurs, the output is reasonable.
- * See the report's Integration notes — a public sanitized insights endpoint
- * is needed for full parity.
+ * Uses the public, server-sanitized endpoint GET /api/agents/{id}/insights
+ * (mirrors the legacy book_insights_page: list_assistant_messages_for_agent +
+ * insights.select_publishable — PII-scrubbed, deduped, role=assistant only).
+ * Returns 404 when the insights feature flag is off; we treat that (and any
+ * failure) as "no insights" so the page renders its empty state.
  */
 export async function getInsights(
   id: string,
   limit = 10,
 ): Promise<InsightCard[]> {
-  let rows: MessageRow[] = [];
   try {
-    const res = await get<MessageRow[]>(
-      `/api/agents/${encodeURIComponent(id)}/messages`,
+    const res = await get<{ insights?: InsightCard[] }>(
+      `/api/agents/${encodeURIComponent(id)}/insights`,
     );
-    rows = Array.isArray(res) ? res : [];
+    const cards = Array.isArray(res?.insights) ? res.insights : [];
+    return cards.slice(0, limit);
   } catch {
     return [];
   }
+}
 
-  const seen = new Set<string>();
-  const out: InsightCard[] = [];
-  for (const m of rows) {
-    if ((m.role || "").toLowerCase() !== "assistant") continue;
-    const text = (m.content || "").trim();
-    if (text.length < 80) continue; // skip trivial / fragmentary replies
-    const head = text.slice(0, 120).trim().toLowerCase();
-    if (seen.has(head)) continue;
-    seen.add(head);
-    out.push({ text, created_at: (m.created_at || "").toString() });
-    if (out.length >= limit) break;
+export interface QaPassage {
+  chunk_index?: number;
+  text: string;
+}
+export interface BookQa {
+  question: string;
+  answer: string;
+  passages: QaPassage[];
+}
+
+/**
+ * Fetch the grounded answer + supporting passages for one book question
+ * (GET /api/agents/{id}/qa?question=…). Mirrors the legacy book_question_page.
+ * Returns null on failure; the page then renders passages-only / empty state.
+ */
+export async function getBookQa(id: string, question: string): Promise<BookQa | null> {
+  try {
+    const res = await get<BookQa>(
+      `/api/agents/${encodeURIComponent(id)}/qa?question=${encodeURIComponent(question)}`,
+    );
+    if (!res) return null;
+    return {
+      question: res.question || question,
+      answer: res.answer || "",
+      passages: Array.isArray(res.passages) ? res.passages : [],
+    };
+  } catch {
+    return null;
   }
-  return out;
+}
+
+export interface RelatedBook {
+  id: string;
+  name: string;
+  author?: string;
+  type?: string;
+}
+export interface RelatedMind {
+  id: string;
+  name: string;
+  era?: string;
+  domain?: string;
+}
+
+/**
+ * Fetch related books + minds for a book (GET /api/agents/{id}/related).
+ * Mirrors the cross-link sections of the legacy book_page. Returns empty
+ * arrays on failure so the sections simply omit.
+ */
+export async function getRelatedForBook(
+  id: string,
+): Promise<{ books: RelatedBook[]; minds: RelatedMind[] }> {
+  try {
+    const res = await get<{ books?: RelatedBook[]; minds?: RelatedMind[] }>(
+      `/api/agents/${encodeURIComponent(id)}/related`,
+    );
+    return {
+      books: Array.isArray(res?.books) ? res.books : [],
+      minds: Array.isArray(res?.minds) ? res.minds : [],
+    };
+  } catch {
+    return { books: [], minds: [] };
+  }
 }
 
 // ─── Small shared helpers for the pages/components ─────────────────────

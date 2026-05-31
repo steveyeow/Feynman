@@ -35,6 +35,7 @@ import {
   getSimilarities,
 } from "@/lib/minds";
 import { post } from "@/lib/api";
+import { useProGate } from "@/components/pro/ProOverlay";
 import styles from "./MindsGraph.module.css";
 
 const BASE_R = 20; // node radius (legacy ~20–30 clamped; we fix at 20 then scale on focus)
@@ -46,6 +47,10 @@ type ModalKind = null | "upload" | "expand";
 export default function MindsGraph() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
+  // Expand-network / upload-a-mind / chat-with-a-mind are pro features on the
+  // hosted build (legacy app.js 6784/6838/6846/6807/7693/7697). Node click →
+  // /mind/{id} stays FREE (legacy keeps the paywall on explicit Chat only).
+  const { requirePro } = useProGate();
 
   const [minds, setMinds] = useState<Mind[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -586,7 +591,7 @@ export default function MindsGraph() {
         <button
           className="minds-add-btn"
           title="Invite a great mind to expand the network"
-          onClick={() => setModal("expand")}
+          onClick={() => requirePro(() => setModal("expand"))}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
@@ -605,7 +610,7 @@ export default function MindsGraph() {
           className="minds-add-btn"
           title="Upload your own mind to connect with the network"
           style={{ marginLeft: 4 }}
-          onClick={() => setModal("upload")}
+          onClick={() => requirePro(() => setModal("upload"))}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -637,7 +642,10 @@ export default function MindsGraph() {
             <strong>The network is empty.</strong>
             <span>Minds are being generated — or invite one to get started.</span>
             <div className={styles.stateActions}>
-              <button className={styles.btnPrimary} onClick={() => setModal("expand")}>
+              <button
+                className={styles.btnPrimary}
+                onClick={() => requirePro(() => setModal("expand"))}
+              >
                 Invite a great mind
               </button>
             </div>
@@ -679,7 +687,13 @@ export default function MindsGraph() {
               <button
                 className="tt-chat-icon-btn"
                 title={`Chat with ${tooltip.node.name}`}
-                onClick={() => router.push(`/mind/${encodeURIComponent(tooltip.node.id)}`)}
+                // Chatting with a single mind is pro-gated (legacy app.js 6807);
+                // the Profile button above stays free.
+                onClick={() =>
+                  requirePro(() =>
+                    router.push(`/mind/${encodeURIComponent(tooltip.node.id)}`),
+                  )
+                }
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />

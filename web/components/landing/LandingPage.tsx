@@ -486,7 +486,8 @@ export function LandingPage({
         get<unknown>("/api/minds/similarities"),
       ]);
       minds = pickArray<{ id?: string; name?: string }>(m, "minds");
-      sims = pickArray<Record<string, unknown>>(s, "similarities");
+      // /api/minds/similarities returns { links: [{source,target,strength}], layout }
+      sims = pickArray<Record<string, unknown>>(s, "links");
     } catch {
       minds = [];
     }

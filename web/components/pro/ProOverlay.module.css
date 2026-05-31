@@ -1,0 +1,8 @@
+/* The overlay's visual styling (.pro-overlay / .pro-overlay-inner /
+   .pro-overlay-close / .pro-overlay.visible) all come from styles/app.css —
+   reused verbatim from the legacy. This module only guarantees the overlay
+   stacks above the shell chrome and any in-page modals it may be summoned over
+   (e.g. the minds Upload/Expand modal at z-index 1000). */
+.overlay {
+  z-index: 2000;
+}

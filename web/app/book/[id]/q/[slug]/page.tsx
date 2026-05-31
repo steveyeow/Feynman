@@ -15,6 +15,7 @@ import {
   getBookData,
   getQuestions,
   getSamplePassages,
+  getBookQa,
   findQuestionBySlug,
   clampDescription,
   qaPageJsonld,
@@ -28,14 +29,11 @@ interface PageProps {
 }
 
 /**
- * The legacy book_question_page calls qa_module.generate_grounded_answer
- * (RAG + LLM) for a per-question synthesized answer + cited passages. That
- * pipeline has no JSON endpoint (see report). Here we degrade gracefully:
- * the page resolves the question, renders the book's leading passages as
- * supporting context, and the QAPage schema carries the chat-deflection
- * answer (which is non-empty, satisfying Google's spec). No synthesized
- * answer text is shown — only real book passages — until a grounded-answer
- * endpoint exists.
+ * Mirrors the legacy book_question_page: the grounded answer + cited passages
+ * come from GET /api/agents/{id}/qa (qa_module.generate_grounded_answer). When
+ * QA generation is disabled/fails the answer is empty and we fall back to the
+ * book's leading sample passages; the QAPage schema then carries the
+ * chat-deflection answer (non-empty, satisfying Google's spec).
  */
 async function resolveQuestion(
   id: string,
@@ -91,9 +89,15 @@ export default async function BookQuestionPage({ params }: PageProps) {
   if (!resolved) notFound();
   const { question, questions } = resolved;
 
-  // Supporting passages — the book's leading passages, the best grounding
-  // we can surface without a per-question RAG endpoint.
-  const passages = await getSamplePassages(id, 5);
+  // Grounded answer + cited passages from the RAG endpoint. Falls back to the
+  // book's leading sample passages (and an empty answer) when QA generation is
+  // disabled or fails.
+  const qa = await getBookQa(id, question);
+  const answer = qa?.answer || "";
+  const passages =
+    qa && qa.passages.length
+      ? qa.passages.map((p, i) => ({ index: p.chunk_index ?? i, text: p.text }))
+      : await getSamplePassages(id, 5);
 
   const bookUrl = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const canonical = `${bookUrl}/q/${slug}`;
@@ -102,7 +106,7 @@ export default async function BookQuestionPage({ params }: PageProps) {
 
   const qaLd = qaPageJsonld({
     question,
-    answer: "", // no synthesized answer available → schema uses deflection
+    answer, // real synthesized answer when available; schema deflects if empty
     url: canonical,
     bookTitle: data.title,
     bookUrl,
@@ -124,9 +128,9 @@ export default async function BookQuestionPage({ params }: PageProps) {
       <BackLink href={`/book/${encodeURIComponent(id)}`} label={data.title} />
       <h1>{question}</h1>
 
-      {/* No synthesized answer endpoint yet — QaAnswer renders nothing for an
-          empty answer, and the passages below carry the page's content. */}
-      <QaAnswer answer="" />
+      {/* Real grounded answer when available; QaAnswer renders nothing for an
+          empty answer, in which case the passages below carry the content. */}
+      <QaAnswer answer={answer} />
       <QaPassages
         passages={passages.map((p) => ({ text: p.text, chunk_index: p.index }))}
       />

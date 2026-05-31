@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   startBook,
   chatBook,
@@ -13,6 +14,8 @@ import {
   type AiBookStatus,
   ApiError,
 } from "@/lib/aibooks";
+import { useAuth } from "@/lib/auth";
+import { useProGate } from "@/components/pro/ProOverlay";
 import styles from "./WriteBook.module.css";
 
 /**
@@ -40,6 +43,12 @@ const TERMINAL: AiBookStatus[] = ["completed", "failed", "cancelled"];
 const POLL_MS = 5000;
 
 export default function WriteBook() {
+  const router = useRouter();
+  const { authEnabled, user } = useAuth();
+  // AI book write is pro-gated on the hosted build (legacy app.js 3700;
+  // anon → login 3696). Open-source (auth off) → always allowed.
+  const { requirePro } = useProGate();
+
   const [phase, setPhase] = useState<Phase>("prompt");
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false); // outline generate / refine in-flight
@@ -95,6 +104,13 @@ export default function WriteBook() {
       setError("Tell me a little more — at least a sentence about the book.");
       return;
     }
+    // Pro gate (hosted build only). Anonymous → login; signed-in non-pro →
+    // upgrade overlay; open-source (auth off) → fall through.
+    if (authEnabled && !user) {
+      router.push("/login");
+      return;
+    }
+    if (!requirePro()) return;
     setError(null);
     setBusy(true);
     setMessages([{ role: "user", content: description }]);

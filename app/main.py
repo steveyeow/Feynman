@@ -13,7 +13,7 @@ import os
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -1443,9 +1443,13 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
     # fragmented the experience (same URL meant different things
     # depending on who you were and where you came from) and made
     # logged-in users miss the rich aggregation content the SSR page
-    # assembles. One URL, one page, one set of content; only the
-    # header chrome adapts via is_authenticated.
-    is_authenticated = _get_user_id(request) is not None
+    # assembles. One URL, one page, one set of content.
+    #
+    # Chrome is rendered auth-INDEPENDENT (always the public variant): this
+    # HTML is served with `public, s-maxage` at the Vercel edge with no Vary,
+    # so baking per-user chrome in would let the edge serve one visitor's
+    # variant to everyone. The Next.js frontend (post-cutover) adapts the
+    # header client-side after hydration; here we keep the cacheable public page.
     author_meta = f'<meta property="book:author" content="{html_esc(author_raw)}">' if author_raw else ''
     author_html = f'<p class="book-author">by {html_esc(author_raw)}</p>' if author_raw else ''
 
@@ -1478,7 +1482,7 @@ def book_page(agent_id: str, request: Request) -> HTMLResponse:
 {breadcrumb_ld}
 {faq_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=is_authenticated)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <h1>{title}</h1>
 {author_html}
 {empty_state_html}
@@ -1674,9 +1678,9 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
     ]))
 
     # The page is the destination for everyone — see book_page above for
-    # the rationale. One URL, one page, header chrome adapts via
-    # is_authenticated.
-    is_authenticated = _get_user_id(request) is not None
+    # the rationale. Chrome is rendered auth-INDEPENDENT so the edge-cached
+    # (public, s-maxage, no Vary) HTML is identical for every visitor; the
+    # Next.js frontend adapts the header client-side post-cutover.
     if era_raw and domain_raw:
         era_domain_html = f'<p class="mind-meta">{era} · {domain}</p>'
     elif era_raw:
@@ -1717,7 +1721,7 @@ def mind_page(mind_id: str, request: Request) -> HTMLResponse:
 {person_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=is_authenticated)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <h1>{name}</h1>
 {era_domain_html}
 {bio_html}
@@ -1857,7 +1861,7 @@ def book_question_page(agent_id: str, question_slug: str, request: Request) -> H
 {qa_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <nav class="qa-back"><a href="{book_url}">← {title}</a></nav>
 <h1>{html_esc(question)}</h1>
 {answer_html}
@@ -1974,7 +1978,7 @@ def mind_on_topic_page(mind_id: str, topic_slug: str, request: Request) -> HTMLR
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <nav class="essay-back"><a href="{mind_url}">← {name}</a></nav>
 <h1>How {name} would approach {html_esc(topic)}</h1>
 {essay_html}
@@ -2131,7 +2135,7 @@ def book_insights_page(agent_id: str, request: Request) -> HTMLResponse:
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI insights about {entity_name}</h1>
 <p class="insights-intro">Accumulated AI-synthesized commentary drawn from
@@ -2256,7 +2260,7 @@ def mind_dialogues_page(mind_id: str, request: Request) -> HTMLResponse:
 {article_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <nav class="insights-back"><a href="{entity_canonical}">← {entity_name}</a></nav>
 <h1>AI dialogues with {entity_name}</h1>
 <p class="insights-intro">Accumulated AI agent responses from real user
@@ -2398,7 +2402,7 @@ def topic_page(slug: str, request: Request) -> HTMLResponse:
 {collection_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <h1>{html_esc(topic)}</h1>
 {intro_html}
 {books_html}
@@ -2753,7 +2757,7 @@ def _render_public_discussions_page(
 {forum_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(_SITE_URL, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(_SITE_URL, is_authenticated=False)}
 <nav class="back-link"><a href="{entity_canonical}">← {html_esc(entity_name)}</a></nav>
 <h1>Discussions about {html_esc(entity_name)}</h1>
 {posts_html}
@@ -2972,7 +2976,7 @@ def public_session_page(session_id: str, request: Request) -> HTMLResponse:
 {forum_post_ld}
 {breadcrumb_ld}
 </head><body>
-{seo_render.render_landing_header(base, is_authenticated=_get_user_id(request) is not None)}
+{seo_render.render_landing_header(base, is_authenticated=False)}
 <h1>{title}</h1>
 <p class="post-byline">Shared by {handle}</p>
 {post_html}
@@ -3863,6 +3867,172 @@ def api_get_messages(agent_id: str, request: Request) -> list[dict[str, Any]]:
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return list_messages(agent_id, limit=50, user_id=_get_user_id(request))
+
+
+# ─── JSON mirrors of the SSR SEO surfaces ───────────────────────────────
+# These expose, as JSON, the exact same already-computed data the SSR HTML
+# handlers render (book_question_page, book_insights_page, mind_dialogues_page,
+# public_session_page, book_page related sections, mind_on_topic_page). They
+# exist so the Next.js frontend can render those surfaces itself while reusing
+# the identical data source, feature-gating, and PII model. No new business
+# logic — just the SSR data without the HTML.
+
+@app.get("/api/agents/{agent_id}/qa")
+def api_agent_qa(agent_id: str, question: str) -> JSONResponse:
+    """Grounded answer + supporting passages for one question (mirrors the
+    /book/{id}/q/{slug} SSR handler). `question` is the full question text."""
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    title_raw = agent.get("name", "") or ""
+    try:
+        qa_result = qa_module.generate_grounded_answer(
+            agent_id, question, book_title=title_raw,
+        )
+    except Exception as exc:
+        log.error("qa generation failed for %s: %s", agent_id, exc)
+        qa_result = {"answer": "", "passages": []}
+    return JSONResponse(
+        content={
+            "question": question,
+            "answer": qa_result.get("answer", ""),
+            "passages": qa_result.get("passages", []),
+        },
+        # Mirror the SSR Q&A cache window (answers are stable once generated).
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/agents/{agent_id}/insights")
+def api_agent_insights(agent_id: str) -> JSONResponse:
+    """Public, PII-sanitized AI insight cards for a book (mirrors
+    /book/{id}/insights). 404 when the feature flag is off, matching SSR."""
+    if not insights_module.is_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    try:
+        raw = list_assistant_messages_for_agent(agent_id, limit=200)
+    except Exception:
+        raw = []
+    publishable = insights_module.select_publishable(raw, limit=10)
+    return JSONResponse(
+        content={"insights": publishable},
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=1800"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/dialogues")
+def api_mind_dialogues(mind_id: str) -> JSONResponse:
+    """Public, PII-sanitized AI dialogue cards for a mind (mirrors
+    /mind/{id}/dialogues). Same feature flag + sanitization as book insights."""
+    if not insights_module.is_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    try:
+        raw = list_assistant_messages_for_mind(mind_id, limit=200)
+    except Exception:
+        raw = []
+    publishable = insights_module.select_publishable(raw, limit=10)
+    return JSONResponse(
+        content={"dialogues": publishable},
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=1800"},
+    )
+
+
+@app.get("/api/agents/{agent_id}/related")
+def api_agent_related(agent_id: str) -> JSONResponse:
+    """Related books + minds for a book (the cross-link sections of the
+    /book/{id} SSR page). Minds carry their curated row fields; books come
+    from the topic/author similarity query."""
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    meta = agent.get("meta") or {}
+    topic = meta.get("category") or ""
+    author = meta.get("author") or ""
+    try:
+        related_minds = list_minds_for_agent(agent_id)
+    except Exception:
+        related_minds = []
+    try:
+        related_books = list_related_books(
+            agent_id, topic=topic, author=author, limit=6,
+        )
+    except Exception:
+        related_books = []
+    return JSONResponse(
+        content={"books": related_books, "minds": related_minds},
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/on/{topic_slug}")
+def api_mind_on_topic(mind_id: str, topic_slug: str) -> JSONResponse:
+    """Imagined mind-on-topic essay (mirrors /mind/{id}/on/{slug}). Resolves
+    the slug to a canonical topic, applies the same relevance gate (404 on
+    irrelevant pairs), and returns the generated essay text."""
+    mind = get_mind(mind_id)
+    if not mind:
+        raise HTTPException(status_code=404, detail="Mind not found")
+    # Resolve slug → canonical topic name via the same TOPIC_TAGS index the
+    # SSR handler uses, so URLs stay in lockstep.
+    topic = None
+    for t in TOPIC_TAGS:
+        if seo_render.slugify(t) == topic_slug:
+            topic = t
+            break
+    if not topic or not qa_module.is_mind_topic_relevant(mind, topic):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        essay_result = qa_module.generate_mind_on_topic_essay(mind, topic)
+    except Exception as exc:
+        log.error("mind essay failed for %s/%s: %s", mind_id, topic, exc)
+        essay_result = {"essay": ""}
+    essay = essay_result.get("essay", "")
+    if not essay:
+        raise HTTPException(status_code=404, detail="Not found")
+    return JSONResponse(
+        content={"mind_name": mind.get("name", ""), "topic": topic, "essay": essay},
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/public-discussions/{session_id}")
+def api_public_discussion(session_id: str) -> JSONResponse:
+    """One approved public discussion as JSON (mirrors /discussions/{id}).
+    404 unless the feature flag is on AND public_status='approved'. Message
+    bodies pass through the same PII scrub used by the SSR renderer."""
+    _require_ugc_enabled()
+    session = get_chat_session_with_public_status(session_id)
+    if not session or session.get("public_status") != "approved":
+        raise HTTPException(status_code=404, detail="Discussion not found")
+    try:
+        raw_msgs = list_messages_for_public_session(session_id)
+    except Exception:
+        raw_msgs = []
+    messages = [
+        {
+            "role": m.get("role", ""),
+            "content": ugc_module.scrub_pii_for_public_display(m.get("content", "") or ""),
+        }
+        for m in raw_msgs
+    ]
+    return JSONResponse(
+        content={
+            "id": session_id,
+            "title": session.get("public_title") or session.get("title") or "",
+            "handle": session.get("public_handle") or "Anonymous",
+            "session_type": session.get("session_type") or "",
+            "entity_id": session.get("mind_id") or "",
+            "approved_at": session.get("approved_at") or session.get("consent_at") or "",
+            "messages": messages,
+        },
+        headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
+    )
 
 
 # ─── Chat sessions endpoints ───

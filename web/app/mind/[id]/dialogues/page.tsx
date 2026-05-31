@@ -9,6 +9,7 @@ import {
   breadcrumbJsonLd,
   dialoguesArticleJsonLd,
   fetchMind,
+  fetchMindDialogues,
   metaDescription,
 } from "@/lib/seo-mind";
 
@@ -71,8 +72,7 @@ export default async function MindDialoguesPage({
   const entityCanonical = abs(`/mind/${params.id}`);
   const readerUrl = `${SITE_URL}/#/mind/${params.id}`;
 
-  // No JSON source for publishable dialogues — always the empty state for now.
-  const dialogues: Array<{ text: string }> = [];
+  const dialogues = await fetchMindDialogues(params.id, 10);
 
   const articleLd = dialoguesArticleJsonLd({
     headline: `AI dialogues with ${mind.name}`,

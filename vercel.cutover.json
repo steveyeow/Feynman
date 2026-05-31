@@ -1,0 +1,27 @@
+{
+  "__doc__": "STAGED cutover config — NOT active. See CUTOVER.md. To activate: back up vercel.json, then `cp vercel.cutover.json vercel.json`, deploy a PREVIEW, verify the checklist, only then promote. This routes user-facing HTML pages to the Next app (web/) and keeps /api/* + all SEO infra + OG images + static/legal pages on the Python function (app/main.py), which is where they must stay (Pillow-generated OG images and the sitemap/llms corpora are pure-Python and not ported).",
+  "builds": [
+    { "src": "app/main.py", "use": "@vercel/python", "config": { "maxDuration": 60 } },
+    { "src": "web/package.json", "use": "@vercel/next" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "app/main.py" },
+    { "src": "/sitemap.xml", "dest": "app/main.py" },
+    { "src": "/sitemap", "dest": "app/main.py" },
+    { "src": "/robots.txt", "dest": "app/main.py" },
+    { "src": "/llms.txt", "dest": "app/main.py" },
+    { "src": "/llms-full.txt", "dest": "app/main.py" },
+    { "src": "/[^/]+\\.txt", "dest": "app/main.py" },
+    { "src": "/book/([^/]+)/og.png", "dest": "app/main.py" },
+    { "src": "/mind/([^/]+)/og.png", "dest": "app/main.py" },
+    { "src": "/share/(.*)", "dest": "app/main.py" },
+    { "src": "/terms", "dest": "app/main.py" },
+    { "src": "/privacy", "dest": "app/main.py" }
+  ],
+  "crons": [
+    { "path": "/api/cron/seed-minds", "schedule": "0 0 * * 1" },
+    { "path": "/api/cron/discover", "schedule": "0 6 * * 3" },
+    { "path": "/api/cron/embed-minds", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/indexnow", "schedule": "0 4 * * *" }
+  ]
+}

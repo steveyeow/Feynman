@@ -22,6 +22,7 @@ import {
   getBookData,
   getQuestions,
   getSamplePassages,
+  getRelatedForBook,
   detectCapabilities,
   clampDescription,
   slugify,
@@ -83,9 +84,10 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages] = await Promise.all([
+  const [questions, passages, related] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
+    getRelatedForBook(id),
   ]);
 
   const caps = detectCapabilities(data.agent);
@@ -161,6 +163,34 @@ export default async function BookLandingPage({ params }: PageProps) {
       <CtaRow caps={caps} bookId={id} title={data.title} />
 
       <LiveContentLink entityName={data.title} bookId={id} />
+
+      {related.minds.length ? (
+        <section className="seo-section">
+          <h2>Great minds who discuss this book</h2>
+          <ul className="related-minds">
+            {related.minds.map((m) => (
+              <li key={m.id}>
+                <Link href={`/mind/${m.id}`}>{m.name}</Link>
+                {m.domain ? ` — ${m.domain}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {related.books.length ? (
+        <section className="seo-section">
+          <h2>Related books</h2>
+          <ul className="related-books">
+            {related.books.map((b) => (
+              <li key={b.id}>
+                <Link href={`/book/${b.id}`}>{b.name}</Link>
+                {b.author ? ` — ${b.author}` : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {data.category ? (
         <p className="topic-link-back">

@@ -8,6 +8,9 @@ import {
   type BookContent,
   ApiError,
 } from "@/lib/reader";
+import { useAuth } from "@/lib/auth";
+import { savePendingBookIntent } from "@/lib/pendingIntent";
+import { track } from "@/lib/analytics";
 import styles from "./Reader.module.css";
 
 /**
@@ -25,6 +28,7 @@ import styles from "./Reader.module.css";
  */
 export default function Reader({ id }: { id: string }) {
   const router = useRouter();
+  const { authEnabled, user } = useAuth();
   const [content, setContent] = useState<BookContent | null>(null);
   const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,6 +145,17 @@ export default function Reader({ id }: { id: string }) {
   }
 
   function askQuestion(q: string) {
+    // Anonymous visitor on the hosted build: stash the book they came for + the
+    // question, then bounce through login. After sign-up the home composer
+    // restores the intent and resumes the chat (port of app.js 4930 +
+    // _savePendingBookIntent). Open-source (auth off) or signed-in users go
+    // straight to the composer.
+    if (authEnabled && !user) {
+      savePendingBookIntent(id, { question: q, via: "reader" });
+      track("pending_intent_saved", { via: "reader" });
+      router.push("/login");
+      return;
+    }
     router.push(`/?book=${encodeURIComponent(id)}&q=${encodeURIComponent(q)}`);
   }
 

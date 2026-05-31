@@ -26,7 +26,7 @@ const LANDED_KEY = "feynman-landed";
  * returning visitor never flashes the landing on first paint.
  */
 export default function HomeOrLanding() {
-  const { ready, authEnabled, user, isPro } = useAuth();
+  const { ready, authEnabled, user } = useAuth();
   const router = useRouter();
 
   // Tracks the localStorage flag. `null` = not yet read (SSR / first paint).
@@ -50,27 +50,34 @@ export default function HomeOrLanding() {
   }, []);
 
   // CTA handler — ports the legacy _lpCtaHandler branch logic (app.js 938-951).
+  // Keyed on authEnabled (the FEYNMAN_PRO mirror), NOT isPro: on the hosted
+  // build a signed-out visitor must go to /login; on the open-source build we
+  // just remember the visit and drop into the app.
   const handleCta = useCallback(() => {
-    if (isPro) {
-      // Pro build: signed in -> home; signed out -> login.
+    if (authEnabled) {
       if (user) markLandedAndShowHome();
       else router.push("/login");
     } else {
-      // Non-Pro: remember the visit and drop into the home.
       markLandedAndShowHome();
     }
-  }, [isPro, user, router, markLandedAndShowHome]);
+  }, [authEnabled, user, router, markLandedAndShowHome]);
 
-  // Before auth/localStorage resolve, render HOME (the default app surface).
-  // Keeps the common case intact and avoids flashing the landing.
+  // Before auth/localStorage resolve, render nothing (a neutral blank) rather
+  // than committing to HOME — otherwise a first-time anonymous visitor on the
+  // hosted build briefly sees the app home, then it swaps to the landing
+  // (a backwards flash). Rendering null until `ready` avoids that while still
+  // never flashing the landing to returning/auth'd users.
   if (!ready || landed === null) {
-    return <HomePage />;
+    return null;
   }
 
-  const showLanding = authEnabled && !user && !landed;
+  // Legacy getRoute() (app.js 679-684):
+  //   authEnabled  -> landing whenever there's no signed-in user
+  //   !authEnabled -> landing once, until the visitor dismisses it (feynman-landed)
+  const showLanding = authEnabled ? !user : !landed;
   if (showLanding) {
-    // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO.
-    const ctaLabel = isPro ? "Get Started Free" : "Start Exploring";
+    // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO (authEnabled).
+    const ctaLabel = authEnabled ? "Get Started Free" : "Start Exploring";
     return <LandingPage ctaLabel={ctaLabel} onCta={handleCta} />;
   }
 

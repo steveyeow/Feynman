@@ -15,9 +15,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { get } from "@/lib/api";
+import { get, getAgent, type Agent } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow } from "@/lib/books";
 import { createSession } from "@/lib/chat";
+import { useProGate } from "@/components/pro/ProOverlay";
+import { restorePendingBookIntent } from "@/lib/pendingIntent";
+import { track } from "@/lib/analytics";
 import {
   SelectedChips,
   BookPopover,
@@ -35,6 +38,7 @@ const PENDING_KEY = "feynman:pendingChat";
 export default function HomeComposer() {
   const router = useRouter();
   const params = useSearchParams();
+  const { requirePro } = useProGate();
 
   const [value, setValue] = useState("");
   const [books, setBooks] = useState<Map<string, SelectedBook>>(new Map());
@@ -45,31 +49,75 @@ export default function HomeComposer() {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const prefilled = useRef(false);
 
-  // ── ?book & ?q handoff from the Reader / cross-surface links ──
+  // ── Preselect a book + prefill a question on mount ──
+  // Two sources, in priority order:
+  //   1. ?book & ?q query params — cross-surface links (the Reader's "ask").
+  //   2. localStorage pending-intent — the post-signup resume path. An
+  //      anonymous visitor who hit a pro/login gate on a SEO surface gets their
+  //      book restored here after they sign in (port of _restorePendingBookIntent).
+  // Query params win when both are present (an explicit link beats stale state).
   useEffect(() => {
     if (prefilled.current) return;
     prefilled.current = true;
     const q = params.get("q");
     const bookId = params.get("book");
-    if (q) setValue(q);
-    if (bookId) {
-      // Resolve the agent → a SelectedBook so the chip shows the real title.
-      get<AgentRow[]>("/api/agents")
-        .then((rows) => {
-          const all = mapAgentsToBooks(rows || []);
-          const b = all.find((x) => x.agentId === bookId || x.id === bookId);
-          if (b) {
-            setBooks(
-              new Map([[b.id, { id: b.id, agentId: b.agentId, title: b.title, author: b.author }]]),
-            );
-          }
-        })
-        .catch(() => {
-          /* book preselect is best-effort */
-        });
+
+    if (q || bookId) {
+      if (q) setValue(q);
+      if (bookId) preselectBook(bookId);
+      return;
+    }
+
+    // No query params → try a pending intent (read+validate TTL+clear).
+    const intent = restorePendingBookIntent();
+    if (intent) {
+      if (intent.question) setValue(intent.question);
+      preselectBook(intent.bookId);
+      track("pending_intent_restored", {
+        via: intent.via,
+        had_question: !!intent.question,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resolve an agent/book id → a SelectedBook chip. Tries the catalog list
+  // first (cheap, already cached), falling back to a direct /api/agents/{id}
+  // fetch for books the catalog filter excludes (matches the legacy fallback).
+  const preselectBook = (bookId: string) => {
+    get<AgentRow[]>("/api/agents")
+      .then((rows) => {
+        const all = mapAgentsToBooks(rows || []);
+        const b = all.find((x) => x.agentId === bookId || x.id === bookId);
+        if (b) {
+          setBooks(
+            new Map([[b.id, { id: b.id, agentId: b.agentId, title: b.title, author: b.author }]]),
+          );
+          return null;
+        }
+        // Fallback: fetch the single agent directly.
+        return getAgent(bookId).then((agent: Agent) => {
+          if (agent?.id) {
+            setBooks(
+              new Map([
+                [
+                  agent.id,
+                  {
+                    id: agent.id,
+                    agentId: agent.id,
+                    title: agent.name,
+                    author: (agent.author as string) || "",
+                  },
+                ],
+              ]),
+            );
+          }
+        });
+      })
+      .catch(() => {
+        /* book preselect is best-effort */
+      });
+  };
 
   const grow = () => {
     const ta = taRef.current;
@@ -81,6 +129,9 @@ export default function HomeComposer() {
   const submit = async () => {
     const msg = value.trim();
     if (!msg || busy) return;
+    // Inviting minds requires pro on the hosted build (legacy app.js 3149).
+    // The minds popover already gates selection; this is the backstop on send.
+    if (minds.size && !requirePro()) return;
     setBusy(true);
     try {
       const session = await createSession({ title: "New chat", sessionType: "chat" });

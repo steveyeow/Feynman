@@ -37,6 +37,8 @@ import {
   isRealMindReply,
   type MindResponse,
 } from "@/lib/minds-chat";
+import { useProGate } from "@/components/pro/ProOverlay";
+import { track } from "@/lib/analytics";
 import MessageList from "./MessageList";
 import Composer from "./Composer";
 import MindConsent from "./MindConsent";
@@ -56,6 +58,20 @@ interface PendingChat {
   message: string;
   books?: SelectedBook[];
   minds?: SelectedMind[];
+}
+
+/** True if a first-message handoff for this session is waiting (without
+ *  consuming it) — lets the load effect avoid clobbering the optimistic
+ *  transcript the handoff is about to render. */
+function hasPending(sessionId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return false;
+    return (JSON.parse(raw) as PendingChat).sessionId === sessionId;
+  } catch {
+    return false;
+  }
 }
 
 /** Read + clear the first-message handoff written by HomeComposer. */
@@ -97,6 +113,10 @@ function stubSession(id: string): Session {
 }
 
 export default function ChatView({ sessionId }: { sessionId: string }) {
+  // Pro-gate for inviting minds (hosted build). On open-source, isProUser is
+  // always true so requirePro() runs through.
+  const { requirePro } = useProGate();
+
   // The session row (title + share state). Loaded client-side with a stub
   // fallback so the chat works even when the row can't be fetched.
   const sessionRef = useRef<Session>(stubSession(sessionId));
@@ -153,13 +173,19 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         // before auth lands.
         console.warn("Failed to load session row:", e);
       });
-    loadMessages(sessionId)
-      .then((msgs) => {
-        if (alive) setMessages(msgs);
-      })
-      .catch((e) => {
-        console.warn("Failed to load session messages:", e);
-      });
+    // Skip loading persisted messages when a first-message handoff is pending
+    // for this session: the handoff effect renders the user bubble + streams
+    // the reply optimistically, and a fast loadMessages() resolving mid-send
+    // would otherwise overwrite (clobber) that live transcript.
+    if (!hasPending(sessionId)) {
+      loadMessages(sessionId)
+        .then((msgs) => {
+          if (alive) setMessages(msgs);
+        })
+        .catch((e) => {
+          console.warn("Failed to load session messages:", e);
+        });
+    }
     // Endpoint returns { public_discussions, ai_insights }. (The scope referred
     // to the ENABLE_PUBLIC_DISCUSSIONS env var; the JSON key is the lowercase
     // public_discussions — verified against app/main.py.)
@@ -385,6 +411,8 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       for (const id of c?.mindIds || []) activeMindsRef.current.delete(id);
       return;
     }
+    // mind_joined — the user accepted the auto-suggested minds (app.js 2925).
+    track("mind_joined", { minds: c.names, count: c.names.length });
     setMindsBusy(true);
     await runPanel(ctx.gen, c.mindIds, c.names, ctx.working, ctx.message, ctx.bookCtx, ctx.agentIds);
     setMindsBusy(false);
@@ -393,6 +421,8 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   const onConsentDecline = useCallback(() => {
     const c = consent;
     setConsent(null);
+    // mind_declined — the user dismissed the suggestion (app.js 2929).
+    if (c) track("mind_declined", { minds: c.names, count: c.names.length });
     for (const id of c?.mindIds || []) activeMindsRef.current.delete(id);
   }, [consent]);
 
@@ -410,6 +440,16 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
 
       const effBooks = override?.books ?? books;
       const effMinds = override?.minds ?? minds;
+
+      // Inviting minds requires pro on the hosted build (legacy app.js 3149).
+      // The minds popover already gates selection; this is the backstop on send.
+      if (effMinds.size && !requirePro()) return;
+
+      // chat_sent — fired once per user send (port of app.js 2761).
+      track("chat_sent", {
+        has_books: effBooks.size > 0,
+        has_minds: effMinds.size > 0,
+      });
 
       // Invalidate any in-flight minds work + abort prior chat request.
       const gen = ++genRef.current;
@@ -506,7 +546,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         await inviteMinds(gen, working, message, bookCtx, agentIds, effMinds);
       }
     },
-    [books, minds, messages, sessionId, buildHistory, inviteMinds],
+    [books, minds, messages, sessionId, buildHistory, inviteMinds, requirePro],
   );
 
   // ── First-message handoff from HomeComposer ──

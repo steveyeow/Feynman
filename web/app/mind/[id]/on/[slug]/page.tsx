@@ -8,20 +8,18 @@ import {
   abs,
   breadcrumbJsonLd,
   fetchMind,
+  fetchMindOnTopic,
   isMindTopicRelevant,
   metaDescription,
   mindEssayJsonLd,
   resolveTopicSlug,
 } from "@/lib/seo-mind";
 
-// NOTE — missing endpoint:
-// The legacy /mind/{id}/on/{slug} page rendered an LLM-generated imagined
-// essay (qa.generate_mind_on_topic_essay). There is NO JSON API for that
-// generation, so this Next.js route renders a MINIMAL page: the framed title,
-// an explicit "imagined perspective" disclaimer, and links back to the mind
-// and topic hubs. When an essay endpoint exists (e.g. GET
-// /api/minds/{id}/on/{slug}), drop the generated paragraphs in below and
-// extend the Article JSON-LD description with an excerpt.
+// The imagined essay comes from GET /api/minds/{id}/on/{slug} (mirrors the
+// legacy qa.generate_mind_on_topic_essay). When that endpoint returns an
+// essay we render it; when it 404s (relevance gate) or returns nothing
+// (ENABLE_MIND_ESSAY off / generation failed), we fall back to the framed
+// view below so the page is always substantive and never crashes.
 
 export const revalidate = 86400;
 export const dynamicParams = true;
@@ -85,6 +83,13 @@ export default async function MindOnTopicPage({
   const readerUrl = `${SITE_URL}/#/mind/${params.id}`;
   const desc = `An imagined perspective on ${topic}, grounded in ${mind.name}'s recorded ideas and methods.`;
 
+  // Generated essay (may be null when the feature is off / generation fails →
+  // we fall back to the framed view).
+  const onTopic = await fetchMindOnTopic(params.id, params.slug);
+  const essayParagraphs = onTopic?.essay
+    ? onTopic.essay.split(/\n\n+/).map((p) => p.trim()).filter(Boolean)
+    : [];
+
   const articleLd = mindEssayJsonLd({
     mindName: mind.name,
     topic,
@@ -114,18 +119,28 @@ export default async function MindOnTopicPage({
       </h1>
 
       <section className="seo-section">
-        <p>
-          This is a framed view of how {mind.name}
-          {mind.era ? ` (${mind.era})` : ""} might reason about {topic},
-          drawing on the methods, values, and concerns their work exhibits.
-          {mind.domain ? ` ${mind.name} is best known in ${mind.domain}.` : ""}
-        </p>
-        {mind.bio_summary ? <p>{mind.bio_summary}</p> : null}
-        <p>
-          The fullest version of this perspective is interactive — put a
-          question to {mind.name} directly and follow the reasoning where it
-          leads.
-        </p>
+        {essayParagraphs.length ? (
+          <>
+            {essayParagraphs.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </>
+        ) : (
+          <>
+            <p>
+              This is a framed view of how {mind.name}
+              {mind.era ? ` (${mind.era})` : ""} might reason about {topic},
+              drawing on the methods, values, and concerns their work exhibits.
+              {mind.domain ? ` ${mind.name} is best known in ${mind.domain}.` : ""}
+            </p>
+            {mind.bio_summary ? <p>{mind.bio_summary}</p> : null}
+            <p>
+              The fullest version of this perspective is interactive — put a
+              question to {mind.name} directly and follow the reasoning where it
+              leads.
+            </p>
+          </>
+        )}
         <p>
           <small>
             Imagined perspective — an AI synthesis grounded in {mind.name}&rsquo;s

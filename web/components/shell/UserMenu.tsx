@@ -54,6 +54,11 @@ export default function UserMenu() {
             <span>Theme</span>
             <ThemeToggle />
           </div>
+          {authEnabled && user && (
+            <Link className="user-menu-item" href="/subscription" onClick={() => setOpen(false)}>
+              Subscription
+            </Link>
+          )}
           {authEnabled && user && <SignOutItem onDone={() => setOpen(false)} />}
           {authEnabled && !user && (
             <Link className="user-menu-item" href="/login" onClick={() => setOpen(false)}>

@@ -350,3 +350,42 @@ body {
 .user-menu-item:hover { background: var(--accent-light); }
 .user-menu-signout { color: var(--delete-color, #dc2626); }
 .login-page-wrap { min-height: 100%; padding: 24px; }
+
+/* ── Public discussion thread (/discussions/[id]) ─────────────────────── */
+.discussion-thread { display: flex; flex-direction: column; gap: 16px; }
+.discussion-msg { padding: 12px 16px; border-radius: var(--r-control); }
+.discussion-msg .discussion-role {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.discussion-user { background: var(--bg-elev); }
+.discussion-assistant {
+  background: var(--accent-light);
+  border: 1px solid var(--border);
+}
+.discussion-msg p { margin: 0; }
+
+/* ── /chats list page ─────────────────────────────────────────────────── */
+.chats-content { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+.chats-title-row {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
+}
+.chats-new-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--r-control);
+  background: var(--accent); color: #fff; text-decoration: none;
+  font-size: 14px; font-weight: 600;
+}
+.chats-list { display: flex; flex-direction: column; gap: 6px; }
+.chats-list-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 16px; border-radius: var(--r-control);
+  background: var(--glass-clear);
+  -webkit-backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  backdrop-filter: blur(var(--blur-thin)) saturate(140%);
+  border: 1px solid var(--glass-edge);
+  color: var(--text); text-decoration: none; font-size: 15px;
+  transition: background 0.15s ease;
+}
+.chats-list-item:hover { background: var(--glass-thick); }
+.chats-empty { color: var(--text-muted); padding: 40px 4px; font-size: 14px; }
