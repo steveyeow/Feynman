@@ -370,7 +370,7 @@ export default function HomeComposer() {
             </button>
             <BookPopover
               open={booksOpen}
-              direction="up"
+              direction="down"
               selected={books}
               onToggle={toggleBook}
               onClose={() => setBooksOpen(false)}
@@ -392,7 +392,7 @@ export default function HomeComposer() {
             </button>
             <MindsPopover
               open={mindsOpen}
-              direction="up"
+              direction="down"
               selected={minds}
               onToggle={toggleMind}
               onClose={() => setMindsOpen(false)}

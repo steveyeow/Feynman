@@ -134,6 +134,11 @@ body { background-color: var(--bg-home); }
 .chats-new-btn, .chats-new-btn:hover,
 .chats-list-item, .chats-list-item:hover,
 .card-chat-btn, .card-chat-btn:hover,
+.create-book-btn, .create-book-btn:hover,
+.card-details-btn, .card-details-btn:hover,
+.filter-tag, .filter-tag:hover,
+.topic-tag, .topic-tag:hover,
+.discover-bar-btn, .discover-bar-btn:hover,
 .seo-action, .seo-action:hover,
 .user-menu-item, .user-menu-item:hover { text-decoration: none; }
 
