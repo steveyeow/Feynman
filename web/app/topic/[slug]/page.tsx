@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 import { ExploreFooter } from "@/components/seo/mind/MindSections";
 import {
@@ -110,18 +111,59 @@ export default async function TopicPage({
     href: `/topic/${topicSlug(t)}`,
   }));
 
+  // A topic isn't chattable, so there's no primary action — but keep shareUrl
+  // so the Share control still renders. EntityActions handles an empty actions
+  // array (it just maps over it).
+  const hero = (
+    <>
+      <p className="seo-meta">Topic</p>
+      <h1>{topic}</h1>
+      <EntityActions actions={[]} shareUrl={canonical} shareTitle={`${topic} on Feynman`} />
+    </>
+  );
+
+  const rail = (
+    <>
+      {books.length ? (
+        <div className="seo-rail-card">
+          <h3>Books in this topic</h3>
+          <ul>
+            {books.slice(0, 8).map((b) => (
+              <li key={b.id}>
+                <Link href={`/book/${b.id}`}>{b.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {topicMinds.length ? (
+        <div className="seo-rail-card">
+          <h3>Great minds</h3>
+          <ul>
+            {topicMinds.slice(0, 8).map((m) => (
+              <li key={m.id}>
+                <Link href={`/mind/${m.id}`}>{m.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const hasRail = books.length > 0 || topicMinds.length > 0;
+
   return (
-    <SeoColumn>
+    <EntityLayout hero={hero} rail={hasRail ? rail : undefined}>
       <JsonLd data={collectionLd} />
       <JsonLd data={breadcrumbLd} />
 
-      <h1>{topic}</h1>
       <p className="topic-intro">{introText(topic, books.length, topicMinds.length)}</p>
 
       {books.length ? (
         <section className="seo-section">
           <h2>Books in this topic</h2>
-          <ul className="topic-books">
+          <ul className="related-books">
             {books.map((b) => {
               const author = bookAuthor(b);
               return (
@@ -138,7 +180,7 @@ export default async function TopicPage({
       {topicMinds.length ? (
         <section className="seo-section">
           <h2>Great minds on this topic</h2>
-          <ul className="topic-minds">
+          <ul className="related-minds">
             {topicMinds.map((m) => (
               <li key={m.id}>
                 <Link href={`/mind/${m.id}`}>{m.name}</Link>
@@ -166,6 +208,6 @@ export default async function TopicPage({
       </p>
 
       <ExploreFooter items={exploreItems} label="Other topics" />
-    </SeoColumn>
+    </EntityLayout>
   );
 }

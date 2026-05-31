@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 
-import BackLink from "@/components/seo/book/BackLink";
 import QaAnswer from "@/components/seo/book/QaAnswer";
 import QaPassages from "@/components/seo/book/QaPassages";
 import SiblingQuestions from "@/components/seo/book/SiblingQuestions";
@@ -101,7 +101,10 @@ export default async function BookQuestionPage({ params }: PageProps) {
 
   const bookUrl = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const canonical = `${bookUrl}/q/${slug}`;
-  const reader = `${SITE_URL}/read/${encodeURIComponent(id)}`;
+  // Chat ALWAYS routes to the conversational composer (preselects the book),
+  // never the reader — catalog stubs have no readable text, so /read would be
+  // a dead end here.
+  const chatHref = `/?book=${encodeURIComponent(id)}`;
   const createdAt = data.agent.created_at || "";
 
   const qaLd = qaPageJsonld({
@@ -120,13 +123,37 @@ export default async function BookQuestionPage({ params }: PageProps) {
     { name: "Q&A", url: canonical },
   ]);
 
+  const actions: EntityAction[] = [
+    { label: `Chat about this book`, href: chatHref, variant: "primary" },
+  ];
+
+  const hero = (
+    <>
+      <Link href={`/book/${encodeURIComponent(id)}`} className="seo-backlink">
+        ← {data.title}
+      </Link>
+      <p className="seo-meta">Question</p>
+      <h1>{question}</h1>
+      <EntityActions actions={actions} shareUrl={canonical} shareTitle={question} />
+    </>
+  );
+
+  const rail = (
+    <div className="seo-rail-card">
+      <h3>About this book</h3>
+      <ul>
+        <li>
+          <Link href={`/book/${encodeURIComponent(id)}`}>{data.title}</Link>
+        </li>
+        {data.author ? <li className="seo-meta">by {data.author}</li> : null}
+      </ul>
+    </div>
+  );
+
   return (
-    <SeoColumn>
+    <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={qaLd} />
       <JsonLd data={breadcrumbLd} />
-
-      <BackLink href={`/book/${encodeURIComponent(id)}`} label={data.title} />
-      <h1>{question}</h1>
 
       {/* Real grounded answer when available; QaAnswer renders nothing for an
           empty answer, in which case the passages below carry the content. */}
@@ -139,12 +166,6 @@ export default async function BookQuestionPage({ params }: PageProps) {
         bookId={id}
         currentQuestion={question}
       />
-
-      <p className="cta">
-        <Link href={`/read/${encodeURIComponent(id)}`} data-abs={reader}>
-          Chat about this question →
-        </Link>
-      </p>
-    </SeoColumn>
+    </EntityLayout>
   );
 }

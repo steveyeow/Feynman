@@ -93,6 +93,15 @@ export function coverStyle(book: Book): string {
   return COVER_COLORS[Math.abs(h) % COVER_COLORS.length];
 }
 
+/** Title-only cover color (for surfaces that have a title but not a full Book,
+ *  e.g. the SEO book hero). Same palette + hash as coverStyle. */
+export function coverStyleFromTitle(title: string, isAIGenerated = false): string {
+  if (isAIGenerated) return "linear-gradient(135deg,#667eea 0%,#764ba2 100%)";
+  let h = 0;
+  for (let i = 0; i < title.length; i++) h = ((h << 5) - h + title.charCodeAt(i)) | 0;
+  return COVER_COLORS[Math.abs(h) % COVER_COLORS.length];
+}
+
 /** Cover initials — first letters of up to TWO words longer than 2 chars
  *  (legacy coverInitials). "Induction motor" → "IM", "Tesla coil" → "TC". */
 export function coverInitials(title: string): string {

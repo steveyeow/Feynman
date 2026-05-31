@@ -1,8 +1,8 @@
 /**
  * Surfaces the book's /insights live-content page from the landing page.
- * Port of seo.py render_live_content_link (kind="insights"). Always
- * rendered so the page is discoverable; an optional count badge advertises
- * real activity when > 0.
+ * Port of seo.py render_live_content_link (kind="insights"). Rendered as a
+ * "promo card" (NOT an <h2><a>, which inherited the content-link underline +
+ * heading size and looked like a struck-through title).
  */
 import Link from "next/link";
 
@@ -16,17 +16,19 @@ export default function LiveContentLink({
   count?: number;
 }) {
   return (
-    <section className="seo-section live-content-link">
-      <h2>
-        <Link href={`/book/${encodeURIComponent(bookId)}/insights`}>
-          AI insights about {entityName} →
-        </Link>
-        {count > 0 ? <span className="count-badge"> {count}</span> : null}
-      </h2>
-      <p>
+    <Link
+      href={`/book/${encodeURIComponent(bookId)}/insights`}
+      className="seo-promo-card"
+    >
+      <span className="seo-promo-title">
+        AI insights about {entityName}
+        {count > 0 ? <span className="seo-promo-badge">{count}</span> : null}
+        <span className="seo-promo-arrow"> →</span>
+      </span>
+      <span className="seo-promo-sub">
         Accumulated AI commentary on this book, drawn from real reader chat
         sessions and updated as more readers engage.
-      </p>
-    </section>
+      </span>
+    </Link>
   );
 }

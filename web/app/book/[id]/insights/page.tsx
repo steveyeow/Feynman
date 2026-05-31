@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 
-import BackLink from "@/components/seo/book/BackLink";
 import {
   InsightCards,
   InsightsEmptyState,
@@ -61,7 +61,10 @@ export default async function BookInsightsPage({ params }: PageProps) {
 
   const bookUrl = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const canonical = `${bookUrl}/insights`;
-  const reader = `${SITE_URL}/read/${encodeURIComponent(id)}`;
+  // Chat ALWAYS routes to the conversational composer (preselects the book),
+  // never the reader — catalog stubs have no readable text, so /read would be
+  // a dead end here.
+  const chatHref = `/?book=${encodeURIComponent(id)}`;
   const latest = insights[0]?.created_at || "";
 
   const descRaw = insights.length
@@ -86,17 +89,49 @@ export default async function BookInsightsPage({ params }: PageProps) {
     { name: "Insights", url: canonical },
   ]);
 
+  const actions: EntityAction[] = [
+    { label: `Chat about this book`, href: chatHref, variant: "primary" },
+  ];
+
+  const hero = (
+    <>
+      <Link
+        href={`/book/${encodeURIComponent(id)}`}
+        className="seo-backlink"
+      >
+        ← {data.title}
+      </Link>
+      <p className="seo-meta">Live AI insights</p>
+      <h1>AI insights about {data.title}</h1>
+      <EntityActions actions={actions} shareUrl={canonical} shareTitle={`AI insights about ${data.title}`} />
+    </>
+  );
+
+  const rail = (
+    <div className="seo-rail-card">
+      <h3>About this book</h3>
+      <ul>
+        <li>
+          <Link href={`/book/${encodeURIComponent(id)}`}>{data.title}</Link>
+        </li>
+        <li>
+          <Link href={`/book/${encodeURIComponent(id)}/discussions`}>
+            Reader discussions
+          </Link>
+        </li>
+      </ul>
+    </div>
+  );
+
   return (
-    <SeoColumn>
+    <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={articleLd} />
       <JsonLd data={breadcrumbLd} />
 
-      <BackLink href={`/book/${encodeURIComponent(id)}`} label={data.title} />
-      <h1>AI insights about {data.title}</h1>
-      <p className="insights-intro">
-        Accumulated AI-synthesized commentary drawn from real reader chat
-        sessions with this book. Updated as more readers explore the text. The
-        AI&apos;s responses are published; user questions remain private.
+      <p className="seo-meta">
+        These are AI-synthesized insights about {data.title}, drawn from real
+        reader chat sessions on Feynman and refreshed as more readers engage.
+        The AI&apos;s responses are published; reader questions stay private.
       </p>
 
       {insights.length ? (
@@ -104,12 +139,6 @@ export default async function BookInsightsPage({ params }: PageProps) {
       ) : (
         <InsightsEmptyState entityName={data.title} />
       )}
-
-      <p className="cta">
-        <Link href={`/read/${encodeURIComponent(id)}`} data-abs={reader}>
-          Chat with {data.title} →
-        </Link>
-      </p>
-    </SeoColumn>
+    </EntityLayout>
   );
 }

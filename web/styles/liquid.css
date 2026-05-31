@@ -249,6 +249,59 @@ body { background-color: var(--bg-home); }
 .seo-action.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }
 .seo-action.ghost:hover { color: var(--text); background: rgba(128,128,128,0.08); }
 
+/* Feynman share popup (custom — NOT the OS share sheet). */
+.seo-share-wrap { position: relative; display: inline-flex; }
+.seo-share-popup {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  min-width: 168px; padding: 6px;
+  background: var(--bg-chat); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.18));
+  display: flex; flex-direction: column; gap: 2px;
+}
+.seo-share-opt {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; border: none; background: transparent;
+  color: var(--text); font-size: 13px; font-family: inherit; cursor: pointer;
+  text-align: left; width: 100%;
+}
+.seo-share-opt:hover { background: rgba(128,128,128,0.08); }
+.seo-share-opt svg { flex-shrink: 0; color: var(--text-secondary); }
+
+/* Promo card (e.g. "AI insights about X →") — a tappable card, not a heading. */
+.seo-promo-card {
+  display: block; margin: 1.6em 0; padding: 16px 18px;
+  background: var(--bg-chat); border: 1px solid var(--border);
+  border-radius: 12px; text-decoration: none !important;
+  transition: border-color 0.15s, background 0.15s;
+}
+.seo-promo-card:hover { border-color: var(--accent); }
+.seo-promo-title {
+  display: block; font-size: 16px; font-weight: 600; color: var(--accent);
+  margin-bottom: 4px;
+}
+.seo-promo-arrow { color: var(--accent); }
+.seo-promo-badge {
+  display: inline-block; margin-left: 8px; padding: 1px 8px;
+  background: var(--accent-light); color: var(--accent);
+  border-radius: var(--r-pill); font-size: 12px; font-weight: 600;
+}
+.seo-promo-sub { display: block; font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+/* Book cover in the hero (matches the library card cover treatment). */
+.seo-hero-cover {
+  width: 96px; height: 132px; flex-shrink: 0;
+  border-radius: 10px; box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.seo-hero-cover span {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 30px; font-weight: 700; letter-spacing: 0.05em; color: rgba(255,255,255,0.35);
+}
+.seo-hero-with-cover { display: flex; gap: 20px; align-items: flex-start; }
+.seo-hero-with-cover .seo-hero-body { min-width: 0; flex: 1; }
+@media (max-width: 600px) { .seo-hero-cover { width: 72px; height: 100px; } }
+
 /* Two-column: main content + right info rail (desktop); stacks on mobile. */
 .seo-grid { display: block; }
 .seo-grid.has-rail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; align-items: start; }

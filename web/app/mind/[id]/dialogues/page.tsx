@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
+import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
 import {
   SITE_URL,
@@ -70,7 +71,9 @@ export default async function MindDialoguesPage({
 
   const canonical = abs(`/mind/${params.id}/dialogues`);
   const entityCanonical = abs(`/mind/${params.id}`);
-  const readerUrl = `${SITE_URL}/#/mind/${params.id}`;
+  // Chat with a single mind → the DEDICATED 1:1 chat page (not the reader,
+  // not the multi-mind home composer), so a cold visitor can start talking.
+  const chatHref = `/mind/${encodeURIComponent(params.id)}/chat`;
 
   const dialogues = await fetchMindDialogues(params.id, 10);
 
@@ -88,45 +91,71 @@ export default async function MindDialoguesPage({
     ["Dialogues", canonical],
   ]);
 
+  const actions: EntityAction[] = [
+    { label: `Chat with ${mind.name}`, href: chatHref, variant: "primary" },
+  ];
+
+  const hero = (
+    <>
+      <Link href={`/mind/${params.id}`} className="seo-backlink">
+        ← {mind.name}
+      </Link>
+      <p className="seo-meta">Live AI dialogues</p>
+      <h1>AI dialogues with {mind.name}</h1>
+      <EntityActions actions={actions} shareUrl={canonical} shareTitle={`AI dialogues with ${mind.name}`} />
+    </>
+  );
+
+  const rail = (
+    <div className="seo-rail-card">
+      <h3>About this mind</h3>
+      <ul>
+        <li>
+          <Link href={`/mind/${params.id}`}>{mind.name}</Link>
+        </li>
+        <li>
+          <Link href={`/mind/${params.id}/discussions`}>
+            Reader discussions
+          </Link>
+        </li>
+      </ul>
+    </div>
+  );
+
   return (
-    <SeoColumn>
+    <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={articleLd} />
       <JsonLd data={breadcrumbLd} />
 
-      <nav className="seo-meta">
-        <Link href={`/mind/${params.id}`}>← {mind.name}</Link>
-      </nav>
-
-      <h1>AI dialogues with {mind.name}</h1>
-      <p>
-        Accumulated AI agent responses from real chat sessions with {mind.name}.
-        Updated as more conversations happen. The agent&rsquo;s responses are
-        published; user questions remain private.
+      <p className="seo-meta">
+        These are AI agent responses from real chat sessions with {mind.name} on
+        Feynman, aggregated and refreshed as new conversations happen. The
+        agent&apos;s responses are published; reader questions stay private.
       </p>
 
       {dialogues.length ? (
-        <div className="insights">
+        <section className="seo-section insights">
           {dialogues.map((d, i) => (
             <article key={i} className="insight-card">
               <p>{d.text}</p>
             </article>
           ))}
-        </div>
+          <p>
+            <small>
+              Synthesized from AI agent responses across reader conversations.
+              AI output only; user questions are never published.
+            </small>
+          </p>
+        </section>
       ) : (
         <section className="seo-section insights-empty">
           <p>
             No AI dialogues have accumulated yet for {mind.name}. Start a chat
-            below and the agent&rsquo;s responses get aggregated here (your
-            questions stay private).
+            and the agent&apos;s responses get aggregated here (your questions
+            stay private).
           </p>
         </section>
       )}
-
-      <p className="seo-cta-row">
-        <a className="primary" href={readerUrl}>
-          Chat with {mind.name} →
-        </a>
-      </p>
-    </SeoColumn>
+    </EntityLayout>
   );
 }

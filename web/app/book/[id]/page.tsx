@@ -5,6 +5,7 @@ import Link from "next/link";
 import EntityLayout from "@/components/seo/EntityLayout";
 import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
+import { coverStyleFromTitle, coverInitials } from "@/lib/books";
 
 import BookEmptyState from "@/components/seo/book/BookEmptyState";
 import AboutBook from "@/components/seo/book/AboutBook";
@@ -143,18 +144,24 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
   if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
 
+  const isAI = data.agent.type === "ai_book";
   const hero = (
-    <>
-      <p className="seo-meta">Book{data.category ? ` · ${data.category}` : ""}</p>
-      <h1>{data.title}</h1>
-      {data.author ? <p className="seo-author">by {data.author}</p> : null}
-      {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
-      <EntityActions
-        actions={actions}
-        shareUrl={canonical}
-        shareTitle={data.title}
-      />
-    </>
+    <div className="seo-hero-with-cover">
+      <div
+        className="seo-hero-cover"
+        style={{ background: coverStyleFromTitle(data.title, isAI) }}
+        aria-hidden="true"
+      >
+        <span>{coverInitials(data.title)}</span>
+      </div>
+      <div className="seo-hero-body">
+        <p className="seo-meta">Book{data.category ? ` · ${data.category}` : ""}</p>
+        <h1>{data.title}</h1>
+        {data.author ? <p className="seo-author">by {data.author}</p> : null}
+        {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
+        <EntityActions actions={actions} shareUrl={canonical} shareTitle={data.title} />
+      </div>
+    </div>
   );
 
   const rail = (
