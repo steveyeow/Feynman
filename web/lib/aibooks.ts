@@ -153,6 +153,29 @@ export async function confirmBook(
   return { status: data.status, chaptersTotal: data.chapters_total ?? 0 };
 }
 
+/**
+ * Stop an in-progress write (port of _cancelWriteBook → POST /{id}/cancel).
+ * Chapters already written are kept; the book transitions to `cancelled`.
+ */
+export async function cancelBook(bookId: string): Promise<void> {
+  await post(`/api/ai-books/${encodeURIComponent(bookId)}/cancel`, {});
+}
+
+/**
+ * Resume a failed write from the failed chapter (port of _retryWriteBook →
+ * POST /{id}/retry). Returns the (typically `writing`) status so the caller can
+ * resume polling.
+ */
+export async function retryBook(
+  bookId: string,
+): Promise<{ status: AiBookStatus }> {
+  const data = await post<{ status?: AiBookStatus }>(
+    `/api/ai-books/${encodeURIComponent(bookId)}/retry`,
+    {},
+  );
+  return { status: (data.status ?? "writing") as AiBookStatus };
+}
+
 /** Lightweight poll for writing progress. */
 export async function getStatus(bookId: string): Promise<BookStatus> {
   const raw = await get<any>(

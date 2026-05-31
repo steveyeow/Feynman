@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { get } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow, type Book } from "@/lib/books";
 import { listMinds, type Mind } from "@/lib/api";
+import { generateMind } from "@/lib/minds-chat";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { mindColor, mindInitials } from "./markdown";
 import styles from "./ComposerPickers.module.css";
@@ -236,9 +237,33 @@ export function MindsPopover({
   const [minds, setMinds] = useState<Mind[]>([]);
   const [state, setState] = useState<LoadState>("idle");
   const [query, setQuery] = useState("");
+  const [inviting, setInviting] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   // Inviting minds is a pro feature on the hosted build (legacy app.js 4804).
   const { isProUser, showProOverlay } = useProGate();
+
+  // Mint a brand-new mind from the search query and select it (port of
+  // _inviteComposerMind → /api/minds/generate {name, link_works:false}).
+  async function inviteToNetwork() {
+    const name = query.trim();
+    if (!name || inviting) return;
+    setInviting(true);
+    try {
+      const m = await generateMind({ name });
+      if (m) {
+        setMinds((prev) =>
+          prev.some((x) => x.id === m.id) ? prev : [...prev, { id: m.id, name: m.name }],
+        );
+        onToggle({ id: m.id, name: m.name });
+        setQuery("");
+        onClose();
+      }
+    } catch {
+      // Best-effort — leave the popover open so the user can retry.
+    } finally {
+      setInviting(false);
+    }
+  }
 
   useEffect(() => {
     if (!open || state !== "idle") return;
@@ -296,12 +321,40 @@ export function MindsPopover({
           ? `No minds match "${query}"`
           : "No minds yet";
 
+  // Empty-state branching (port of renderPopoverMindList's !filtered.length):
+  //   • non-pro  → "Upgrade to Pro to invite minds" (click → overlay)
+  //   • pro + a query → an "Invite '<query>' to the network" action button
+  //   • pro + no query (or loading/error) → the default empty text
+  const noMatch = filtered.length === 0;
+  const showInvite = noMatch && isProUser && !!query.trim() && state === "ready";
+  const showUpgradeHint = noMatch && !isProUser && state === "ready";
+
   return (
     <div
       ref={ref}
       className={`composer-popover${direction === "down" ? " composer-popover-down" : ""}`}
       onMouseDown={(e) => e.stopPropagation()}
     >
+      {/* Pro badge row — only shown to non-pro users (legacy index.html:247). */}
+      {!isProUser && (
+        <div className="popover-pro-row">
+          <button
+            type="button"
+            className="popover-pro-badge"
+            onClick={() => {
+              onClose();
+              showProOverlay();
+            }}
+          >
+            <span className="popover-pro-label">Pro</span> Upgrade
+          </button>
+        </div>
+      )}
+      {/* Hint line (legacy index.html:248). */}
+      <div className="popover-hint">
+        Invite minds to join the discussion. More relevant minds will also join
+        automatically.
+      </div>
       <input
         className="popover-search"
         placeholder="Search minds..."
@@ -310,8 +363,54 @@ export function MindsPopover({
         onChange={(e) => setQuery(e.target.value)}
       />
       <div className="popover-mind-list">
-        {filtered.length === 0 ? (
-          <div className="popover-empty">{emptyText}</div>
+        {noMatch ? (
+          showInvite ? (
+            <button
+              type="button"
+              className="popover-action popover-invite-mind-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                inviteToNetwork();
+              }}
+              disabled={inviting}
+            >
+              {inviting ? (
+                <>
+                  <span className="popover-invite-spinner" /> Inviting &ldquo;
+                  {query.trim()}&rdquo;...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <circle cx="4" cy="6" r="2" />
+                    <circle cx="20" cy="6" r="2" />
+                    <circle cx="4" cy="18" r="2" />
+                    <circle cx="20" cy="18" r="2" />
+                    <line x1="9.5" y1="10" x2="5.5" y2="7.5" />
+                    <line x1="14.5" y1="10" x2="18.5" y2="7.5" />
+                    <line x1="9.5" y1="14" x2="5.5" y2="16.5" />
+                    <line x1="14.5" y1="14" x2="18.5" y2="16.5" />
+                  </svg>
+                  Invite &ldquo;{query.trim()}&rdquo; to the network
+                </>
+              )}
+            </button>
+          ) : showUpgradeHint ? (
+            <button
+              type="button"
+              className="popover-empty"
+              onClick={() => {
+                onClose();
+                showProOverlay();
+              }}
+              style={{ cursor: "pointer", background: "none", border: "none", width: "100%", textAlign: "left" }}
+            >
+              Upgrade to Pro to invite minds
+            </button>
+          ) : (
+            <div className="popover-empty">{emptyText}</div>
+          )
         ) : (
           filtered.map((m) => {
             const sel = selected.has(m.id);

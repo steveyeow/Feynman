@@ -39,6 +39,7 @@ import {
   type MindResponse,
 } from "@/lib/minds-chat";
 import { listMinds } from "@/lib/api";
+import { parseMentions, stripMentions } from "@/lib/mentions";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { track } from "@/lib/analytics";
 import MessageList from "./MessageList";
@@ -231,6 +232,8 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   );
 
   // ── Run a panel-chat round + append responses ──
+  // `targetMinds` (the @-mentioned names) is sent so the backend restricts who
+  // answers to the mentioned minds (port of runPanelChat's target_minds).
   const runPanel = useCallback(
     async (
       gen: number,
@@ -240,6 +243,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       message: string,
       bookCtx: { title: string; author: string }[],
       agentIds: string[],
+      targetMinds?: string[],
     ): Promise<Message[]> => {
       if (!panelMindIds.length) return baseMsgs;
       const invitedIds = panelMindIds.filter((id) => {
@@ -255,6 +259,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           bookContext: bookCtx.length ? bookCtx : undefined,
           agentIds: agentIds.length ? agentIds : undefined,
           history: buildPanelHistory(baseMsgs),
+          targetMinds: targetMinds?.length ? targetMinds : undefined,
         });
       } catch (e) {
         console.warn("[minds] panel-chat failed:", e);
@@ -329,8 +334,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       bookCtx: { title: string; author: string }[],
       agentIds: string[],
       selectedMinds: Map<string, SelectedMind>,
+      mentionedNames: string[] = [],
     ) => {
       setMindsBusy(true);
+      const hasMentions = mentionedNames.length > 0;
       try {
         // Move chip-selected minds into activeMinds (they're "invited").
         const invitedIds: string[] = [];
@@ -345,18 +352,44 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
 
         let working = baseMsgs;
 
-        // Phase 1: invited (chip) minds answer first — no consent needed.
-        if (invitedIds.length) {
+        // Phase 1: explicitly invited (chip) AND @-mentioned EXISTING minds
+        // answer first — no consent needed (port of app.js phase1Set). Mentioned
+        // names that aren't already active minds are skipped here (production
+        // materializes them via generate; we keep this scoped to existing minds).
+        const phase1Ids = new Set<string>();
+        if (hasMentions) {
+          for (const [id, m] of activeMindsRef.current) {
+            if (mentionedNames.some((n) => n.toLowerCase() === m.name.toLowerCase())) {
+              phase1Ids.add(id);
+            }
+          }
+        }
+        for (const id of invitedIds) phase1Ids.add(id);
+
+        if (phase1Ids.size) {
+          const ids = [...phase1Ids];
+          // joinedNames: of the phase-1 minds, the ones newly invited this turn.
+          const joined = ids
+            .map((id) => activeMindsRef.current.get(id)?.name)
+            .filter((n): n is string => !!n && invitedNames.includes(n));
           working = await runPanel(
             gen,
-            invitedIds,
-            invitedNames,
+            ids,
+            joined,
             working,
             message,
             bookCtx,
             agentIds,
+            hasMentions ? mentionedNames : undefined,
           );
           if (genRef.current !== gen) return;
+        }
+
+        // Phase 2: auto-suggest is skipped when the user @-mentioned minds
+        // (they already chose who answers) — port of app.js skipSuggest.
+        if (hasMentions) {
+          setMindsBusy(false);
+          return;
         }
 
         // Phase 2: auto-suggest 1-3 fresh minds, then ask consent.
@@ -480,10 +513,24 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       // The minds popover already gates selection; this is the backstop on send.
       if (effMinds.size && !requirePro()) return;
 
+      // @-mention parsing (port of parseMentions). Known names = minds already
+      // active in the conversation + the chip-selected minds. Mentions targeting
+      // one of these route the question to that mind on send.
+      const knownMindNames = [
+        ...[...activeMindsRef.current.values()].map((m) => m.name),
+        ...[...effMinds.values()].map((m) => m.name),
+      ];
+      const mentionedNames = parseMentions(message, knownMindNames);
+      // The message the model sees has the @ stripped ("@Aristotle" → "Aristotle").
+      const cleanMessage = mentionedNames.length
+        ? stripMentions(message, knownMindNames)
+        : message;
+
       // chat_sent — fired once per user send (port of app.js 2761).
       track("chat_sent", {
         has_books: effBooks.size > 0,
         has_minds: effMinds.size > 0,
+        has_mentions: mentionedNames.length > 0,
       });
 
       // Invalidate any in-flight minds work + abort prior chat request.
@@ -499,7 +546,12 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         title: b.title,
         author: b.author,
       }));
-      const contextMinds = [...effMinds.values()].map((m) => ({ name: m.name }));
+      // Context minds exclude @-mentioned ones — those render inline as mention
+      // tags in the message text, not as duplicate context chips (port of
+      // app.js 2755: contextMinds = selectedMinds.filter(!mentioned)).
+      const contextMinds = [...effMinds.values()]
+        .filter((m) => !mentionedNames.some((n) => n.toLowerCase() === m.name.toLowerCase()))
+        .map((m) => ({ name: m.name }));
 
       // Rename "New chat" from the first user message.
       if (sessionRef.current.title === "New chat" && messages.length === 0) {
@@ -527,9 +579,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         Object.keys(userMeta).length ? userMeta : undefined,
       );
 
-      // skipFeynman: when minds are chosen as chips, the panel answers instead
-      // of Feynman (matches the legacy).
-      const skipFeynman = effMinds.size > 0;
+      // skipFeynman: when minds are chosen as chips OR the user @-mentioned a
+      // mind, the panel answers instead of Feynman (port of app.js 2783, scoped
+      // per the brief to fire whenever there are mentioned names).
+      const skipFeynman = effMinds.size > 0 || mentionedNames.length > 0;
 
       let working = afterUser;
 
@@ -539,10 +592,13 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         chatAbortRef.current = abort;
         try {
           const data = await sendChat({
-            message,
+            message: cleanMessage,
             agentIds,
             bookContext: bookCtx,
-            history: buildHistory(messages),
+            // History must INCLUDE the just-sent user turn (port of app.js: the
+            // user message is pushed into session.messages before history is
+            // built). We send the stripped text so the model never sees @tokens.
+            history: [...buildHistory(messages), { role: "user", content: cleanMessage }],
             signal: abort.signal,
           });
           if (genRef.current !== gen) return;
@@ -576,9 +632,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         }
       }
 
-      // Kick off the minds-join flow (phase 1 invited, phase 2 auto-suggest).
+      // Kick off the minds-join flow (phase 1 invited + @-mentioned, phase 2
+      // auto-suggest). The panel sees the stripped message (no @tokens).
       if (genRef.current === gen) {
-        await inviteMinds(gen, working, message, bookCtx, agentIds, effMinds);
+        await inviteMinds(gen, working, cleanMessage, bookCtx, agentIds, effMinds, mentionedNames);
       }
     },
     [books, minds, messages, sessionId, buildHistory, inviteMinds, requirePro],

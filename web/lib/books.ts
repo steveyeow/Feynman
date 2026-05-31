@@ -41,6 +41,8 @@ export interface Book {
   creatorName: string;
   userId: string;
   createdAt: string;
+  /** Crowd vote count for this title (merged from /api/votes). 0 if none. */
+  upvotes: number;
 }
 
 export function mapAgentsToBooks(agents: AgentRow[]): Book[] {
@@ -69,8 +71,25 @@ export function mapAgentsToBooks(agents: AgentRow[]): Book[] {
         creatorName: meta.creator_name || "",
         userId: a.user_id || meta.creator_user_id || "",
         createdAt: a.created_at || "",
+        upvotes: 0,
       };
     });
+}
+
+/**
+ * Merge crowd vote counts into a Book list by case-insensitive title match
+ * (port of buildBookList's vote-merge loop). Mutates a copy, returns it.
+ */
+export function mergeVotes(
+  books: Book[],
+  votes: { title: string; count: number }[],
+): Book[] {
+  if (!votes?.length) return books;
+  const byTitle = new Map(votes.map((v) => [v.title.toLowerCase(), v.count]));
+  return books.map((b) => {
+    const count = byTitle.get(b.title.toLowerCase());
+    return count != null ? { ...b, upvotes: count } : b;
+  });
 }
 
 // Verbatim from legacy app.js: fixed palette + FNV-ish hash (NOT an HSL hash),

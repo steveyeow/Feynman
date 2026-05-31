@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { get, post } from "@/lib/api";
-import { AgentRow, Book, mapAgentsToBooks } from "@/lib/books";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { get, post, listVotes } from "@/lib/api";
+import { AgentRow, Book, mapAgentsToBooks, mergeVotes } from "@/lib/books";
 import BookCard from "./BookCard";
 
 /**
@@ -21,27 +21,36 @@ export default function Library() {
   const [discovering, setDiscovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [agents, tops] = await Promise.all([
+      const [agents, tops, votes] = await Promise.all([
         get<AgentRow[]>("/api/agents"),
         // /api/topics returns { topics: [...] } — unwrap it (was read as a bare
         // array, so the tag row never rendered).
         get<{ topics?: string[] } | string[]>("/api/topics").catch(() => ({ topics: [] })),
+        // Vote counts merged into Book.upvotes (port of buildBookList).
+        listVotes().catch(() => []),
       ]);
-      setBooks(mapAgentsToBooks(agents));
+      setBooks(mergeVotes(mapAgentsToBooks(agents), votes));
       setTopics(Array.isArray(tops) ? tops : tops.topics || []);
     } catch (e) {
       setError("Couldn't load the library. Is the API running?");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Remove a deleted book from the list immediately (BookCard already DELETEd
+  // the agent). Port of deleteBook's loadAgents()+renderLibraryGrid refresh,
+  // done as an optimistic filter so the card disappears without a refetch.
+  const handleDeleted = useCallback((agentId: string) => {
+    setBooks((prev) => prev.filter((b) => b.agentId !== agentId));
   }, []);
 
   const filtered = useMemo(() => {
@@ -153,7 +162,7 @@ export default function Library() {
       ) : (
         <div id="library-grid" className="book-grid">
           {filtered.map((b) => (
-            <BookCard key={b.id} book={b} />
+            <BookCard key={b.id} book={b} onDeleted={handleDeleted} />
           ))}
         </div>
       )}

@@ -106,6 +106,9 @@ export const post = <T = unknown>(path: string, data?: unknown, init?: RequestIn
     body: data === undefined ? undefined : JSON.stringify(data),
   });
 
+export const del = <T = unknown>(path: string, init?: RequestInit) =>
+  apiFetch<T>(path, { ...init, method: "DELETE" });
+
 // ── Typed helpers for the first surfaces (extended per-phase) ──────────
 export interface Agent {
   id: string;
@@ -126,8 +129,21 @@ export interface Mind {
 
 export const listAgents = () => get<Agent[]>("/api/agents");
 export const getAgent = (id: string) => get<Agent>(`/api/agents/${encodeURIComponent(id)}`);
+export const deleteAgent = (id: string) =>
+  del<void>(`/api/agents/${encodeURIComponent(id)}`);
 export const listMinds = () => get<Mind[]>("/api/minds");
 export const getMind = (id: string) => get<Mind>(`/api/minds/${encodeURIComponent(id)}`);
+
+/**
+ * POST /api/votes {title} — upvote a book by title (port of handleUpvote). The
+ * server returns the new vote record incl. the updated count.
+ */
+export const upvote = (title: string) =>
+  post<{ id?: string; title?: string; count?: number }>("/api/votes", { title });
+
+/** GET /api/votes → vote records ({title, count, …}); merged into Book.upvotes. */
+export const listVotes = () =>
+  get<{ id: string; title: string; count: number }[]>("/api/votes");
 export const listTopics = () =>
   get<{ topics?: string[] } | string[]>("/api/topics").then((r) =>
     Array.isArray(r) ? r : r.topics || [],

@@ -112,10 +112,19 @@ function Citation({
   return <sup>{num}</sup>;
 }
 
+/** Friendly labels for the skill badge (port of app.js 2335 — exact strings). */
+const SKILL_LABELS: Record<string, string> = {
+  rag: "RAG",
+  content_fetch: "Web APIs",
+  web_search: "Web Search",
+  llm_knowledge: "LLM Knowledge",
+};
+
 function AssistantMessage({ msg }: { msg: Message }) {
   const refs = msg.opts?.references || [];
   const webSrcs = msg.opts?.webSources || [];
   const usage = msg.opts?.usage;
+  const skillUsed = msg.opts?.skillUsed;
   const refsByIndex = new Map<number, Reference>(refs.map((r) => [Number(r.index), r]));
   const cleaned = String(msg.content ?? "")
     .replace(/<div\b[^>]*>|<\/div>/gi, "")
@@ -181,6 +190,12 @@ function AssistantMessage({ msg }: { msg: Message }) {
               </a>
             ))}
           </div>
+        )}
+
+        {skillUsed && skillUsed !== "none" && (
+          <span className={`skill-badge skill-${skillUsed}`}>
+            {SKILL_LABELS[skillUsed] || skillUsed}
+          </span>
         )}
 
         {usage && (usage.total_tokens || 0) > 0 && (

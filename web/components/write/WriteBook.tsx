@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   startBook,
   chatBook,
   confirmBook,
   getStatus,
+  getBook,
+  cancelBook,
+  retryBook,
   type Outline,
   type OutlineChapter,
   type BookStatus,
@@ -42,8 +45,22 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 const TERMINAL: AiBookStatus[] = ["completed", "failed", "cancelled"];
 const POLL_MS = 5000;
 
+/**
+ * Public entry: wraps the inner component in a Suspense boundary because it
+ * reads ?book={id} via useSearchParams to resume an in-progress write (App
+ * Router requirement; mirrors HomePage's pattern).
+ */
 export default function WriteBook() {
+  return (
+    <Suspense fallback={<div className={styles.promptWrap} />}>
+      <WriteBookInner />
+    </Suspense>
+  );
+}
+
+function WriteBookInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { authEnabled, user } = useAuth();
   // AI book write is pro-gated on the hosted build (legacy app.js 3700;
   // anon → login 3696). Open-source (auth off) → always allowed.
@@ -162,6 +179,9 @@ export default function WriteBook() {
     try {
       await confirmBook(bookId);
       setPhase("writing");
+      // Stamp ?book={id} into the URL so a reload (or "leave and come back")
+      // resumes this write via the resume effect above.
+      router.replace(`/write?book=${encodeURIComponent(bookId)}`);
       setMessages((m) => [
         ...m,
         {
@@ -178,20 +198,102 @@ export default function WriteBook() {
     }
   }
 
-  function startPolling(id: string) {
-    stopPolling();
-    const tick = async () => {
+  // ── Stop an in-progress write (port of _cancelWriteBook) ──
+  async function onCancel() {
+    if (!bookId) return;
+    if (!confirm("Stop writing? Chapters already completed will be kept.")) return;
+    try {
+      await cancelBook(bookId);
+      stopPolling();
+      // Reflect the cancelled state locally (poll is stopped, so refresh once).
       try {
-        const s = await getStatus(id);
-        setStatus(s);
-        if (TERMINAL.includes(s.status)) stopPolling();
+        setStatus(await getStatus(bookId));
       } catch {
-        // Transient poll error — keep trying on the next tick.
+        setStatus((s) => (s ? { ...s, status: "cancelled" } : s));
       }
-    };
-    tick();
-    pollRef.current = setInterval(tick, POLL_MS);
+    } catch (err) {
+      setError(describeError(err, "Couldn't stop writing. Try again."));
+    }
   }
+
+  // ── Retry a failed write (port of _retryWriteBook) ──
+  async function onRetry() {
+    if (!bookId) return;
+    setError(null);
+    try {
+      await retryBook(bookId);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          content: "Resuming — picking up from the chapter that failed.",
+        },
+      ]);
+      startPolling(bookId);
+    } catch (err) {
+      setError(describeError(err, "Retry failed. Try again."));
+    }
+  }
+
+  const startPolling = useCallback(
+    (id: string) => {
+      stopPolling();
+      const tick = async () => {
+        try {
+          const s = await getStatus(id);
+          setStatus(s);
+          if (TERMINAL.includes(s.status)) stopPolling();
+        } catch {
+          // Transient poll error — keep trying on the next tick.
+        }
+      };
+      tick();
+      pollRef.current = setInterval(tick, POLL_MS);
+    },
+    [stopPolling],
+  );
+
+  // ── Resume an in-progress write from ?book={id} (port of _restoreWriteBookState) ──
+  // On mount, if the URL carries a book id, rehydrate the title/outline/state
+  // from the server and resume polling when it's still writing. This makes the
+  // "you can leave and come back" promise true across a reload.
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current) return;
+    const resumeId = searchParams?.get("book");
+    if (!resumeId) return;
+    resumedRef.current = true;
+    let alive = true;
+    (async () => {
+      try {
+        const book = await getBook(resumeId);
+        if (!alive) return;
+        setBookId(book.id || resumeId);
+        if (book.agentId) setAgentId(book.agentId);
+        if (book.outline) setOutline(book.outline);
+        if (book.outline?.chapters?.length) {
+          setExpanded(new Set([book.outline.chapters[0].number]));
+        }
+        if (book.status === "outlining" || book.status === "confirmed") {
+          // Outline still being refined / just confirmed — drop back to the
+          // outlining workspace so the user can confirm (or it begins writing).
+          setPhase(book.status === "confirmed" ? "writing" : "outlining");
+          if (book.status === "confirmed") startPolling(resumeId);
+        } else {
+          // writing / completed / failed / cancelled → show the progress canvas.
+          setPhase("writing");
+          setStatus(book);
+          if (book.status === "writing") startPolling(resumeId);
+        }
+      } catch {
+        // Couldn't resume (gone / access denied) — leave the prompt phase as-is.
+        if (alive) resumedRef.current = false;
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [searchParams, startPolling]);
 
   function toggleChapter(n: number) {
     setExpanded((prev) => {
@@ -398,6 +500,8 @@ export default function WriteBook() {
               status={status}
               fallbackChapters={chapters}
               agentId={agentId}
+              onCancel={onCancel}
+              onRetry={onRetry}
             />
           )}
 
@@ -413,10 +517,14 @@ function WritingProgress({
   status,
   fallbackChapters,
   agentId,
+  onCancel,
+  onRetry,
 }: {
   status: BookStatus | null;
   fallbackChapters: OutlineChapter[];
   agentId: string | null;
+  onCancel: () => void;
+  onRetry: () => void;
 }) {
   const chapters = status?.outline?.chapters?.length
     ? status.outline.chapters
@@ -440,6 +548,14 @@ function WritingProgress({
         <span className={styles.progCount}>
           {done} / {total}
         </span>
+        {state === "writing" && (
+          <button type="button" className="canvas-cancel-btn" onClick={onCancel}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+            Stop Writing
+          </button>
+        )}
       </div>
 
       <div className={styles.progBarWrap}>
@@ -502,12 +618,32 @@ function WritingProgress({
             Writing stopped before finishing.
             {readId && done > 0 ? " You can read the chapters that completed." : ""}
           </div>
+          <div className="canvas-done-actions">
+            <button type="button" className="canvas-action-btn" onClick={onRetry}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              Retry
+            </button>
+            {readId && done > 0 && (
+              <Link href={`/read/${encodeURIComponent(readId)}`} className="canvas-action-btn">
+                Read what&apos;s done
+              </Link>
+            )}
+          </div>
+        </>
+      )}
+
+      {state === "cancelled" && (
+        <>
+          <div className={styles.divider} />
+          <div className={styles.failLabel}>
+            Writing stopped — {done} of {total} chapters written.
+          </div>
           {readId && done > 0 && (
-            <Link
-              href={`/read/${encodeURIComponent(readId)}`}
-              className={styles.readBtn}
-            >
-              Read what's done
+            <Link href={`/read/${encodeURIComponent(readId)}`} className={styles.readBtn}>
+              Read the partial book
             </Link>
           )}
         </>
