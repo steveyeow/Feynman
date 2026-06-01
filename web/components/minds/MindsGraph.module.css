@@ -79,7 +79,6 @@
   width: 100%;
   box-sizing: border-box;
   padding: 9px 12px;
-  margin-top: 8px;
   border-radius: 10px;
   border: 1px solid var(--border-strong, var(--border));
   background: var(--bg-chat, transparent);
@@ -89,7 +88,7 @@
   outline: none;
 }
 .modalField:focus { border-color: var(--accent); }
-.modalField:first-of-type { margin-top: 0; }
+.modalField + .modalField { margin-top: 8px; }
 
 textarea.modalField {
   resize: vertical;
