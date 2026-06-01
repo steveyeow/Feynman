@@ -1,0 +1,162 @@
+import type { Metadata } from "next";
+import LegalPage from "@/components/legal/LegalPage";
+
+export const metadata: Metadata = {
+  title: "Terms of Service — Feynman",
+  description: "The terms governing your use of Feynman.",
+  alternates: { canonical: "/terms" },
+};
+
+export default function TermsPage() {
+  return (
+    <LegalPage title="Terms of Service" date="Effective date: March 15, 2026">
+      <p>
+        These Terms of Service (“Terms”) govern your access to and use of Feynman
+        (“the Service”, “we”, “us”, “our”). By creating an account or using the
+        Service, you agree to be bound by these Terms.
+      </p>
+
+      <h2>1. Description of Service</h2>
+      <p>
+        Feynman is an AI-powered interactive knowledge network that lets you
+        explore books, topics, and ideas through conversation, with AI-simulated
+        great minds as part of the network. The Service includes both a free tier
+        and a paid subscription tier (“Pro”).
+      </p>
+
+      <h2>2. Eligibility</h2>
+      <p>
+        You must be at least 13 years old to use the Service. If you are under 18,
+        you represent that your parent or legal guardian has reviewed and agreed
+        to these Terms on your behalf.
+      </p>
+
+      <h2>3. Accounts</h2>
+      <ul>
+        <li>You are responsible for maintaining the confidentiality of your account credentials.</li>
+        <li>You are responsible for all activity that occurs under your account.</li>
+        <li>You agree to provide accurate and complete information when creating your account.</li>
+        <li>We reserve the right to suspend or terminate accounts that violate these Terms.</li>
+      </ul>
+
+      <h2>4. User-Uploaded Content</h2>
+      <p>You may upload files (PDF, TXT) to the Service for AI-assisted analysis. By uploading content:</p>
+      <ul>
+        <li>You represent that you have the legal right to upload and use the content (e.g., you own it, have a license, or your use qualifies as fair use).</li>
+        <li>You retain all ownership rights to your uploaded content.</li>
+        <li>You grant us a limited, non-exclusive license to process, index, and store your uploaded content solely for the purpose of providing the Service to you.</li>
+        <li>We do not share your uploaded content with other users.</li>
+        <li><strong>We are not responsible for any copyright infringement arising from content you upload.</strong></li>
+      </ul>
+
+      <h2>5. AI-Generated Content</h2>
+      <p>
+        The Service uses large language models (LLMs) to generate responses,
+        simulate historical and contemporary thinkers, and provide analysis. You
+        acknowledge that:
+      </p>
+      <ul>
+        <li>AI-generated content may contain inaccuracies, errors, or hallucinations. It is provided for informational and educational purposes only and should not be relied upon as authoritative.</li>
+        <li>The “great minds” feature simulates thinkers based on publicly available information about their ideas and works. These simulations are approximations and do not represent the actual views of any living or deceased person.</li>
+        <li>You are solely responsible for how you use AI-generated content.</li>
+      </ul>
+
+      <h2>6. Acceptable Use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Use the Service for any unlawful purpose.</li>
+        <li>Upload malicious files, viruses, or harmful code.</li>
+        <li>Attempt to circumvent usage quotas, rate limits, or access controls.</li>
+        <li>Use automated means (bots, scrapers) to access the Service without our prior written consent.</li>
+        <li>Resell, redistribute, or sublicense access to the Service.</li>
+        <li>Upload content that infringes the intellectual property rights of others.</li>
+      </ul>
+
+      <h2>7. Subscriptions and Payments</h2>
+      <ul>
+        <li>The Pro subscription is billed on a recurring basis through Stripe. By subscribing, you authorize recurring charges at the then-current rate.</li>
+        <li>You may cancel your subscription at any time through your account settings. Cancellation takes effect at the end of the current billing period.</li>
+        <li>We do not provide refunds for partial billing periods, unless required by applicable law.</li>
+        <li>We reserve the right to change subscription pricing with 30 days’ notice.</li>
+      </ul>
+
+      <h2>8. Intellectual Property</h2>
+      <ul>
+        <li>The Service, including its code, design, and branding, is the property of Feynman.</li>
+        <li>The open-source components of Feynman are licensed under the MIT License. The commercial components (in <code>app/pro/</code>) are licensed under the Business Source License 1.1.</li>
+        <li>Book metadata displayed in the Service is sourced from public APIs (Open Library, Google Books) and public sources (Wikipedia) and remains the property of their respective owners.</li>
+      </ul>
+
+      <h2>9. Data Sources and Copyright</h2>
+      <p>The Service retrieves book-related information through four layers:</p>
+      <ol>
+        <li><strong>User-uploaded content</strong> — files you provide, processed solely for your use.</li>
+        <li><strong>Public metadata APIs</strong> — book titles, authors, descriptions, and summaries from Open Library, Google Books, and Wikipedia.</li>
+        <li><strong>Web search</strong> — real-time results from publicly available web pages, with source attribution.</li>
+        <li><strong>LLM knowledge</strong> — the AI model’s training knowledge.</li>
+      </ol>
+      <p>
+        We do not crawl, scrape, or store copyrighted full-text book content. We
+        do not provide pirated or unauthorized copies of any work.
+      </p>
+
+      <h2>10. Disclaimer of Warranties</h2>
+      <p>
+        THE SERVICE IS PROVIDED “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF
+        ANY KIND, EXPRESS OR IMPLIED. WE DO NOT WARRANT THAT THE SERVICE WILL BE
+        UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS. WE MAKE NO
+        GUARANTEES ABOUT THE ACCURACY, RELIABILITY, OR COMPLETENESS OF ANY
+        AI-GENERATED CONTENT.
+      </p>
+
+      <h2>11. Limitation of Liability</h2>
+      <p>
+        TO THE MAXIMUM EXTENT PERMITTED BY LAW, WE SHALL NOT BE LIABLE FOR ANY
+        INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING
+        FROM YOUR USE OF THE SERVICE. OUR TOTAL LIABILITY SHALL NOT EXCEED THE
+        AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM.
+      </p>
+
+      <h2>12. Indemnification</h2>
+      <p>
+        You agree to indemnify and hold harmless Feynman from any claims, damages,
+        or expenses arising from your use of the Service, your uploaded content,
+        or your violation of these Terms.
+      </p>
+
+      <h2>13. Modifications</h2>
+      <p>
+        We may update these Terms from time to time. We will notify you of
+        material changes by posting the updated Terms on this page with a revised
+        effective date. Your continued use of the Service after changes take
+        effect constitutes acceptance of the updated Terms.
+      </p>
+
+      <h2>14. Termination</h2>
+      <p>
+        We may suspend or terminate your access to the Service at any time, with
+        or without cause. Upon termination, your right to use the Service ceases
+        immediately. Sections that by their nature should survive termination
+        (including indemnification, limitation of liability, and disclaimers) will
+        survive.
+      </p>
+
+      <h2>15. Governing Law</h2>
+      <p>
+        These Terms are governed by and construed in accordance with the laws of
+        the State of California, United States, without regard to conflict-of-law
+        principles.
+      </p>
+
+      <h2>16. Contact</h2>
+      <p>
+        If you have questions about these Terms, contact us at{" "}
+        <strong>shuqi.yeow@gmail.com</strong> or reach out on{" "}
+        <a href="https://x.com/steve_yeow" target="_blank" rel="noopener noreferrer">
+          Twitter/X
+        </a>
+        .
+      </p>
+    </LegalPage>
+  );
+}
