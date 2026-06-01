@@ -31,6 +31,10 @@
   --glass-regular: rgba(255, 255, 255, 0.62);
   --glass-clear: rgba(255, 255, 255, 0.42);
   --glass-thick: rgba(255, 255, 255, 0.80);
+  /* Dropdown MENUS are text-dense and float directly over body copy, so the
+   * 0.80 glass let the text behind bleed through as a blurry smudge. Menus use
+   * a near-opaque surface (still a whisper of frost, but content stays legible). */
+  --glass-menu: rgba(255, 255, 255, 0.97);
   --glass-edge: rgba(255, 255, 255, 0.60);
   --glass-specular: rgba(255, 255, 255, 0.70);
   --glass-inner-line: rgba(0, 0, 0, 0.04);
@@ -64,6 +68,7 @@
     --glass-regular: rgba(44, 44, 46, 0.60);
     --glass-clear: rgba(44, 44, 46, 0.40);
     --glass-thick: rgba(28, 28, 30, 0.82);
+    --glass-menu: rgba(28, 28, 30, 0.97);
     --glass-edge: rgba(255, 255, 255, 0.10);
     --glass-specular: rgba(255, 255, 255, 0.10);
     --glass-inner-line: rgba(255, 255, 255, 0.04);
@@ -77,6 +82,7 @@
   --glass-regular: rgba(44, 44, 46, 0.60);
   --glass-clear: rgba(44, 44, 46, 0.40);
   --glass-thick: rgba(28, 28, 30, 0.82);
+  --glass-menu: rgba(28, 28, 30, 0.97);
   --glass-edge: rgba(255, 255, 255, 0.10);
   --glass-specular: rgba(255, 255, 255, 0.10);
   --glass-inner-line: rgba(255, 255, 255, 0.04);
@@ -163,6 +169,12 @@ body { background-color: var(--bg-home); }
 .minds-graph-toolbar { border-radius: var(--r-panel); }
 .share-modal-card,
 .pro-overlay-card { border-radius: var(--r-window); }
+
+/* Composer book/minds dropdown: a text-dense MENU that floats directly over the
+ * chat/home body copy, where the 0.80 glass let that text bleed through as a
+ * blurry smudge. Use the near-opaque menu fill (keeps the frosted edge + blur
+ * from the rule above — only the background is made legible). */
+.composer-popover { background: var(--glass-menu); }
 
 /* Composer — a subtle frosted capsule (it floats above the home/chat surface),
  * but keep it close to production: light glass, production radius, accent focus. */
