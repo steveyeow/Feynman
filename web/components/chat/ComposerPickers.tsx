@@ -118,9 +118,14 @@ export function BookPopover({
   const [state, setState] = useState<LoadState>("idle");
   const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
+  // Guard so the fetch runs once per open. CRITICAL: deps must be [open] only —
+  // putting `state` in deps made setState("loading") re-run the effect, whose
+  // cleanup flipped the in-flight fetch's `alive=false`, so the .then was skipped
+  // and the popover hung on "Loading…" forever.
+  const loadedRef = useRef(false);
 
   useEffect(() => {
-    if (!open || state !== "idle") return;
+    if (!open || loadedRef.current) return;
     let alive = true;
     setState("loading");
     get<AgentRow[]>("/api/agents")
@@ -128,6 +133,7 @@ export function BookPopover({
         if (!alive) return;
         setBooks(mapAgentsToBooks(rows || []));
         setState("ready");
+        loadedRef.current = true;
       })
       .catch(() => {
         if (alive) setState("error");
@@ -135,7 +141,7 @@ export function BookPopover({
     return () => {
       alive = false;
     };
-  }, [open, state]);
+  }, [open]);
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -239,6 +245,9 @@ export function MindsPopover({
   const [query, setQuery] = useState("");
   const [inviting, setInviting] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  // See BookPopover: fetch once per open, deps [open] only (state in deps caused
+  // the in-flight fetch to be cancelled by the cleanup → stuck on "Loading…").
+  const loadedRef = useRef(false);
   // Inviting minds is a pro feature on the hosted build (legacy app.js 4804).
   const { isProUser, showProOverlay } = useProGate();
 
@@ -266,7 +275,7 @@ export function MindsPopover({
   }
 
   useEffect(() => {
-    if (!open || state !== "idle") return;
+    if (!open || loadedRef.current) return;
     let alive = true;
     setState("loading");
     listMinds()
@@ -274,6 +283,7 @@ export function MindsPopover({
         if (!alive) return;
         setMinds(rows || []);
         setState("ready");
+        loadedRef.current = true;
       })
       .catch(() => {
         if (alive) setState("error");
@@ -281,7 +291,7 @@ export function MindsPopover({
     return () => {
       alive = false;
     };
-  }, [open, state]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
