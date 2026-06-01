@@ -66,6 +66,34 @@ export function findQuestionBySlug(
   return null;
 }
 
+/**
+ * Map a book's free-form `meta.category` to one of the 15 canonical topic
+ * hubs, so the "More on …" link resolves to a real /topic/{slug} (200) instead
+ * of 404'ing. Books carry 46+ ad-hoc categories ("Business" vs the canonical
+ * "Business & Strategy", plus "Chemistry", "Contemporary Fiction", and some
+ * leaked chat prompts) — only those that map to a canonical topic get a link;
+ * the rest return null and the caller omits the link rather than sending a
+ * crawler to a dead end. `topics` is the canonical list from /api/topics.
+ */
+export function canonicalTopicForCategory(
+  category: string,
+  topics: string[],
+): string | null {
+  const cat = (category || "").trim().toLowerCase();
+  if (!cat || !topics?.length) return null;
+  const catSlug = slugify(category);
+  // 1) exact slug match (Psychology, Economics, Computer Science, …)
+  for (const t of topics) {
+    if (slugify(t) === catSlug) return t;
+  }
+  // 2) loose containment either way (Business → Business & Strategy)
+  for (const t of topics) {
+    const tl = t.toLowerCase();
+    if (tl.includes(cat) || cat.includes(tl)) return t;
+  }
+  return null;
+}
+
 // ─── JSON-LD schema builders (ported from seo.py) ──────────────────────
 
 type Json = Record<string, unknown>;
