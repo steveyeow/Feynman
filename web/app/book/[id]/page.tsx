@@ -53,6 +53,7 @@ export async function generateMetadata({
     return { title: "Book not found — Feynman" };
   }
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}`;
+  const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
     title: `${data.title} — Feynman`,
@@ -64,11 +65,13 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: data.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: data.title,
       description: desc,
+      images: [ogImage],
     },
   };
 }
