@@ -99,6 +99,7 @@ from .core import seo as seo_render
 from .core import qa as qa_module
 from .core import ugc as ugc_module
 from .core import insights as insights_module
+from .core import overview as overview_module
 from .core import llm_analytics as llm_analytics_module
 from .core import indexnow as indexnow_module
 from .core.minds import (
@@ -3903,6 +3904,67 @@ def api_agent_qa(agent_id: str, question: str) -> JSONResponse:
     )
 
 
+@app.get("/api/agents/{agent_id}/overview")
+def api_agent_overview(agent_id: str) -> JSONResponse:
+    """Unique "About this book" overview + key concepts for the /book/{id} hub
+    (Bucket B content-density floor). Generated on demand — grounded in the
+    book's chunks when it has full text, general-knowledge for catalog stubs —
+    and cached (in-process TTL + long edge Cache-Control), exactly like the Q&A
+    and mind-essay endpoints. Degrades to an empty payload, in which case the
+    hub falls back to its synthesized about-line."""
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    cache_key = f"book_overview:{agent_id}"
+    cached = _cache_get(cache_key, 21600)  # 6h — overviews are stable
+    if cached is None:
+        try:
+            cached = overview_module.generate_book_overview(agent)
+        except Exception as exc:
+            log.error("overview failed for %s: %s", agent_id, exc)
+            cached = {"overview": "", "concepts": [], "grounded": False}
+        # Cache only non-empty results so a transient LLM/quota failure doesn't
+        # pin an empty overview in-process; empty falls through and retries.
+        if cached.get("overview"):
+            _cache_set(cache_key, cached)
+    return JSONResponse(
+        content={
+            "overview": cached.get("overview", ""),
+            "concepts": cached.get("concepts", []),
+            "grounded": cached.get("grounded", False),
+        },
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/topics/{slug}/overview")
+def api_topic_overview(slug: str) -> JSONResponse:
+    """Generated 2-paragraph intro for a topic hub (Bucket B). Resolves the
+    slug to a canonical topic, generates once, caches. Empty payload degrades
+    to the page's existing one-line intro."""
+    topic = None
+    for t in TOPIC_TAGS:
+        if seo_render.topic_slug(t) == slug:
+            topic = t
+            break
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    cache_key = f"topic_overview:{slug}"
+    cached = _cache_get(cache_key, 86400)  # 24h — topic intros are static
+    if cached is None:
+        try:
+            cached = overview_module.generate_topic_overview(topic)
+        except Exception as exc:
+            log.error("topic overview failed for %s: %s", topic, exc)
+            cached = {"overview": ""}
+        if cached.get("overview"):
+            _cache_set(cache_key, cached)
+    return JSONResponse(
+        content={"topic": topic, "overview": cached.get("overview", "")},
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
 @app.get("/api/agents/{agent_id}/insights")
 def api_agent_insights(agent_id: str) -> JSONResponse:
     """Public, PII-sanitized AI insight cards for a book (mirrors
@@ -4673,7 +4735,18 @@ def api_get_mind(mind_id: str) -> dict[str, Any]:
     mind = get_mind(mind_id)
     if not mind:
         raise HTTPException(status_code=404, detail="Mind not found")
+    # Expose a bounded, plain-text persona EXCERPT for the SEO "Core approach"
+    # section. The legacy SSR rendered this (render_mind_persona_excerpt); the
+    # JSON port lost it when the full persona got stripped, leaving every mind
+    # page ~150 words thinner. The FULL persona stays private — it's
+    # system-prompt-style text not meant for public display — but a ~900-char
+    # excerpt is real, citable content. Mirrors seo.render_mind_persona_excerpt.
+    persona = (mind.get("persona") or "").strip()
     mind.pop("persona", None)
+    if persona:
+        mind["persona_excerpt"] = (
+            persona if len(persona) <= 900 else persona[:900].rsplit(" ", 1)[0] + "…"
+        )
     return mind
 
 

@@ -9,7 +9,6 @@ import {
   breadcrumbJsonLd,
   fetchMind,
   fetchMindOnTopic,
-  isMindTopicRelevant,
   metaDescription,
   mindEssayJsonLd,
   resolveTopicSlug,
@@ -33,7 +32,7 @@ export async function generateMetadata({
     fetchMind(params.id),
     resolveTopicSlug(params.slug),
   ]);
-  if (!mind || !topic || !isMindTopicRelevant(mind, topic)) {
+  if (!mind || !topic) {
     return { title: "Not found — Feynman" };
   }
   const canonical = abs(`/mind/${params.id}/on/${params.slug}`);
@@ -74,9 +73,13 @@ export default async function MindOnTopicPage({
   ]);
   if (!mind) notFound();
   if (!topic) notFound();
-  // Relevance gate — mirrors the legacy 404 for implausible (mind, topic)
-  // pairs so we don't expose programmatic combinations.
-  if (!isMindTopicRelevant(mind, topic)) notFound();
+  // Relevance is decided by the backend essay endpoint (same Python
+  // is_mind_topic_relevant the sitemap uses), NOT re-checked here. The old JS
+  // port of the stemmer diverged ("economics" → "economic" vs Python "econom"),
+  // so it 404'd pairs the sitemap advertised (e.g. Karl Marx × Economics) —
+  // self-inflicted 404s on URLs we tell Google to crawl. We now fetch the essay
+  // and fall back to a framed view when it's absent, so every sitemap /on/ URL
+  // resolves 200.
 
   const canonical = abs(`/mind/${params.id}/on/${params.slug}`);
   const mindUrl = abs(`/mind/${params.id}`);

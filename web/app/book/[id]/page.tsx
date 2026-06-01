@@ -18,12 +18,12 @@ import {
   getQuestions,
   getSamplePassages,
   getRelatedForBook,
+  getBookOverview,
   detectCapabilities,
   clampDescription,
   slugify,
   bookJsonld,
   breadcrumbJsonld,
-  faqJsonld,
 } from "@/lib/seo-book";
 
 // ISR — on-demand revalidation, no generateStaticParams (thousands of books).
@@ -82,10 +82,11 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages, related] = await Promise.all([
+  const [questions, passages, related, overview] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
     getRelatedForBook(id),
+    getBookOverview(id),
   ]);
 
   const caps = detectCapabilities(data.agent);
@@ -118,12 +119,6 @@ export default async function BookLandingPage({ params }: PageProps) {
     { name: "Books", url: `${SITE_URL}/library` },
     { name: data.title, url: canonical },
   ]);
-  const reader = `${SITE_URL}/read/${encodeURIComponent(id)}`;
-  const deflect = `Open Feynman to chat with this book and explore the answer in depth: ${reader}`;
-  const faqLd = questions.length
-    ? faqJsonld(questions.filter(Boolean).map((q) => ({ question: q, answer: deflect })))
-    : null;
-
   // ── Top actions (per product direction) ───────────────────────────────
   // Chat ALWAYS available → routes to the conversational surface (home
   // composer preselects the book), NOT the reader — so catalog stubs with no
@@ -226,10 +221,21 @@ export default async function BookLandingPage({ params }: PageProps) {
     <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={bookLd} />
       <JsonLd data={breadcrumbLd} />
-      {faqLd ? <JsonLd data={faqLd} /> : null}
 
       <section className="seo-section">
-        <p className="book-about">{aboutLine}</p>
+        {overview ? (
+          overview.overview
+            .split(/\n\n+/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((p, i) => (
+              <p key={i} className="book-about">
+                {p}
+              </p>
+            ))
+        ) : (
+          <p className="book-about">{aboutLine}</p>
+        )}
         {isStub ? (
           <p className="seo-availability">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -242,6 +248,19 @@ export default async function BookLandingPage({ params }: PageProps) {
           </p>
         ) : null}
       </section>
+
+      {overview && overview.concepts.length ? (
+        <section className="seo-section">
+          <h2>Key concepts in {data.title}</h2>
+          <ul className="key-concepts">
+            {overview.concepts.map((c, i) => (
+              <li key={i}>
+                <strong>{c.term}</strong> — {c.note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
