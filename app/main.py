@@ -463,6 +463,26 @@ def _learn_agent(agent_id: str) -> None:
 
 # ─── Scheduled discovery ───
 
+def _clean_catalog_category(topic: str) -> str:
+    """Topic discovery passes the user's raw chat query as ``topic``; storing it
+    verbatim as a book's category pollutes the catalog (e.g. "how game theory
+    can be used in hiring", "who are you", CJK queries) and self-propagates
+    through scheduled discovery, which re-discovers by existing category. Keep it
+    as the category only when it actually looks like a category — short,
+    Title-Case ASCII, not a question/sentence — else return "" so we never
+    persist a chat prompt as a category. Mirrors the frontend isCleanCategory."""
+    t = (topic or "").strip()
+    if not t or "?" in t:
+        return ""
+    if not (t[:1].isascii() and t[:1].isupper()):
+        return ""
+    if len(t.split()) > 4:
+        return ""
+    if re.match(r"(?i)^(how|what|who|why|does|is|are|should|can|will|we|i|my)\b", t):
+        return ""
+    return t
+
+
 def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT, exclude_titles: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Use LLM to discover top books for a topic. Returns (books, usage)."""
     exclude_clause = ""
@@ -498,7 +518,8 @@ def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT, exc
             continue
         already_existed = find_agent_by_name(title) is not None
         agent_id = create_catalog_agent(
-            title=title, author=author, category=topic, description=desc,
+            title=title, author=author,
+            category=_clean_catalog_category(topic), description=desc,
         )
         results.append({"id": agent_id, "title": title, "author": author, "new": not already_existed})
         log.info("Discovered book: %s by %s [%s] new=%s", title, author, topic, not already_existed)

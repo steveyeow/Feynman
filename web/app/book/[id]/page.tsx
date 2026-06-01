@@ -23,6 +23,7 @@ import {
   clampDescription,
   slugify,
   canonicalTopicForCategory,
+  isCleanCategory,
   bookJsonld,
   breadcrumbJsonld,
 } from "@/lib/seo-book";
@@ -96,6 +97,9 @@ export default async function BookLandingPage({ params }: PageProps) {
   // "Topic" rail links to a real /topic/{slug} instead of 404'ing on ad-hoc
   // categories like "Business" (→ "Business & Strategy") or junk values.
   const canonicalTopic = canonicalTopicForCategory(data.category, topics);
+  // Only surface the category in display chrome when it's a real category, not
+  // a leaked chat query stored as the category by topic-discovery.
+  const cleanCategory = isCleanCategory(data.category) ? data.category : "";
 
   const caps = detectCapabilities(data.agent);
   const chapterCount = data.chapters.length;
@@ -159,7 +163,7 @@ export default async function BookLandingPage({ params }: PageProps) {
         <span>{coverInitials(data.title)}</span>
       </div>
       <div className="seo-hero-body">
-        <p className="seo-meta">Book{data.category ? ` · ${data.category}` : ""}</p>
+        <p className="seo-meta">Book{cleanCategory ? ` · ${cleanCategory}` : ""}</p>
         <h1>{data.title}</h1>
         {data.author ? <p className="seo-author">by {data.author}</p> : null}
         {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
@@ -219,7 +223,7 @@ export default async function BookLandingPage({ params }: PageProps) {
     data.subtitle?.trim() ||
     [
       data.author ? `${data.title} by ${data.author}` : data.title,
-      data.category ? `a work on ${data.category}` : "",
+      cleanCategory ? `a work on ${cleanCategory}` : "",
     ]
       .filter(Boolean)
       .join(" — ") +
