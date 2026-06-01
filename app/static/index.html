@@ -88,7 +88,7 @@
     <script>
       (function(){var t=localStorage.getItem('feynman-theme');if(t)document.documentElement.classList.add(t)})();
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=108" />
+    <link rel="stylesheet" href="/static/styles.css?v=109" />
   </head>
   <body>
     <div class="app-layout" id="app-layout">
@@ -510,6 +510,13 @@
         <!-- ─── SUBSCRIPTION PAGE ─── -->
         <div id="page-subscription" class="page-view subscription-page hidden"></div>
 
+        <!-- ─── BACK TO TOP ─── -->
+        <!-- Anchored in .app-main (position:relative); its scroll listener is
+             (re)bound to the active scrolling page-view on each navigate(). -->
+        <button id="back-to-top" class="back-to-top" type="button" title="Back to top" aria-label="Back to top">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="4" x2="19" y2="4"/><line x1="12" y1="20" x2="12" y2="9"/><polyline points="7 14 12 9 17 14"/></svg>
+        </button>
+
       </div><!-- .app-main -->
     </div><!-- .app-layout -->
 
@@ -566,6 +573,6 @@
     <script>
       !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     </script>
-    <script src="/static/app.js?v=125"></script>
+    <script src="/static/app.js?v=126"></script>
   </body>
 </html>

@@ -419,6 +419,23 @@ body {
 }
 .sidebar-float-btn:hover { color: var(--text); background: rgba(128,128,128,0.08); }
 
+/* ─── Back-to-top floating button ─── */
+.back-to-top {
+  position: absolute; bottom: 24px; right: 24px; z-index: 40;
+  width: 42px; height: 42px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--border);
+  background: var(--bg-chat); color: var(--text-muted);
+  cursor: pointer; box-shadow: var(--shadow-md);
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, color 0.15s, box-shadow 0.2s ease;
+}
+.back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.back-to-top.visible:hover {
+  color: var(--text); transform: translateY(-2px); box-shadow: var(--shadow-lg);
+}
+.back-to-top.visible:active { transform: translateY(0); }
+
 /* ─── Main Content Area ─── */
 .app-main {
   flex: 1; min-width: 0;
@@ -1739,6 +1756,7 @@ body {
   .chats-content { padding: 16px 16px 48px; }
   .book-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .card-cover, .card-cover-placeholder { height: 160px; }
+  .back-to-top { bottom: 16px; right: 16px; width: 40px; height: 40px; }
 }
 
 /* ─── Skill badge (on chat messages) ─── */
