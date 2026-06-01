@@ -19,23 +19,12 @@ const API_BASE =
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    // afterFiles semantics (plain array): these fire only for paths WITHOUT a
-    // matching Next page, so /book/[id] (a Next page) is served by Next while
-    // /book/[id]/og.png (no page) proxies to Python. /terms + /privacy are NOT
-    // rewritten — the Next pages serve them (design-consistent). API + all
-    // SEO/OG/share infra stay on the Python backend (Pillow OG images +
-    // sitemap/llms corpora are pure-Python, not ported). In prod
-    // API_BASE = https://api.feynman.wiki.
+    // Local-dev proxy so the browser talks same-origin to the FastAPI on :8001.
+    // PRODUCTION rewrites (incl. SEO/OG/share → the Python backend) live in
+    // web/vercel.json — that file is also what makes feynman-web read its OWN
+    // config instead of falling back to the repo-root (Python) vercel.json.
     return [
       { source: "/api/:path*", destination: `${API_BASE}/api/:path*` },
-      { source: "/sitemap.xml", destination: `${API_BASE}/sitemap.xml` },
-      { source: "/sitemap", destination: `${API_BASE}/sitemap` },
-      { source: "/robots.txt", destination: `${API_BASE}/robots.txt` },
-      { source: "/llms.txt", destination: `${API_BASE}/llms.txt` },
-      { source: "/llms-full.txt", destination: `${API_BASE}/llms-full.txt` },
-      { source: "/book/:id/og.png", destination: `${API_BASE}/book/:id/og.png` },
-      { source: "/mind/:id/og.png", destination: `${API_BASE}/mind/:id/og.png` },
-      { source: "/share/:path*", destination: `${API_BASE}/share/:path*` },
     ];
   },
 };

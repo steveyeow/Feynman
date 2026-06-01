@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.feynman.wiki/api/:path*" },
+    { "source": "/sitemap.xml", "destination": "https://api.feynman.wiki/sitemap.xml" },
+    { "source": "/sitemap", "destination": "https://api.feynman.wiki/sitemap" },
+    { "source": "/robots.txt", "destination": "https://api.feynman.wiki/robots.txt" },
+    { "source": "/llms.txt", "destination": "https://api.feynman.wiki/llms.txt" },
+    { "source": "/llms-full.txt", "destination": "https://api.feynman.wiki/llms-full.txt" },
+    { "source": "/book/:id/og.png", "destination": "https://api.feynman.wiki/book/:id/og.png" },
+    { "source": "/mind/:id/og.png", "destination": "https://api.feynman.wiki/mind/:id/og.png" },
+    { "source": "/share/:path*", "destination": "https://api.feynman.wiki/share/:path*" }
+  ]
+}
