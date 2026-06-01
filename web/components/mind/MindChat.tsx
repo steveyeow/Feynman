@@ -183,7 +183,7 @@ function MindMetaSidebar({ mind }: { mind: MindDetail }) {
 
   const postOnX = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const text = encodeURIComponent(`Chat with ${mind.name} on feynman.wiki`);
+    const text = encodeURIComponent(`Chat with ${mind.name} on Feynman`);
     const url = encodeURIComponent(shareUrl);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
     setShareOpen(false);

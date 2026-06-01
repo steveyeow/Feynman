@@ -131,7 +131,7 @@ export default function Reader({ id }: { id: string }) {
   function shareOnX() {
     const author = (content?.author || "").replace(/ · AI$/, "");
     const text = encodeURIComponent(
-      `${content?.title || "A book"} — by ${author || "AI"} on feynman.wiki`,
+      `${content?.title || "A book"} — by ${author || "AI"} on Feynman`,
     );
     const url = encodeURIComponent(shareUrl);
     window.open(

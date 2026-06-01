@@ -41,7 +41,7 @@ export default function EntityActions({
 
   function postOnX() {
     if (!shareUrl) return;
-    const text = encodeURIComponent(`${shareTitle || "Explore this"} on feynman.wiki`);
+    const text = encodeURIComponent(`${shareTitle || "Explore this"} on Feynman`);
     const url = encodeURIComponent(shareUrl);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank", "noopener");
     setOpen(false);

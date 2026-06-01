@@ -112,7 +112,7 @@ function CanvasShare({ title, readId }: { title: string; readId: string }) {
   }, [open]);
 
   const shareOnX = () => {
-    const text = encodeURIComponent(`${title || "A book"} — written on feynman.wiki`);
+    const text = encodeURIComponent(`${title || "A book"} — written on Feynman`);
     window.open(
       `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(shareUrl)}`,
       "_blank",
