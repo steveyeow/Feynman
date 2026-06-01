@@ -31,9 +31,11 @@ export interface MindDetail {
   bio_summary?: string;
   thinking_style?: string;
   typical_phrases?: string[];
-  /** Stripped by /api/minds and /api/minds/{id} — present only if the API
-   *  ever exposes it. We render it when available, omit it otherwise. */
+  /** Full persona is stripped by /api/minds and /api/minds/{id} (system-prompt
+   *  text, kept private). `persona_excerpt` is the bounded ~900-char public
+   *  snippet the single-mind endpoint exposes for the "Core approach" section. */
   persona?: string;
+  persona_excerpt?: string;
   works?: string[];
   created_at?: string;
   [k: string]: unknown;
@@ -379,14 +381,21 @@ export function metaDescription(text: string): string {
 const MIND_ESSAY_MIN_DOMAIN_OVERLAP_CHARS = 3;
 const STEM_SKIP = new Set(["and", "the", "of", "in", "on", "for", "to", "&"]);
 
-/** Light morphological stem (matches qa._morphological_stem behavior). */
+/**
+ * Light morphological stem — a FAITHFUL port of qa._morphological_stem so the
+ * Next pages and the Python sitemap agree on which (mind, topic) pairs are
+ * related. The previous port diverged: its suffix list/order stripped only
+ * "s" from "economics" → "economic" (vs Python's "ics" → "econom"), so
+ * isMindTopicRelevant returned false for pairs the sitemap lists as true —
+ * which 404'd /mind/{id}/on/economics AND dropped mind↔topic internal links
+ * (e.g. Karl Marx never linked to /topic/economics). Same suffix tuple, same
+ * order, same length guard (len(w) > len(suffix) + 3) as the Python original.
+ */
 function morphologicalStem(word: string): string {
-  let w = word.toLowerCase().trim();
-  if (w.length <= 4) return w;
-  for (const suf of ["ies", "ing", "ed", "es", "s", "al", "ic", "ical", "y"]) {
-    if (w.length - suf.length >= 3 && w.endsWith(suf)) {
-      w = w.slice(0, w.length - suf.length);
-      break;
+  const w = word.toLowerCase();
+  for (const suf of ["ical", "ics", "ing", "ed", "al", "ly", "es", "s", "y"]) {
+    if (w.length > suf.length + 3 && w.endsWith(suf)) {
+      return w.slice(0, w.length - suf.length);
     }
   }
   return w;
@@ -489,6 +498,23 @@ export async function fetchSimilarityLinks(): Promise<SimilarityLink[]> {
     return data && Array.isArray(data.links) ? data.links : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Generated 2-paragraph intro for a topic hub (GET /api/topics/{slug}/overview).
+ * On-demand generated + cached server-side; empty string degrades to the
+ * page's existing one-line intro. The Bucket-B density floor for Type-3 hubs.
+ */
+export async function fetchTopicOverview(slug: string): Promise<string> {
+  try {
+    const res = await get<{ overview?: string }>(
+      `/api/topics/${encodeURIComponent(slug)}/overview`,
+      { next: { revalidate: 86400 } } as RequestInit,
+    );
+    return (res?.overview || "").trim();
+  } catch {
+    return "";
   }
 }
 

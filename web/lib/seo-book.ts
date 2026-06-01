@@ -447,7 +447,13 @@ export async function getSamplePassages(
 ): Promise<SamplePassage[]> {
   let res: ReadResponse | null = null;
   try {
-    res = await get<ReadResponse>(`/api/agents/${encodeURIComponent(id)}/read`);
+    // Public, edge-cached read endpoint (serves ready books without auth).
+    // The authed /api/agents/{id}/read is gated for the in-app reader, so the
+    // SSR (no user cookie) must use the public mirror or it 401s and renders
+    // a passage-less — and thus thin — book page.
+    res = await get<ReadResponse>(
+      `/api/public/book/${encodeURIComponent(id)}/read`,
+    );
   } catch {
     return [];
   }
@@ -514,6 +520,39 @@ export async function getInsights(
     return cards.slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+export interface BookConcept {
+  term: string;
+  note: string;
+}
+export interface BookOverview {
+  overview: string;
+  concepts: BookConcept[];
+  grounded: boolean;
+}
+
+/**
+ * Fetch the generated "About this book" overview + key concepts
+ * (GET /api/agents/{id}/overview). On-demand generated + cached server-side;
+ * returns null when empty/disabled/failed so the hub falls back to its
+ * synthesized about-line. This is the Bucket-B content-density floor — it
+ * fills on the first crawl of each book, no upfront batch.
+ */
+export async function getBookOverview(id: string): Promise<BookOverview | null> {
+  try {
+    const res = await get<BookOverview>(
+      `/api/agents/${encodeURIComponent(id)}/overview`,
+    );
+    if (!res || !res.overview) return null;
+    return {
+      overview: res.overview,
+      concepts: Array.isArray(res.concepts) ? res.concepts.filter((c) => c?.term && c?.note) : [],
+      grounded: !!res.grounded,
+    };
+  } catch {
+    return null;
   }
 }
 

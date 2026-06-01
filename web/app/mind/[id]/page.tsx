@@ -175,9 +175,28 @@ export default async function MindPage({
       <MindBio bio={mind.bio_summary} />
       <MindThinkingStyle style={mind.thinking_style} />
       <MindPhrases phrases={mind.typical_phrases} />
-      {/* persona is stripped by the JSON API — renders only if ever present */}
-      <MindPersonaExcerpt persona={mind.persona} />
+      {/* Full persona stays private; the API exposes a bounded excerpt. */}
+      <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
       <MindWorks works={mind.works} agents={agents} />
+
+      {matchingTopics.length ? (
+        <section className="seo-section">
+          <h2>How {mind.name} approaches key topics</h2>
+          <p className="seo-meta">
+            Imagined, persona-grounded perspectives — read how {mind.name} would
+            reason about each field, then take the question further in conversation.
+          </p>
+          <ul className="mind-on-topics">
+            {matchingTopics.slice(0, 8).map((t) => (
+              <li key={t}>
+                <Link href={`/mind/${params.id}/on/${topicSlug(t)}`}>
+                  How {mind.name} approaches {t}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {libraryExtra.length ? (
         <section className="seo-section">

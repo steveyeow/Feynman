@@ -63,7 +63,14 @@ PRIVATE_GET_PREFIXES = (
     "/api/users/",
     "/api/pro/subscription",
 )
-PRIVATE_GET_SUFFIXES = ("/read", "/messages", "/questions")
+# NOTE: `/questions` is intentionally NOT private. A book's popular questions
+# are public SEO content — the sitemap advertises them as /book/{id}/q/{slug}
+# URLs, and the Next SSR pages fetch /api/agents/{id}/questions server-side
+# (no user cookie). Gating it 401'd every SSR fetch, which 404'd all /q/ pages
+# and stripped the popular-questions section + FAQ JSON-LD from every book
+# landing page. `/read` stays gated (full book text behind the in-app reader);
+# SSR sample passages come from the public /api/public/book/{id}/read instead.
+PRIVATE_GET_SUFFIXES = ("/read", "/messages")
 
 
 def _get_jwks_keys() -> list:

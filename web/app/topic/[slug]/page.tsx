@@ -14,6 +14,7 @@ import {
   fetchAgents,
   fetchMinds,
   fetchTopics,
+  fetchTopicOverview,
   filterBooksByTopic,
   filterMindsByTopic,
   metaDescription,
@@ -70,10 +71,11 @@ export default async function TopicPage({
   const topic = await resolveTopicSlug(params.slug);
   if (!topic) notFound();
 
-  const [agents, minds, topics] = await Promise.all([
+  const [agents, minds, topics, overview] = await Promise.all([
     fetchAgents(),
     fetchMinds(),
     fetchTopics(),
+    fetchTopicOverview(params.slug),
   ]);
 
   const books = filterBooksByTopic(agents, topic, 30);
@@ -158,6 +160,17 @@ export default async function TopicPage({
       <JsonLd data={collectionLd} />
       <JsonLd data={breadcrumbLd} />
 
+      {overview
+        ? overview
+            .split(/\n\n+/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((p, i) => (
+              <p key={i} className="topic-intro">
+                {p}
+              </p>
+            ))
+        : null}
       <p className="topic-intro">{introText(topic, books.length, topicMinds.length)}</p>
 
       {books.length ? (
@@ -185,6 +198,13 @@ export default async function TopicPage({
               <li key={m.id}>
                 <Link href={`/mind/${m.id}`}>{m.name}</Link>
                 {m.era ? ` — ${m.era}` : ""}
+                {" · "}
+                <Link
+                  href={`/mind/${m.id}/on/${params.slug}`}
+                  className="seo-inline-link"
+                >
+                  How {m.name} approaches {topic} →
+                </Link>
               </li>
             ))}
           </ul>
