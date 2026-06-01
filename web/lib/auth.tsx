@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import { getProConfig, type ProConfig } from "@/lib/config";
 import { initSupabase } from "@/lib/supabase";
-import { get, setAuthToken } from "@/lib/api";
+import { get, setAuthToken, setTokenRefreshHandler } from "@/lib/api";
 
 interface AuthContextValue {
   ready: boolean;
@@ -66,12 +66,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           applySession(session);
           const { data: sub } = client.auth.onAuthStateChange((_event, s) => applySession(s));
           unsub = () => sub.subscription.unsubscribe();
+          // Let api.ts refresh + retry a raced 401 (token_expired/invalid_token):
+          // refresh the Supabase session, apply it, and return the new token.
+          setTokenRefreshHandler(async () => {
+            const c = clientRef.current;
+            if (!c) return null;
+            try {
+              const {
+                data: { session: refreshed },
+              } = await c.auth.refreshSession();
+              if (refreshed) {
+                applySession(refreshed);
+                return refreshed.access_token;
+              }
+            } catch {
+              /* refresh failed */
+            }
+            return null;
+          });
         }
       }
       setReady(true);
     })();
 
-    return () => unsub?.();
+    return () => {
+      unsub?.();
+      setTokenRefreshHandler(null);
+    };
   }, []);
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {
@@ -84,8 +105,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     const client = clientRef.current;
     if (!client) return { error: "Auth is not configured." };
-    const { error } = await client.auth.signUp({ email, password });
-    return { error: error?.message ?? null };
+    const { data, error } = await client.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin + "/" },
+    });
+    if (error) return { error: error.message };
+    // Supabase returns no error for an already-registered email, but with an
+    // empty identities array — surface it instead of a phantom "check your
+    // email" (port of app.js signUpWithEmail 315-317).
+    if (data?.user?.identities?.length === 0) {
+      return { error: "This email is already registered. Please sign in instead." };
+    }
+    return { error: null };
   }, []);
 
   const signInWithOAuth = useCallback(async (provider: "google") => {

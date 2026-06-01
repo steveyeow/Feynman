@@ -488,6 +488,7 @@ body {
 
 /* ─── Composer (shared) ─── */
 .chat-composer, .chat-composer-inline {
+  position: relative;
   width: 100%;
   background: var(--bg-chat);
   border: 1px solid var(--border);
@@ -1314,6 +1315,7 @@ body {
 }
 .card-badge.coming { background: var(--card-badge-coming-bg); color: var(--text-muted); }
 .card-badge.indexing { background: var(--card-badge-indexing-bg); color: var(--card-badge-indexing-color); }
+.card-badge.failed { background: var(--error-color, #e55); color: #fff; }
 
 .card-chat-btn {
   padding: 4px 12px; border-radius: 999px; border: none;

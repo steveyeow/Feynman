@@ -160,6 +160,19 @@ function normalizeSession(s: SessionRow): Session {
 
 // ── Session CRUD ───────────────────────────────────────────────────────
 
+/**
+ * Cross-component signal that the session list changed (created / renamed /
+ * deleted / public-status flip). The sidebar (ChatHistory) and /chats (ChatsList)
+ * listen and refetch — restoring production's instant pill-text + public-dot
+ * update without a navigation (renderChatHistory was called on every mutation).
+ */
+export const SESSIONS_CHANGED = "feynman:sessions-changed";
+export function bumpSessions(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SESSIONS_CHANGED));
+  }
+}
+
 /** GET /api/sessions → normalized list (newest first per server order). */
 export async function listSessions(): Promise<Session[]> {
   const rows = await get<SessionRow[]>("/api/sessions");
@@ -326,7 +339,11 @@ export function responseToAssistant(data: ChatResponse): {
   if (data.web_sources?.length) opts.webSources = data.web_sources;
   if (data.grounded) opts.grounded = true;
   if (data.usage) opts.usage = data.usage;
-  if (data.skill_used && data.skill_used !== "none") opts.skillUsed = data.skill_used;
+  // NOTE: skill_used is intentionally NOT mapped here. The global /api/chat
+  // response never carries it (only /api/agents/{id}/chat does), and production
+  // sendGlobalChat builds msgOpts without skill_used — so the global path must
+  // not surface a skill badge (L1 parity). The book-chat path routes through
+  // the same global endpoint in the port, so there is no book mapping to keep.
   return { sources, opts };
 }
 

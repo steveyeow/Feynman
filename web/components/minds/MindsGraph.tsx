@@ -743,11 +743,22 @@ function MindModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [content, setContent] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // When the backend reports the uploaded mind already exists (name_match or
+  // semantic_match), we show an "already in your network — open it" state
+  // instead of a misleading success (port of showMindDuplicateDialog).
+  const [dup, setDup] = useState<{
+    id: string;
+    name: string;
+    era?: string;
+    reason?: string;
+    similarity?: number;
+  } | null>(null);
 
   async function submit() {
     const trimmedName = name.trim();
@@ -763,11 +774,30 @@ function MindModal({
     setErr(null);
     try {
       if (kind === "upload") {
-        await post("/api/minds/create-from-content", {
+        const data = await post<{
+          duplicate?: boolean;
+          id: string;
+          name: string;
+          era?: string;
+          duplicate_reason?: string;
+          similarity?: number;
+        }>("/api/minds/create-from-content", {
           name: trimmedName,
           source_url: url.trim() || undefined,
           content: content.trim() || undefined,
         });
+        if (data?.duplicate) {
+          // Already in the network — don't reload as if it succeeded.
+          setDup({
+            id: data.id,
+            name: data.name,
+            era: data.era,
+            reason: data.duplicate_reason,
+            similarity: data.similarity,
+          });
+          setBusy(false);
+          return;
+        }
       } else {
         await post("/api/minds/generate", { name: trimmedName });
       }
@@ -779,6 +809,33 @@ function MindModal({
   }
 
   const isUpload = kind === "upload";
+
+  // Duplicate-upload state: the mind already exists — offer to open it.
+  if (dup) {
+    return (
+      <div className={styles.modalOverlay} onClick={onClose}>
+        <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+          <h3>Already in your network</h3>
+          <p className={styles.modalDesc}>
+            {dup.reason === "semantic_match" && dup.similarity != null
+              ? `This looks like the same person as “${dup.name}”${dup.era ? ` (${dup.era})` : ""}, already in your network (content similarity ${Math.round(dup.similarity * 100)}%).`
+              : `A mind named “${dup.name}”${dup.era ? ` (${dup.era})` : ""} is already in your network.`}
+          </p>
+          <div className={styles.modalActions}>
+            <button className={styles.btnGhost} onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className={styles.btnPrimary}
+              onClick={() => router.push(`/mind/${encodeURIComponent(dup.id)}`)}
+            >
+              Open it →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.modalOverlay} onClick={onClose}>

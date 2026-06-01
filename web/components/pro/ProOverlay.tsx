@@ -63,8 +63,10 @@ export function ProOverlayProvider({ children }: { children: React.ReactNode }) 
   //   overlay (except generate_mind, which production excludes); 401
   //   auth_required → bounce to /login.
   useEffect(() => {
-    setQuotaHandler(({ action, code, message }) => {
-      track("quota_hit", { action, code, message: message || "" });
+    setQuotaHandler(({ action, limit, used, tier }) => {
+      // Match production's quota_hit schema exactly (action/limit/used/tier) so
+      // PostHog paywall funnels keyed on those keep working (M17, app.js 1747).
+      track("quota_hit", { action, limit, used, tier });
       if (action !== "generate_mind") {
         track("upgrade_prompt_shown", { tier: isPro ? "pro" : "free" });
         setOpen(true);

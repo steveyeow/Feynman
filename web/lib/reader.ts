@@ -120,11 +120,68 @@ function paragraphsToHtml(paragraphs: string[]): string {
     .join("");
 }
 
+interface DetectedChapter {
+  number: number;
+  title: string;
+  paragraphs: string[];
+}
+
+/**
+ * Split a non-AI full-text book's paragraphs into chapters by heading patterns
+ * (port of _detectChapters in app.js). Used for Gutenberg-sourced classics whose
+ * newlines survive to the client, so long books get chapter headers + a TOC
+ * instead of one undifferentiated block. Returns null when <2 chapters detected.
+ *
+ * Enhancement over production: also matches Roman-numeral forms like
+ * "CHAPTER I." / "Chapter IV" which the legacy \d+ / ALL-CAPS patterns miss.
+ */
+function detectChapters(paragraphs: string[]): DetectedChapter[] | null {
+  if (!paragraphs || paragraphs.length < 5) return null;
+  const chapterPatterns = [
+    /^chapter\s+\d+/i,
+    /^chapter\s+[ivxlcdm]+\b/i,
+    /^part\s+\d+/i,
+    /^part\s+[ivxlcdm]+\b/i,
+    /^section\s+\d+/i,
+    /^\d+\.\s+[A-Z]/,
+  ];
+  const headingPattern = /^[A-Z][A-Z\s:,\-]{4,}$/;
+  const chapters: DetectedChapter[] = [];
+  let current: string[] = [];
+  let currentTitle = "";
+  let chNum = 0;
+
+  for (const p of paragraphs) {
+    const t = p.trim();
+    let isHeading = chapterPatterns.some((pat) => pat.test(t));
+    if (!isHeading && headingPattern.test(t) && t.length < 80) isHeading = true;
+    if (isHeading) {
+      if (current.length > 0 || chNum > 0) {
+        chapters.push({
+          number: chNum,
+          title: currentTitle || `Section ${chNum}`,
+          paragraphs: current,
+        });
+      }
+      chNum++;
+      currentTitle = t;
+      current = [];
+    } else {
+      current.push(p);
+    }
+  }
+  if (current.length > 0) {
+    chapters.push({ number: chNum || 1, title: currentTitle || "Content", paragraphs: current });
+  }
+  if (chapters.length <= 1) return null;
+  return chapters;
+}
+
 function normalize(raw: RawReaderResponse): BookContent {
   const sections: ReaderSection[] = [];
   const isAI = raw.type === "ai_book";
   const chapters = raw.chapters || [];
-  const hasChapters = isAI && chapters.length > 0;
+  let hasChapters = isAI && chapters.length > 0;
 
   if (hasChapters) {
     for (const c of chapters) {
@@ -136,7 +193,23 @@ function normalize(raw: RawReaderResponse): BookContent {
       });
     }
   } else if (raw.paragraphs && raw.paragraphs.length) {
-    sections.push({ chapter: null, html: paragraphsToHtml(raw.paragraphs) });
+    // Non-AI full-text books: detect chapter headings so classics render with
+    // chapter headers + a TOC, not one block (M13). Preview tier / short books
+    // fall back to a single section.
+    const detected =
+      raw.content_tier === "full" ? detectChapters(raw.paragraphs) : null;
+    if (detected && detected.length > 1) {
+      for (const c of detected) {
+        sections.push({
+          chapter: c.number,
+          title: c.title,
+          html: paragraphsToHtml(c.paragraphs),
+        });
+      }
+      hasChapters = true;
+    } else {
+      sections.push({ chapter: null, html: paragraphsToHtml(raw.paragraphs) });
+    }
   }
 
   const totalWords = raw.total_words || 0;
@@ -156,11 +229,20 @@ function normalize(raw: RawReaderResponse): BookContent {
 /**
  * Fetch + normalize reading content. Throws ApiError (with `.status`) so the
  * caller can distinguish 404 (no content / not found) from other failures.
+ *
+ * On the hosted build an anonymous reader must use the PUBLIC endpoint: the
+ * authed /api/agents/{id}/read is a private GET that 401s without a token (which
+ * the api.ts interceptor would bounce to /login, breaking shared-link reads).
+ * Mirrors app.js 4946: window.FEYNMAN_PRO && !currentUser → /api/public/book/{id}/read.
  */
-export async function getBookContent(id: string): Promise<BookContent> {
-  const raw = await get<RawReaderResponse>(
-    `/api/agents/${encodeURIComponent(id)}/read`,
-  );
+export async function getBookContent(
+  id: string,
+  opts: { publicRead?: boolean } = {},
+): Promise<BookContent> {
+  const path = opts.publicRead
+    ? `/api/public/book/${encodeURIComponent(id)}/read`
+    : `/api/agents/${encodeURIComponent(id)}/read`;
+  const raw = await get<RawReaderResponse>(path);
   return normalize(raw);
 }
 

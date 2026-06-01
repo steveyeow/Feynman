@@ -19,10 +19,14 @@
  */
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Outline, OutlineChapter, BookStatus, AiBookStatus } from "@/lib/aibooks";
 
 export type CanvasPhase = "outlining" | "writing";
+
+/** Per-chapter content map (chapter-number → {content, word_count}), available
+ *  on resume of a finished/partial book (the live /status poll has no content). */
+export type CanvasContent = Record<string, { content?: string; word_count?: number }>;
 
 interface BookCanvasProps {
   phase: CanvasPhase;
@@ -31,6 +35,7 @@ interface BookCanvasProps {
   agentId: string | null;
   confirming: boolean;
   error: string | null;
+  content?: CanvasContent | null;
   onConfirm: () => void;
   onCancel: () => void;
   onRetry: () => void;
@@ -43,6 +48,7 @@ export default function BookCanvas({
   agentId,
   confirming,
   error,
+  content,
   onConfirm,
   onCancel,
   onRetry,
@@ -58,6 +64,7 @@ export default function BookCanvas({
             status={status}
             fallbackChapters={outline?.chapters || []}
             agentId={agentId}
+            content={content}
             onCancel={onCancel}
             onRetry={onRetry}
           />
@@ -65,6 +72,122 @@ export default function BookCanvas({
         {error && <p className="canvas-error">{error}</p>}
       </div>
     </aside>
+  );
+}
+
+// ── Post-write actions: Chat + Read + Share (port of the completed/cancelled
+//    canvas footer) ──────────────────────────────────────────────────────────
+function ReadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
+  );
+}
+function ChatIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+/** Share popup (Twitter / Copy URL / Email) building ${origin}/book/{id}. */
+function CanvasShare({ title, readId }: { title: string; readId: string }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/book/${encodeURIComponent(readId)}`
+      : `https://feynman.wiki/book/${encodeURIComponent(readId)}`;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, [open]);
+
+  const shareOnX = () => {
+    const text = encodeURIComponent(`${title || "A book"} — written on feynman.wiki`);
+    window.open(
+      `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(shareUrl)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setOpen(false);
+  };
+  const copyUrl = () => {
+    navigator.clipboard?.writeText(shareUrl).catch(() => {});
+    setOpen(false);
+  };
+  const sendMail = () => {
+    window.location.href = `mailto:?subject=${encodeURIComponent(title || "A book")}&body=${encodeURIComponent(shareUrl)}`;
+    setOpen(false);
+  };
+
+  return (
+    <div className={`canvas-share-wrap${open ? " open" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="canvas-action-btn canvas-share-trigger"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+          <polyline points="16 6 12 2 8 6" />
+          <line x1="12" y1="2" x2="12" y2="15" />
+        </svg>
+        Share
+      </button>
+      <div className="canvas-share-popup">
+        <button type="button" className="canvas-share-opt canvas-share-x" onClick={shareOnX}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+          Share on Twitter
+        </button>
+        <button type="button" className="canvas-share-opt canvas-share-copy" onClick={copyUrl}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+          Copy URL
+        </button>
+        <button type="button" className="canvas-share-opt canvas-share-mail" onClick={sendMail}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+            <polyline points="22,6 12,13 2,6" />
+          </svg>
+          Send via Email
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Chat + Read + Share row shown on the completed / cancelled canvas. The Chat
+ *  link uses the universal ?book={id} contract HomeComposer consumes (a fresh
+ *  chat preselected to the just-written book — port of chatWithBookByAgent). */
+function CanvasActions({ readId, title }: { readId: string; title: string }) {
+  return (
+    <div className="canvas-done-actions">
+      <Link className="canvas-action-btn" href={`/?book=${encodeURIComponent(readId)}`}>
+        <ChatIcon />
+        Chat
+      </Link>
+      <Link className="canvas-action-btn" href={`/read/${encodeURIComponent(readId)}`}>
+        <ReadIcon />
+        Read
+      </Link>
+      <CanvasShare title={title} readId={readId} />
+    </div>
   );
 }
 
@@ -164,12 +287,14 @@ function WritingProgress({
   status,
   fallbackChapters,
   agentId,
+  content,
   onCancel,
   onRetry,
 }: {
   status: BookStatus | null;
   fallbackChapters: OutlineChapter[];
   agentId: string | null;
+  content?: CanvasContent | null;
   onCancel: () => void;
   onRetry: () => void;
 }) {
@@ -227,10 +352,20 @@ function WritingProgress({
 
       <div className="writing-progress-chapters">
         {chapters.map((c) => {
+          // On resume the full book carries per-chapter content + word_count;
+          // the live /status poll does not (so words only show post-resume,
+          // matching production) — port of _renderCanvasWritingProgress.
+          const chData = content?.[String(c.number)];
           let stateClass = "pending";
           let icon = "—";
           let detail = "Waiting...";
-          if (c.number <= done) {
+          let words = "";
+          if (chData?.content) {
+            stateClass = "done";
+            icon = "✓";
+            detail = "Completed";
+            words = `${(chData.word_count || 0).toLocaleString()} words`;
+          } else if (c.number <= done) {
             stateClass = "done";
             icon = "✓";
             detail = "Completed";
@@ -250,6 +385,7 @@ function WritingProgress({
                 </div>
                 <div className="progress-ch-detail">{detail}</div>
               </div>
+              <div className="progress-ch-words">{words}</div>
             </div>
           );
         })}
@@ -259,38 +395,32 @@ function WritingProgress({
         <>
           <div className="canvas-divider" />
           <div className="canvas-done-label">Your book is ready!</div>
-          <div className="canvas-done-actions">
-            <Link className="canvas-action-btn" href={`/read/${encodeURIComponent(readId)}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-              Read it
-            </Link>
-          </div>
+          {/* Chat + Read + Share — the full production completed footer. */}
+          <CanvasActions readId={readId} title={title} />
         </>
       )}
 
       {isFailed && (
         <>
           <div className="canvas-divider" />
-          <div className="canvas-done-label" style={{ color: "var(--text-secondary)" }}>
-            Writing stopped before finishing.
-            {readId && done > 0 ? " You can read the chapters that completed." : ""}
+          {/* Red, specific failure point + Retry only — matches production
+              (no read/chat/share on failure). */}
+          <div className="canvas-done-label" style={{ color: "var(--error-color, #e55)" }}>
+            Writing failed at chapter {done + 1} of {total}
           </div>
           <div className="canvas-done-actions">
-            <button type="button" className="canvas-action-btn" onClick={onRetry}>
+            <button
+              type="button"
+              className="canvas-action-btn"
+              style={{ background: "var(--accent, #5b8a72)", color: "#fff" }}
+              onClick={onRetry}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="23 4 23 10 17 10" />
                 <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
               </svg>
               Retry
             </button>
-            {readId && done > 0 && (
-              <Link className="canvas-action-btn" href={`/read/${encodeURIComponent(readId)}`}>
-                Read what&apos;s done
-              </Link>
-            )}
           </div>
         </>
       )}
@@ -299,15 +429,10 @@ function WritingProgress({
         <>
           <div className="canvas-divider" />
           <div className="canvas-done-label" style={{ color: "var(--text-secondary)" }}>
-            Writing stopped — {done} of {total} chapters written.
+            Writing stopped — {done} of {total} chapters
           </div>
-          {readId && done > 0 && (
-            <div className="canvas-done-actions">
-              <Link className="canvas-action-btn" href={`/read/${encodeURIComponent(readId)}`}>
-                Read the partial book
-              </Link>
-            </div>
-          )}
+          {/* Chat + Read + Share, like production's cancelled (written>0) footer. */}
+          {readId && done > 0 && <CanvasActions readId={readId} title={title} />}
         </>
       )}
     </>

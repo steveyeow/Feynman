@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { get, post, listVotes } from "@/lib/api";
 import { AgentRow, Book, mapAgentsToBooks, mergeVotes } from "@/lib/books";
@@ -31,9 +31,14 @@ export default function Library() {
   const [filter, setFilter] = useState<"recent" | "all">("recent");
   const [loading, setLoading] = useState(true);
   const [discovering, setDiscovering] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // IDs of books found+added by search — kept visible across keystrokes even
+  // when the corrected title ≠ the typed query (port of _searchDiscoveredIds).
+  const [discoveredIds, setDiscoveredIds] = useState<Set<string>>(new Set());
+  const [autoSearching, setAutoSearching] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -69,18 +74,30 @@ export default function Library() {
     const q = query.trim().toLowerCase();
     let list = books;
     if (q) {
+      // title / author / category match, OR a freshly discovered book — kept
+      // visible across keystrokes even if its corrected title ≠ the query
+      // (port of renderLibraryGrid's predicate, app.js 3322-3324).
       list = list.filter(
-        (b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q),
+        (b) =>
+          b.title.toLowerCase().includes(q) ||
+          b.author.toLowerCase().includes(q) ||
+          (b.category || "").toLowerCase().includes(q) ||
+          discoveredIds.has(b.id),
       );
     }
     if (activeTopics.size > 0) {
-      list = list.filter((b) => activeTopics.has(b.category));
+      // Case-insensitive, null-safe topic match (app.js 3316-3319).
+      const t = new Set([...activeTopics].map((x) => x.toLowerCase()));
+      list = list.filter((b) => t.has((b.category || "").toLowerCase()));
     }
     if (filter === "recent") {
       list = [...list].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    } else {
+      // "All" → alphabetical by title (app.js 3314-3315 else branch).
+      list = [...list].sort((a, b) => a.title.localeCompare(b.title));
     }
     return list;
-  }, [books, query, activeTopics, filter]);
+  }, [books, query, activeTopics, filter, discoveredIds]);
 
   function toggleTopic(t: string) {
     if (loadingTopics.has(t)) return;
@@ -122,20 +139,76 @@ export default function Library() {
     }
   }
 
-  // Real-time "find & add" when a search has no local match.
-  async function findAndAdd() {
+  // Search the catalog for a title not present locally and add the best match
+  // (port of autoSearchBook). Records discovered IDs so the added book stays
+  // visible across keystrokes even when its corrected title ≠ the typed query.
+  const runSearch = useCallback(
+    async (q: string) => {
+      if (q.length < 2) return;
+      if (searchAbortRef.current) searchAbortRef.current.abort();
+      const ac = new AbortController();
+      searchAbortRef.current = ac;
+      setAutoSearching(true);
+      setError(null);
+      try {
+        const data = await post<{ books?: { id?: string }[] }>(
+          "/api/search-book",
+          { query: q },
+          { signal: ac.signal },
+        );
+        const ids = (data.books || []).map((b) => b.id).filter(Boolean) as string[];
+        if (ids.length) {
+          setDiscoveredIds((prev) => {
+            const next = new Set(prev);
+            ids.forEach((id) => next.add(id));
+            return next;
+          });
+        }
+        await load();
+      } catch (e) {
+        if ((e as Error)?.name !== "AbortError") setError(`Couldn't find "${q}". Try again.`);
+      } finally {
+        if (searchAbortRef.current === ac) searchAbortRef.current = null;
+        setAutoSearching(false);
+      }
+    },
+    [load],
+  );
+
+  // Manual "Find & add it" button — fires the same search immediately.
+  function findAndAdd() {
     const q = query.trim();
-    if (q.length < 2 || adding) return;
-    setAdding(true);
-    try {
-      await post("/api/search-book", { query: q });
-      await load();
-    } catch {
-      setError(`Couldn't add "${q}". Try again.`);
-    } finally {
-      setAdding(false);
-    }
+    if (q.length < 2 || autoSearching) return;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    void runSearch(q);
   }
+
+  // Debounced auto-search (1200ms) when a query has no local match — honors the
+  // placeholder's "find and add it in real time" promise (port of the
+  // #library-search listener + autoSearchBook, app.js 7611-7636 / 3384-3416).
+  useEffect(() => {
+    const q = query.trim();
+    if (!q) {
+      // Clear the discovered set when the query empties (app.js 7615).
+      setDiscoveredIds((prev) => (prev.size ? new Set() : prev));
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      return;
+    }
+    if (q.length < 2) return;
+    const ql = q.toLowerCase();
+    const localMatch = books.some(
+      (b) =>
+        b.title.toLowerCase().includes(ql) ||
+        b.author.toLowerCase().includes(ql) ||
+        (b.category || "").toLowerCase().includes(ql),
+    );
+    if (localMatch) return;
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => void runSearch(q), 1200);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [query, books, runSearch]);
 
   const searching = query.trim().length > 0;
   const noMatch = searching && !loading && filtered.length === 0;
@@ -224,15 +297,24 @@ export default function Library() {
 
       {error && <p className="library-error">{error}</p>}
 
-      {/* Real-time find & add when a search has no local match. */}
+      {/* Real-time find & add when a search has no local match. The debounced
+          auto-search shows "Looking up…"; the button is the manual fallback. */}
       {noMatch && (
         <div className="library-discover-bar">
-          <span className="discover-bar-text">
-            Can&apos;t find &ldquo;{query.trim()}&rdquo; in your library?
-          </span>
-          <button className="discover-bar-btn" onClick={findAndAdd} disabled={adding}>
-            {adding ? "Adding…" : `Find & add it`}
-          </button>
+          {autoSearching ? (
+            <span className="discover-bar-text">
+              Looking up &ldquo;{query.trim()}&rdquo; — we&apos;ll add it if we find it…
+            </span>
+          ) : (
+            <>
+              <span className="discover-bar-text">
+                Can&apos;t find &ldquo;{query.trim()}&rdquo; in your library?
+              </span>
+              <button className="discover-bar-btn" onClick={findAndAdd}>
+                Find &amp; add it
+              </button>
+            </>
+          )}
         </div>
       )}
 

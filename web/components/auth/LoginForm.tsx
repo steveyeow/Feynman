@@ -13,6 +13,9 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Required Terms/Privacy consent on the email sign-up path (port of app.js
+  // 385-388/451-453). Shown only in signup mode.
+  const [agreed, setAgreed] = useState(false);
 
   if (ready && !authEnabled) {
     return (
@@ -28,6 +31,11 @@ export default function LoginForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // Block sign-up without consent (port of app.js 451-453).
+    if (mode === "signup" && !agreed) {
+      setError("Please agree to the Terms of Service and Privacy Policy.");
+      return;
+    }
     setBusy(true);
     const fn = mode === "signin" ? signInWithPassword : signUp;
     const { error } = await fn(email.trim(), password);
@@ -70,6 +78,38 @@ export default function LoginForm() {
           className={styles.input}
           autoComplete={mode === "signin" ? "current-password" : "new-password"}
         />
+        {mode === "signup" && (
+          <label
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+              fontSize: 12,
+              lineHeight: 1.4,
+              color: "var(--text-secondary)",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              style={{ marginTop: 2, flexShrink: 0 }}
+            />
+            <span>
+              I agree to the{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        )}
         {error && <p className={styles.error}>{error}</p>}
         <button type="submit" className={styles.primary} disabled={busy}>
           {busy ? "…" : mode === "signin" ? "Sign in" : "Create account"}
@@ -86,6 +126,7 @@ export default function LoginForm() {
           onClick={() => {
             setMode(mode === "signin" ? "signup" : "signin");
             setError(null);
+            setAgreed(false);
           }}
         >
           {mode === "signin" ? "Create an account" : "Sign in"}

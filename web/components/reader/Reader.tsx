@@ -38,6 +38,9 @@ export default function Reader({ id }: { id: string }) {
 
   const shareWrapRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Chapter TOC (scroll-spy) — the scroll container is the reading stage.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [activeChapter, setActiveChapter] = useState<number | "cover" | null>(null);
 
   const detailsHref = `/book/${encodeURIComponent(id)}`;
 
@@ -50,7 +53,10 @@ export default function Reader({ id }: { id: string }) {
 
     (async () => {
       try {
-        const c = await getBookContent(id);
+        // Hosted + anonymous → the public read endpoint (shared-link reads must
+        // not 401 → /login). Open-source / signed-in → the authed endpoint.
+        const usePublic = authEnabled && !user;
+        const c = await getBookContent(id, { publicRead: usePublic });
         if (!alive) return;
         setContent(c);
       } catch (e) {
@@ -144,6 +150,48 @@ export default function Reader({ id }: { id: string }) {
     }
   }
 
+  // ── Chapter TOC (port of reader-toc + active-chapter highlight, adapted to
+  //    the scroll model with a scroll-spy IntersectionObserver) ─────────────
+  const toc = (content?.sections || [])
+    .filter((s) => s.chapter != null)
+    .map((s) => ({ num: s.chapter as number, title: s.title || `Chapter ${s.chapter}` }));
+  const showToc = !loading && !error && !!content && toc.length >= 2;
+
+  useEffect(() => {
+    if (!content?.hasChapters) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const els = Array.from(stage.querySelectorAll<HTMLElement>("[data-chapter]"));
+    if (els.length < 2) return;
+    setActiveChapter((prev) => (prev == null ? "cover" : prev));
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        const n = visible[0]?.target.getAttribute("data-chapter");
+        if (n != null) setActiveChapter(Number(n));
+      },
+      { root: stage, rootMargin: "0px 0px -65% 0px", threshold: 0 },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [content]);
+
+  function jumpToChapter(target: number | "cover") {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (target === "cover") {
+      stage.scrollTo({ top: 0, behavior: "smooth" });
+      setActiveChapter("cover");
+      return;
+    }
+    stage
+      .querySelector(`#chapter-${target}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveChapter(target);
+  }
+
   function askQuestion(q: string) {
     // Anonymous visitor on the hosted build: stash the book they came for + the
     // question, then bounce through login. After sign-up the home composer
@@ -231,7 +279,32 @@ export default function Reader({ id }: { id: string }) {
       </div>
 
       <div className={styles.layout}>
-        <main className={styles.stage}>
+        {showToc && (
+          <aside className={styles.toc} aria-label="Chapters">
+            <nav className={styles.tocNav}>
+              <button
+                type="button"
+                className={`${styles.tocItem}${activeChapter === "cover" ? " " + styles.tocActive : ""}`}
+                onClick={() => jumpToChapter("cover")}
+              >
+                Cover
+              </button>
+              {toc.map((t) => (
+                <button
+                  key={t.num}
+                  type="button"
+                  className={`${styles.tocItem}${activeChapter === t.num ? " " + styles.tocActive : ""}`}
+                  onClick={() => jumpToChapter(t.num)}
+                  title={t.title}
+                >
+                  <span className={styles.tocNum}>{t.num}</span>
+                  <span className={styles.tocLabel}>{t.title}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
+        )}
+        <main className={styles.stage} ref={stageRef}>
           {loading && (
             <div className="reader-loading">
               <span className={styles.dot}>Loading book…</span>
@@ -291,6 +364,7 @@ export default function Reader({ id }: { id: string }) {
                   key={s.chapter != null ? `ch-${s.chapter}` : `sec-${i}`}
                   className={styles.section}
                   id={s.chapter != null ? `chapter-${s.chapter}` : undefined}
+                  data-chapter={s.chapter != null ? s.chapter : undefined}
                 >
                   {s.title && (
                     <div className={styles.chapterHeader}>

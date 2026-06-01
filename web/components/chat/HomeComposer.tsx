@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { get, getAgent, getMind, type Agent, type Mind } from "@/lib/api";
 import { mapAgentsToBooks, type AgentRow } from "@/lib/books";
-import { createSession } from "@/lib/chat";
+import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
@@ -34,6 +34,7 @@ import {
   type SelectedBook,
   type SelectedMind,
 } from "./ComposerPickers";
+import { useMentionAutocomplete } from "./useMentionAutocomplete";
 
 const PENDING_KEY = "feynman:pendingChat";
 
@@ -106,6 +107,12 @@ export default function HomeComposer() {
   const [greeting, setGreeting] = useState("");
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const prefilled = useRef(false);
+  // @-mention autocomplete: the chip-selected minds are mentionable on home.
+  const mention = useMentionAutocomplete({
+    taRef,
+    setValue,
+    minds: [...minds.values()].map((m) => ({ name: m.name, era: m.era, domain: m.domain })),
+  });
 
   useEffect(() => {
     const h = new Date().getHours();
@@ -254,6 +261,7 @@ export default function HomeComposer() {
     setBusy(true);
     try {
       const session = await createSession({ title: "New chat", sessionType: "chat" });
+      bumpSessions(); // surface the new row in the sidebar immediately
       // Hand the first message + selections to ChatView.
       try {
         sessionStorage.setItem(
@@ -330,6 +338,7 @@ export default function HomeComposer() {
       </div>
 
       <div className="chat-composer">
+      {mention.dropdown}
       <SelectedChips
         books={books}
         minds={minds}
@@ -345,8 +354,12 @@ export default function HomeComposer() {
         onChange={(e) => {
           setValue(e.target.value);
           grow();
+          mention.refresh();
         }}
+        onBlur={mention.onBlur}
         onKeyDown={(e) => {
+          // Mention dropdown intercepts Arrow/Enter/Tab/Escape before send.
+          if (mention.onKeyDown(e)) return;
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();

@@ -1,46 +1,29 @@
 "use client";
 
 /**
- * Dedicated single-mind chat — a 1:1 conversation with ONE great mind.
- *
- * Faithful port of renderMindDetail + sendMindChat (app.js ~6912-7110). This is
- * NOT the multi-mind home composer: the mind is the conversation partner, not an
- * invited participant, so there are NO "X joined the discussion" notices and NO
- * auto-invite. On open we create a session, greet once, then each turn POSTs to
- * /api/minds/{id}/chat with the running history.
- *
- * Layout mirrors index.html #page-mind: a flex `.mind-detail-layout` →
- *   .chat-main (.chat-messages + .chat-input-area > .chat-composer-inline)
- *   aside.chat-sidebar-right > #mind-meta-sidebar (the agent-info card).
+ * Dedicated mind chat surface (/mind/[id]/chat). Faithful to production's
+ * renderMindDetail + sendMindChat: an INVITE-CAPABLE chat where the mind is
+ * pre-seeded as a participant (so it answers in phase 1), with the full composer
+ * (book picker + "invite great minds" + @-mention autocomplete) and the
+ * auto-join orchestration — all delegated to ChatView so this stays a thin
+ * wrapper over one tested implementation. The right column is the mind's
+ * agent-info card. (Production does NOT greet on open, so we don't either.)
  *
  * Pro gating (hosted builds): mind chat is pro-only. Anonymous users (auth on,
- * not signed in) get a sign-in prompt; signed-in non-pro users get the paywall
- * overlay. Open-source (auth off) → everything works (isProUser is always true).
+ * not signed in) get a sign-in prompt; signed-in non-pro users get the paywall.
+ * Open-source (auth off) → everything works (isProUser is always true).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
-import { post } from "@/lib/api";
-import {
-  createSession,
-  queueSaveMessage,
-  chatErrorMessage,
-  type Message,
-  type Usage,
-} from "@/lib/chat";
+import { createSession, bumpSessions } from "@/lib/chat";
 import type { MindDetail } from "@/lib/seo-mind";
-import MessageList from "@/components/chat/MessageList";
+import ChatView from "@/components/chat/ChatView";
+import type { SelectedMind } from "@/components/chat/ComposerPickers";
 import { mindColor, mindInitials } from "@/components/chat/markdown";
 import styles from "./MindChat.module.css";
-
-/** Response shape of POST /api/minds/{id}/greet and /chat (mind_chat result). */
-interface MindChatResponse {
-  response: string;
-  usage?: Usage;
-}
 
 export default function MindChat({
   mindId,
@@ -49,263 +32,114 @@ export default function MindChat({
   mindId: string;
   mind: MindDetail;
 }) {
-  const router = useRouter();
   const { ready, authEnabled, user } = useAuth();
   const { isProUser, requirePro } = useProGate();
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sending, setSending] = useState(false);
-  const [input, setInput] = useState("");
-
-  // Session id for best-effort message persistence (mirrors currentSessionId).
-  const sessionIdRef = useRef<string | null>(null);
-  // Running turn history sent to /chat (port of mindChatHistory).
-  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
-  // StrictMode-safe greet-once guard (the effect runs twice in dev).
-  const greetedRef = useRef(false);
-  // Abort any in-flight greet/chat on unmount.
-  const abortRef = useRef<AbortController | null>(null);
-
-  const taRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // Anonymous (auth on, not signed in) → sign-in prompt instead of greeting,
-  // mirroring the legacy `!currentUser && FEYNMAN_PRO` branch.
+  // Anonymous (auth on, not signed in) → sign-in prompt; signed-in non-pro
+  // (hosted) → paywall. Open-source → isProUser always true so neither fires.
   const needsSignIn = authEnabled && !user;
-  // Signed-in but not pro (hosted) → paywall. Open-source → isProUser is always
-  // true so this is false. Anonymous is handled above by needsSignIn.
   const needsPaywall = !needsSignIn && !isProUser;
+  const gated = needsSignIn || needsPaywall;
 
-  // ── Greet once on open ──────────────────────────────────────────────────
+  // The session backing this chat (created once, when not gated).
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const creatingRef = useRef(false);
+
   useEffect(() => {
-    // Gate on auth readiness so the bearer token is set before we create the
-    // session / greet (hosted). Open-source resolves ready quickly too.
-    if (!ready) return;
-    // Don't greet for gated users — they see the prompt/paywall instead.
-    if (needsSignIn || needsPaywall) return;
-    if (greetedRef.current) return;
-    greetedRef.current = true;
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    (async () => {
-      // Create the session first (best-effort — failure shouldn't block chat).
-      try {
-        const session = await createSession({
-          title: `Chat with ${mind.name}`,
-          sessionType: "chat",
-          mindId,
-        });
-        sessionIdRef.current = session.id;
-      } catch (e) {
+    if (!ready || gated || creatingRef.current) return;
+    creatingRef.current = true;
+    let alive = true;
+    createSession({ title: `Chat with ${mind.name}`, sessionType: "chat", mindId })
+      .then((s) => {
+        if (alive) {
+          setSessionId(s.id);
+          bumpSessions();
+        }
+      })
+      .catch((e) => {
         console.warn("Failed to create mind chat session:", e);
-      }
-
-      // Greet (empty body) and render as the mind's first message.
-      setSending(true);
-      try {
-        const greet = await post<MindChatResponse>(
-          `/api/minds/${encodeURIComponent(mindId)}/greet`,
-          {},
-          { signal: controller.signal },
-        );
-        if (controller.signal.aborted) return;
-        if (greet?.response) {
-          setMessages([
-            { role: "mind", content: greet.response, mindName: mind.name, usage: greet.usage },
-          ]);
-          historyRef.current.push({ role: "assistant", content: greet.response });
-          if (sessionIdRef.current) {
-            queueSaveMessage(sessionIdRef.current, "mind", greet.response, {
-              mindName: mind.name,
-              usage: greet.usage,
-            });
+        // Degrade gracefully with a client-only id (no server persistence).
+        if (alive) {
+          try {
+            setSessionId(crypto.randomUUID());
+          } catch {
+            setSessionId(`local-${mindId}`);
           }
         }
-      } catch (e) {
-        if (!controller.signal.aborted) console.warn("Mind greeting failed:", e);
-      } finally {
-        if (!controller.signal.aborted) setSending(false);
-      }
-    })();
-
+      });
     return () => {
-      controller.abort();
-      if (abortRef.current === controller) abortRef.current = null;
+      alive = false;
     };
-  }, [ready, needsSignIn, needsPaywall, mindId, mind.name]);
+  }, [ready, gated, mind.name, mindId]);
 
-  // ── Send a turn ─────────────────────────────────────────────────────────
-  const handleSend = useCallback(
-    async (raw: string) => {
-      const message = raw.trim();
-      if (!message || sending) return;
-
-      // Re-check the gate on interaction (matches the legacy guard). If a
-      // not-pro user somehow reaches here, bounce to the overlay and bail.
-      if (needsSignIn) {
-        router.push("/login");
-        return;
-      }
-      if (!requirePro()) return;
-
-      // Append the user message immediately (optimistic).
-      setMessages((prev) => [...prev, { role: "user", content: message }]);
-      if (sessionIdRef.current) {
-        queueSaveMessage(sessionIdRef.current, "user", message);
-      }
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setSending(true);
-
-      try {
-        const body: Record<string, unknown> = { message };
-        if (historyRef.current.length) body.history = historyRef.current;
-        const data = await post<MindChatResponse>(
-          `/api/minds/${encodeURIComponent(mindId)}/chat`,
-          body,
-          { signal: controller.signal },
-        );
-        if (controller.signal.aborted) return;
-
-        setMessages((prev) => [
-          ...prev,
-          { role: "mind", content: data.response, mindName: mind.name, usage: data.usage },
-        ]);
-        // Maintain history with this completed turn (user then assistant).
-        historyRef.current.push({ role: "user", content: message });
-        historyRef.current.push({ role: "assistant", content: data.response });
-
-        if (sessionIdRef.current) {
-          queueSaveMessage(sessionIdRef.current, "mind", data.response, {
-            mindName: mind.name,
-            usage: data.usage,
-          });
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        setMessages((prev) => [
-          ...prev,
-          { role: "error-notice", content: chatErrorMessage(err) },
-        ]);
-      } finally {
-        if (!controller.signal.aborted) setSending(false);
-        if (abortRef.current === controller) abortRef.current = null;
-      }
-    },
-    [sending, needsSignIn, requirePro, router, mindId, mind.name],
+  const sidebar = (
+    <aside className="chat-sidebar-right visible">
+      <MindMetaSidebar mind={mind} />
+    </aside>
   );
 
-  // Abort any in-flight request on unmount (full cleanup).
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  const grow = () => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+  // Pre-seed the mind as a composer chip so it answers (phase 1) and others can
+  // auto-join (phase 2) — the production sendMindChat → _inviteMindsToChat path.
+  const seedMind: SelectedMind = {
+    id: mindId,
+    name: mind.name,
+    era: mind.era,
+    domain: mind.domain,
   };
 
-  const submit = () => {
-    const msg = input.trim();
-    if (!msg || sending) return;
-    setInput("");
-    if (taRef.current) taRef.current.style.height = "auto";
-    handleSend(msg);
-  };
+  // Gated (hosted) — show the prompt alongside the agent-info sidebar, no chat.
+  if (gated) {
+    return (
+      <div className={`mind-page ${styles.page}`}>
+        <div className="chat-with-sidebar">
+          <div className="chat-main">
+            <div className="chat-messages">
+              <div className={styles.fallback}>
+                {needsSignIn ? (
+                  <>
+                    <p>Sign in to chat with {mind.name}</p>
+                    <Link href="/login" className={styles.fallbackLink}>
+                      Sign in →
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p>Chatting with {mind.name} is a Pro feature.</p>
+                    <button
+                      type="button"
+                      className={styles.fallbackLink}
+                      style={{ background: "none", border: "none", cursor: "pointer" }}
+                      onClick={() => requirePro()}
+                    >
+                      Upgrade to Pro →
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          {sidebar}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`mind-page ${styles.page}`}>
-      <div className="mind-detail-layout">
-        <main className="chat-main">
-          <div className="chat-messages">
-            {needsSignIn ? (
-              <div className={styles.fallback}>
-                <p>Sign in to chat with {mind.name}</p>
-                <Link href="/login" className={styles.fallbackLink}>
-                  Sign in →
-                </Link>
-              </div>
-            ) : needsPaywall ? (
-              <div className={styles.fallback}>
-                <p>Chatting one-on-one with {mind.name} is a Pro feature.</p>
-                <button
-                  type="button"
-                  className={styles.fallbackLink}
-                  style={{ background: "none", border: "none", cursor: "pointer" }}
-                  onClick={() => requirePro()}
-                >
-                  Upgrade to Pro →
-                </button>
-              </div>
-            ) : (
-              <>
-                <MessageList messages={messages} />
-                {sending && (
-                  <div className="chat-message assistant">
-                    <span className="loading-dot">Thinking...</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {!needsSignIn && !needsPaywall && (
-            <div className="chat-input-area">
-              <div className="chat-composer chat-composer-inline">
-                <textarea
-                  ref={taRef}
-                  className="composer-input"
-                  rows={1}
-                  placeholder={`Ask ${mind.name} a question...`}
-                  value={input}
-                  disabled={sending}
-                  onChange={(e) => {
-                    setInput(e.target.value);
-                    grow();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
-                />
-                <div className="composer-toolbar">
-                  <div className="composer-left" />
-                  <button
-                    type="button"
-                    className="composer-send-btn"
-                    title="Send"
-                    aria-label="Send"
-                    disabled={sending || !input.trim()}
-                    onClick={submit}
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="12" y1="19" x2="12" y2="5" />
-                      <polyline points="5 12 12 5 19 12" />
-                    </svg>
-                  </button>
-                </div>
+      {sessionId ? (
+        <ChatView sessionId={sessionId} initialMinds={[seedMind]} rightSidebar={sidebar} />
+      ) : (
+        <div className="chat-with-sidebar">
+          <div className="chat-main">
+            <div className="chat-messages">
+              <div className="chat-message assistant">
+                <span className="loading-dot">Starting your chat with {mind.name}…</span>
               </div>
             </div>
-          )}
-        </main>
-
-        <aside className="chat-sidebar-right">
-          <MindMetaSidebar mind={mind} />
-        </aside>
-      </div>
+          </div>
+          {sidebar}
+        </div>
+      )}
     </div>
   );
 }

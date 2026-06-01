@@ -32,6 +32,7 @@ import {
   ApiError,
   type Outline,
   type BookStatus,
+  type FullBook,
   type AiBookStatus,
 } from "@/lib/aibooks";
 import { getSession, updateSession } from "@/lib/chat";
@@ -70,6 +71,10 @@ export interface WriteBookState {
   status: BookStatus | null;
   agentId: string | null;
   bookId: string | null;
+  /** Per-chapter content (chapter# → {content, word_count}) — populated on
+   *  resume of a finished/partial book so the canvas can show word counts;
+   *  null during live polling (the /status poll carries no content). */
+  bookContent: FullBook["content"] | null;
   busy: boolean;
   confirming: boolean;
   error: string | null;
@@ -104,6 +109,7 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
   const [status, setStatus] = useState<BookStatus | null>(null);
   const [bookId, setBookId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [bookContent, setBookContent] = useState<FullBook["content"] | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,6 +199,9 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
         if (!alive || genRef.current !== gen) return;
         setOutline(book.outline);
         setAgentId(book.agentId || (meta.agent_id as string) || null);
+        // The full GET carries per-chapter content + word counts; surface them
+        // so the canvas can show "N words" on completed chapters (L11/L12).
+        setBookContent(book.content || null);
         if (book.status === "writing") {
           setPhase("writing");
           setStatus(book);
@@ -352,6 +361,7 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
     status,
     agentId,
     bookId,
+    bookContent,
     busy,
     confirming,
     error,

@@ -21,10 +21,12 @@ import {
   type SelectedBook,
   type SelectedMind,
 } from "./ComposerPickers";
+import { useMentionAutocomplete, type MentionMind } from "./useMentionAutocomplete";
 
 export default function Composer({
   books,
   minds,
+  mentionable = [],
   disabled,
   onSend,
   onToggleBook,
@@ -34,6 +36,8 @@ export default function Composer({
 }: {
   books: Map<string, SelectedBook>;
   minds: Map<string, SelectedMind>;
+  /** Minds @-mentionable here: active (auto-joined) ∪ chip-selected. */
+  mentionable?: MentionMind[];
   disabled?: boolean;
   onSend: (message: string) => void;
   onToggleBook: (book: SelectedBook) => void;
@@ -45,6 +49,7 @@ export default function Composer({
   const [booksOpen, setBooksOpen] = useState(false);
   const [mindsOpen, setMindsOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const mention = useMentionAutocomplete({ taRef, setValue, minds: mentionable });
 
   const grow = () => {
     const ta = taRef.current;
@@ -61,13 +66,16 @@ export default function Composer({
     onSend(msg);
   };
 
-  const hasMinds = minds.size > 0;
+  // The @-hint shows when minds are mentionable — chip-selected OR auto-joined
+  // (port of _updateComposerMentionHint: activeMinds ∪ selectedMinds).
+  const hasMinds = minds.size > 0 || mentionable.length > 0;
   const placeholder = hasMinds
     ? "Ask a follow-up question... Type @ to mention a mind"
     : "Ask a follow-up question...";
 
   return (
     <div className="chat-composer chat-composer-inline">
+      {mention.dropdown}
       <SelectedChips
         books={books}
         minds={minds}
@@ -83,8 +91,13 @@ export default function Composer({
         onChange={(e) => {
           setValue(e.target.value);
           grow();
+          mention.refresh();
         }}
+        onBlur={mention.onBlur}
         onKeyDown={(e) => {
+          // The mention dropdown intercepts Arrow/Enter/Tab/Escape first so a
+          // completion doesn't also submit the message.
+          if (mention.onKeyDown(e)) return;
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();

@@ -15,7 +15,7 @@
  */
 
 import type { useRouter } from "next/navigation";
-import { createSession, updateSession, queueSaveMessage } from "@/lib/chat";
+import { createSession, updateSession, queueSaveMessage, bumpSessions } from "@/lib/chat";
 
 type Router = ReturnType<typeof useRouter>;
 
@@ -85,6 +85,7 @@ export async function startWriteBook(
     // the chat page reloads from the API, so the write must land first).
     await queueSaveMessage(session.id, "assistant", WRITE_BOOK_GREETING);
 
+    bumpSessions(); // surface the new "New book" row in the sidebar
     router.push(`/chat/${session.id}`);
     return session.id;
   } catch (e) {

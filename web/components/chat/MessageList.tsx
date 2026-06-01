@@ -13,7 +13,7 @@
  * answer, and add the hover affordance the scope asks for).
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Message, Reference, WebSource } from "@/lib/chat";
 import { renderMarkdown, esc, mindColor, mindInitials } from "./markdown";
 import styles from "./MessageList.module.css";
@@ -49,11 +49,9 @@ function tokenizeCitations(
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const nums = m[1].split(/\s*,\s*/).map((n) => parseInt(n, 10));
-    // Only treat as a citation group if at least one number resolves.
-    const resolvable = nums.some(
-      (n) => refsByIndex.has(n) || (n - 1 >= 0 && n - 1 < webSrcs.length),
-    );
-    if (!resolvable) continue;
+    // Production wraps EVERY [n,...] group whenever refs/web exist — an
+    // unresolved number renders as a bare <sup> (via Citation's fallback), never
+    // raw "[N]" text (L7 parity). So we no longer skip non-resolvable groups.
     if (m.index > last) tokens.push({ kind: "html", html: html.slice(last, m.index) });
     tokens.push({ kind: "html", html: "[" });
     nums.forEach((num, i) => {
@@ -71,10 +69,12 @@ function Citation({
   num,
   ref,
   web,
+  onJump,
 }: {
   num: number;
   ref?: Reference;
   web?: WebSource;
+  onJump?: (num: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   if (ref) {
@@ -84,7 +84,16 @@ function Citation({
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
       >
-        <a className="cite-link" href="#" onClick={(e) => e.preventDefault()}>
+        {/* Click jumps to the reference snippet below (scoped to this message),
+            in addition to the hover popover — restores app.js scrollIntoView. */}
+        <a
+          className="cite-link"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            onJump?.(num);
+          }}
+        >
           <sup>{num}</sup>
         </a>
         {open && (
@@ -145,8 +154,18 @@ function AssistantMessage({ msg }: { msg: Message }) {
     }
   }
 
+  // Scope the #ref-N lookup to THIS message (every assistant message emits its
+  // own id="ref-1", id="ref-2"… so a document-level lookup would jump to the
+  // wrong message's row).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const jumpToRef = (num: number) => {
+    rootRef.current
+      ?.querySelector(`#ref-${num}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
-    <div className="chat-message assistant" dir="auto">
+    <div className="chat-message assistant" dir="auto" ref={rootRef}>
       <div className="feynman-msg-avatar">
         <FeynmanGlyph />
       </div>
@@ -162,6 +181,7 @@ function AssistantMessage({ msg }: { msg: Message }) {
                 num={t.num}
                 ref={refsByIndex.get(t.num)}
                 web={!refsByIndex.has(t.num) ? webSrcs[t.num - 1] : undefined}
+                onJump={jumpToRef}
               />
             ),
           )}
@@ -278,16 +298,25 @@ function RefGroup({
   );
 }
 
-function UserMessage({ msg }: { msg: Message }) {
+function UserMessage({
+  msg,
+  knownMindNames = [],
+}: {
+  msg: Message;
+  knownMindNames?: string[];
+}) {
   const cleaned = String(msg.content ?? "")
     .replace(/<div\b[^>]*>|<\/div>/gi, "")
     .trim();
   const contextBooks = msg.contextBooks || [];
   const contextMinds = msg.contextMinds || [];
-  // Mention tags: render @Name spans (port of renderUserMsgWithMentions, but we
-  // only have the message text + known mention names here).
-  const mentionNames = contextMinds.map((m) => m.name);
-  const html = renderUserHtml(cleaned, mentionNames);
+  // Inline-tag any @Name matching a known mind in this chat (context ∪ active ∪
+  // minds that have spoken) — not just contextMinds (M3 parity with
+  // renderUserMsgWithMentions' allMinds union). Context minds not typed inline
+  // are still prefixed (the legacy leading-chip behavior).
+  const contextNames = contextMinds.map((m) => m.name);
+  const inlineNames = [...new Set([...contextNames, ...knownMindNames])];
+  const html = renderUserHtml(cleaned, inlineNames, contextNames);
   return (
     <div className="chat-message user" dir="auto">
       {contextBooks.length > 0 && (
@@ -305,17 +334,28 @@ function UserMessage({ msg }: { msg: Message }) {
 }
 
 /** Escape + wrap @Mentions in tags (subset of renderUserMsgWithMentions). */
-function renderUserHtml(text: string, mentionNames: string[]): string {
+function renderUserHtml(
+  text: string,
+  inlineNames: string[],
+  contextNames: string[],
+): string {
   let html = esc(text);
-  const names = [...mentionNames].sort((a, b) => b.length - a.length);
+  // Inline tagging: longest-first so a shorter name can't swallow a longer one.
+  const names = [...inlineNames].sort((a, b) => b.length - a.length);
   for (const name of names) {
     const escaped = esc(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const pattern = new RegExp("@" + escaped + "(?=\\s|$|&)", "g");
     html = html.replace(pattern, `<span class="mention-tag">@${esc(name)}</span>`);
   }
-  // Leading context mentions (the legacy prefixes them when not inline-typed).
-  const prefixed = mentionNames
-    .filter((n) => !new RegExp("@" + esc(n)).test(esc(text)))
+  // Leading context mentions: minds attached as context but NOT typed inline
+  // get prefixed (the legacy leading-chip behavior) — scoped to contextNames,
+  // never the full known set.
+  const escText = esc(text);
+  const prefixed = contextNames
+    .filter(
+      (n) =>
+        !new RegExp("@" + esc(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(escText),
+    )
     .map((n) => `<span class="mention-tag">@${esc(n)}</span>`)
     .join(" ");
   return prefixed ? prefixed + " " + html : html;
@@ -387,7 +427,13 @@ function JoinNotice({ names }: { names: string[] }) {
   );
 }
 
-export default function MessageList({ messages }: { messages: Message[] }) {
+export default function MessageList({
+  messages,
+  knownMindNames = [],
+}: {
+  messages: Message[];
+  knownMindNames?: string[];
+}) {
   return (
     <>
       {messages.map((msg, i) => {
@@ -397,7 +443,7 @@ export default function MessageList({ messages }: { messages: Message[] }) {
         if (msg.role === "error-notice")
           return <ErrorNotice key={i} text={msg.content} />;
         if (msg.role === "assistant") return <AssistantMessage key={i} msg={msg} />;
-        return <UserMessage key={i} msg={msg} />;
+        return <UserMessage key={i} msg={msg} knownMindNames={knownMindNames} />;
       })}
     </>
   );

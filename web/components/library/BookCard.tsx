@@ -13,7 +13,8 @@ import { upvote, deleteAgent } from "@/lib/api";
  *                          read/preview affordance and instead opens chat.
  *   • Chat button (left) → CHAT (/?book={id}, preselects the book — production
  *                          selectBookForChat). NEVER the reader.
- *   • Details (ⓘ icon)   → the /book/{id} SEO detail page.
+ *   • Title/author body  → the /book/{id} details page (production card-body
+ *                          click). Also reachable via the ⓘ icon in the footer.
  *   • Upvote (▲)         → POST /api/votes {title}, optimistic.
  *   • Delete (×)         → DELETE /api/agents/{id}, uploaded/catalog/AI only.
  */
@@ -113,8 +114,19 @@ export default function BookCard({
           </div>
         )}
       </div>
-      {/* Title/author: plain text (details is the ⓘ in the footer, not here). */}
-      <div className="card-body">
+      {/* Title/author → details page (production card-body click → openBookDetails).
+          The cover color-block keeps its Read/Preview behavior above. */}
+      <div
+        className="card-body"
+        role="link"
+        tabIndex={0}
+        aria-label={`Details about ${book.title}`}
+        style={{ cursor: "pointer" }}
+        onClick={() => router.push(detailHref)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") router.push(detailHref);
+        }}
+      >
         <h3 className="card-title">{book.title}</h3>
         <p className="card-author">
           {book.isAIGenerated

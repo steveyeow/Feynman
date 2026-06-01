@@ -17,6 +17,8 @@ import { useAuth } from "@/lib/auth";
 import {
   listSessions,
   deleteSession as apiDeleteSession,
+  bumpSessions,
+  SESSIONS_CHANGED,
   type Session,
 } from "@/lib/chat";
 
@@ -65,11 +67,20 @@ export default function ChatHistory() {
     if (canLoad && pathname.startsWith("/chat/")) load();
   }, [pathname, load, canLoad]);
 
+  // Live-refresh on any session mutation (create / rename / delete / public flip)
+  // so the pill text + public dot update without navigation (M16).
+  useEffect(() => {
+    const onChanged = () => load();
+    window.addEventListener(SESSIONS_CHANGED, onChanged);
+    return () => window.removeEventListener(SESSIONS_CHANGED, onChanged);
+  }, [load]);
+
   const onDelete = async (e: React.MouseEvent, id: string) => {
     e.preventDefault();
     e.stopPropagation();
     setSessions((prev) => prev.filter((s) => s.id !== id));
     await apiDeleteSession(id);
+    bumpSessions(); // keep /chats (and any other list) in sync
     // If we deleted the open chat, fall back home.
     if (pathname === `/chat/${id}`) router.push("/");
   };

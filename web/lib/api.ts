@@ -41,6 +41,11 @@ export class ApiError extends Error {
       this.code = (detail as { code?: string }).code;
       this.detailMessage = (detail as { message?: string }).message;
     }
+    // The auth middleware returns the code at the TOP level with a STRING detail
+    // (e.g. {detail:"Authentication required", code:"auth_required"} and the
+    // token_expired / invalid_token 401s). Without reading it here the 401
+    // interceptor + token-refresh path never fire.
+    if (!this.code) this.code = (body as { code?: string } | null)?.code;
   }
 }
 
@@ -50,14 +55,28 @@ export class ApiError extends Error {
 // ports app.js's api() 429/401 handling: a daily-limit 429 opens the upgrade
 // overlay (the ONLY way the paywall surfaces on the hosted build); a 401
 // auth_required bounces to login.
-type QuotaHandler = (info: { action: string; code: string; message?: string }) => void;
+// quota_hit reports the same props production sends to PostHog (limit/used/tier),
+// NOT code/message — preserves analytics funnels keyed on those (M17).
+type QuotaHandler = (info: {
+  action: string;
+  limit?: number;
+  used?: number;
+  tier?: string;
+}) => void;
 let _onQuota: QuotaHandler | null = null;
 let _onAuthRequired: (() => void) | null = null;
+// Token-refresh handler: returns a fresh access token (or null). Injected by the
+// auth layer so api.ts can refresh + retry a 401 token_expired/invalid_token
+// before giving up (port of app.js api() refreshSession-and-retry, 1754-1765).
+let _onTokenRefresh: (() => Promise<string | null>) | null = null;
 export function setQuotaHandler(fn: QuotaHandler | null) {
   _onQuota = fn;
 }
 export function setAuthRequiredHandler(fn: (() => void) | null) {
   _onAuthRequired = fn;
+}
+export function setTokenRefreshHandler(fn: (() => Promise<string | null>) | null) {
+  _onTokenRefresh = fn;
 }
 
 export async function apiFetch<T = unknown>(
@@ -65,14 +84,18 @@ export async function apiFetch<T = unknown>(
   opts: RequestInit & { auth?: boolean } = {},
 ): Promise<T> {
   const base = isServer ? SSR_BASE : "";
-  const headers = new Headers(opts.headers || {});
-  if (!headers.has("Content-Type") && opts.body && typeof opts.body === "string") {
-    headers.set("Content-Type", "application/json");
-  }
-  if (opts.auth !== false && _authToken) {
-    headers.set("Authorization", `Bearer ${_authToken}`);
-  }
-  const res = await fetch(`${base}${path}`, { ...opts, headers });
+  const buildHeaders = () => {
+    const h = new Headers(opts.headers || {});
+    if (!h.has("Content-Type") && opts.body && typeof opts.body === "string") {
+      h.set("Content-Type", "application/json");
+    }
+    if (opts.auth !== false && _authToken) {
+      h.set("Authorization", `Bearer ${_authToken}`);
+    }
+    return h;
+  };
+
+  let res = await fetch(`${base}${path}`, { ...opts, headers: buildHeaders() });
   if (!res.ok) {
     let body: unknown = null;
     try {
@@ -80,12 +103,54 @@ export async function apiFetch<T = unknown>(
     } catch {
       /* non-JSON error body */
     }
-    const err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
+    let err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
+
+    // Token expired/invalid mid-flight (hosted): refresh the session once and
+    // retry the original request before surfacing the error (port of app.js
+    // api() 1754-1765). Browser-only; retries AT MOST once (no infinite loop).
+    if (
+      !isServer &&
+      res.status === 401 &&
+      (err.code === "token_expired" || err.code === "invalid_token") &&
+      opts.auth !== false &&
+      _onTokenRefresh
+    ) {
+      let newToken: string | null = null;
+      try {
+        newToken = await _onTokenRefresh();
+      } catch {
+        /* refresh failed — fall through to normal error handling */
+      }
+      if (newToken) {
+        _authToken = newToken;
+        res = await fetch(`${base}${path}`, { ...opts, headers: buildHeaders() });
+        if (res.ok) {
+          if (res.status === 204) return undefined as T;
+          return (await res.json()) as T;
+        }
+        // Retry also failed — re-parse its body so the thrown error reflects it.
+        body = null;
+        try {
+          body = await res.json();
+        } catch {
+          /* non-JSON */
+        }
+        err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
+      }
+    }
+
     // Browser-only interceptors (ports app.js api() 429/401 handling).
     if (!isServer) {
       if (res.status === 429 && (err.code === "quota_exceeded" || err.code === "upload_limit_reached")) {
-        const action = (body as { detail?: { action?: string } } | null)?.detail?.action || "";
-        _onQuota?.({ action, code: err.code, message: err.detailMessage });
+        const detail = (body as {
+          detail?: { action?: string; limit?: number; used?: number; tier?: string };
+        } | null)?.detail;
+        _onQuota?.({
+          action: detail?.action || "",
+          limit: detail?.limit,
+          used: detail?.used,
+          tier: detail?.tier,
+        });
       } else if (res.status === 401 && err.code === "auth_required") {
         _onAuthRequired?.();
       }

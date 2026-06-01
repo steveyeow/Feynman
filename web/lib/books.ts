@@ -134,8 +134,10 @@ export function coverInitials(title: string): string {
 
 /** Status badge text, or null when the book is ready/normal. */
 export function statusBadge(book: Book): { text: string; cls: string } | null {
-  if (book.isAIGenerated && book.status === "failed") return { text: "Failed", cls: "coming" };
-  if (book.isAIGenerated && book.status === "error") return { text: "Error", cls: "coming" };
+  // Both "failed" and "error" show a red "Failed" pill (app.js renderBookGrid
+  // 3451-3454 — never an "Error" label, never grey).
+  if (book.isAIGenerated && (book.status === "failed" || book.status === "error"))
+    return { text: "Failed", cls: "failed" };
   if (book.isAIGenerated && ["writing", "outlining", "confirmed"].includes(book.status))
     return { text: "Writing…", cls: "indexing" };
   if (book.status === "indexing") return { text: "Indexing…", cls: "indexing" };

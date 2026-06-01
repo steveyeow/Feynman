@@ -18,7 +18,7 @@
  *    ≥3 messages (matches the backend gate).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { get } from "@/lib/api";
 import {
   loadMessages,
@@ -28,6 +28,7 @@ import {
   sendChat,
   responseToAssistant,
   chatErrorMessage,
+  bumpSessions,
   type Message,
   type Session,
 } from "@/lib/chat";
@@ -44,6 +45,7 @@ import { useProGate } from "@/components/pro/ProOverlay";
 import { track } from "@/lib/analytics";
 import MessageList from "./MessageList";
 import Composer from "./Composer";
+import type { MentionMind } from "./useMentionAutocomplete";
 import MindConsent from "./MindConsent";
 import RelatedBooks from "./RelatedBooks";
 import BookCanvas from "./BookCanvas";
@@ -123,10 +125,22 @@ function stubSession(id: string): Session {
   };
 }
 
-export default function ChatView({ sessionId }: { sessionId: string }) {
+export default function ChatView({
+  sessionId,
+  initialMinds,
+  rightSidebar,
+}: {
+  sessionId: string;
+  /** Minds pre-seeded as composer chips — e.g. the subject of a /mind chat, so
+   *  it answers in phase 1 and others can auto-join (production sendMindChat). */
+  initialMinds?: SelectedMind[];
+  /** Custom right column (e.g. the mind agent-info card). Defaults to the
+   *  RelatedBooks sidebar when omitted. */
+  rightSidebar?: ReactNode;
+}) {
   // Pro-gate for inviting minds (hosted build). On open-source, isProUser is
   // always true so requirePro() runs through.
-  const { requirePro } = useProGate();
+  const { requirePro, isProUser } = useProGate();
 
   // The session row (title + share state). Loaded client-side with a stub
   // fallback so the chat works even when the row can't be fetched.
@@ -140,10 +154,26 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   const [isWriteBook, setIsWriteBook] = useState(false);
   const [writeMeta, setWriteMeta] = useState<Record<string, unknown> | null>(null);
   const [books, setBooks] = useState<Map<string, SelectedBook>>(new Map());
-  const [minds, setMinds] = useState<Map<string, SelectedMind>>(new Map());
+  // Pre-seed chips from initialMinds (mind-page subject). Lazy initializer so it
+  // only seeds on first mount; absent → empty (the normal /chat behavior).
+  const [minds, setMinds] = useState<Map<string, SelectedMind>>(
+    () => new Map((initialMinds || []).map((m) => [m.id, m])),
+  );
   // Minds already active in this conversation (chips + auto-suggested that the
   // user allowed). Names drive @-mention rendering + suggest excludes.
   const activeMindsRef = useRef<Map<string, SelectedMind>>(new Map());
+  // Render-visible mirror of activeMindsRef (a ref never triggers a re-render):
+  // drives the @-mention autocomplete list, the composer hint, and mention-tag
+  // rendering (port of _getMentionableMinds + _updateComposerMentionHint).
+  const [activeMindList, setActiveMindList] = useState<SelectedMind[]>([]);
+  const syncActiveMinds = useCallback(() => {
+    setActiveMindList([...activeMindsRef.current.values()]);
+  }, []);
+  // Non-Pro users get the auto-suggest → consent fan-out at most ONCE per
+  // conversation (port of _mindsInvitedOnce). Reset per session in the load
+  // effect below. Pro / open-source users are unaffected (the gate only reads
+  // it when !isProUser).
+  const invitedOnceRef = useRef(false);
   const [sending, setSending] = useState(false);
   const [mindsBusy, setMindsBusy] = useState(false);
   const [consent, setConsent] = useState<ConsentState>(null);
@@ -176,6 +206,11 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
   // ── Load the session row, existing messages, and feature flags ──
   useEffect(() => {
     let alive = true;
+    // New/switched conversation — reset the per-session minds state (mirrors
+    // app.js resetting activeMinds + _mindsInvitedOnce on session change).
+    activeMindsRef.current = new Map();
+    invitedOnceRef.current = false;
+    setActiveMindList([]);
     getSession(sessionId)
       .then((s) => {
         if (!alive) return;
@@ -299,11 +334,14 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       const real = responses.filter(isRealMindReply);
       const respondedNames = new Set(real.map((r) => r.mind_name));
       // Drop freshly-joined minds that didn't actually respond.
+      let dropped = false;
       for (const [id, m] of activeMindsRef.current) {
         if (joinedNames.includes(m.name) && !respondedNames.has(m.name)) {
           activeMindsRef.current.delete(id);
+          dropped = true;
         }
       }
+      if (dropped) syncActiveMinds();
       const joinedResponded = joinedNames.filter((n) => respondedNames.has(n));
 
       const appended: Message[] = [];
@@ -356,7 +394,6 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       selectedMinds: Map<string, SelectedMind>,
       mentionedNames: string[] = [],
     ) => {
-      setMindsBusy(true);
       const hasMentions = mentionedNames.length > 0;
       try {
         // Move chip-selected minds into activeMinds (they're "invited").
@@ -369,6 +406,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
             invitedNames.push(m.name);
           }
         }
+        if (invitedIds.length) syncActiveMinds();
 
         let working = baseMsgs;
 
@@ -405,14 +443,21 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           if (genRef.current !== gen) return;
         }
 
-        // Phase 2: auto-suggest is skipped when the user @-mentioned minds
-        // (they already chose who answers) — port of app.js skipSuggest.
-        if (hasMentions) {
-          setMindsBusy(false);
+        // Phase 2: auto-suggest is skipped when the user @-mentioned minds (they
+        // already chose who answers) OR for a non-Pro user who already got the
+        // fan-out once this conversation (port of skipSuggest = hasMentions ||
+        // (!isProUser && _mindsInvitedOnce)). Production latches the flag here too.
+        const skipSuggest = hasMentions || (!isProUser && invitedOnceRef.current);
+        if (skipSuggest) {
+          invitedOnceRef.current = true;
           return;
         }
 
-        // Phase 2: auto-suggest 1-3 fresh minds, then ask consent.
+        // Phase 2: auto-suggest 1-3 fresh minds, then ask consent. The "Inviting
+        // great minds…" notice shows ONLY across this suggest→generate window
+        // (production adds+removes it synchronously in phase 1, so it never
+        // paints there — L4 parity).
+        setMindsBusy(true);
         const exclude = [...activeMindsRef.current.values()].map((m) => m.name);
         const count = Math.floor(Math.random() * 3) + 1;
         let suggested: { id?: string; name: string }[] = [];
@@ -427,7 +472,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         } catch (e) {
           console.warn("[minds] suggest failed:", e);
         }
-        if (genRef.current !== gen) return;
+        if (genRef.current !== gen) {
+          setMindsBusy(false);
+          return;
+        }
 
         // The suggest endpoint returns NO id — each suggestion must be
         // materialized via /api/minds/generate to get a real mind id before it
@@ -435,7 +483,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         // never fired.) Mirror production's suggest→generate fan-out.
         const fresh: { id: string; name: string }[] = [];
         for (const s of suggested) {
-          if (genRef.current !== gen) return;
+          if (genRef.current !== gen) {
+            setMindsBusy(false);
+            return;
+          }
           const m = await generateMind(s);
           if (m && !activeMindsRef.current.has(m.id)) {
             fresh.push(m);
@@ -448,7 +499,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         if (!fresh.length) {
           try {
             const all = await listMinds();
-            if (genRef.current !== gen) return;
+            if (genRef.current !== gen) {
+              setMindsBusy(false);
+              return;
+            }
             const topic = (bookCtx[0]?.title || message || "").toLowerCase();
             const words = topic.split(/\s+/).filter((w) => w.length > 3);
             const scored = all
@@ -466,8 +520,12 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           }
         }
 
+        setMindsBusy(false);
+
         if (!fresh.length) {
-          setMindsBusy(false);
+          // No fresh minds materialized — production latches _mindsInvitedOnce
+          // here too (app.js 3119) so a non-Pro user isn't re-attempted.
+          invitedOnceRef.current = true;
           return;
         }
 
@@ -475,7 +533,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         for (const s of fresh) {
           activeMindsRef.current.set(s.id, { id: s.id, name: s.name });
         }
-        setMindsBusy(false);
+        syncActiveMinds();
         setConsent({
           names: fresh.map((s) => s.name),
           mindIds: fresh.map((s) => s.id),
@@ -488,7 +546,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         setMindsBusy(false);
       }
     },
-    [runPanel],
+    [runPanel, isProUser, syncActiveMinds],
   );
 
   const onConsentAllow = useCallback(async () => {
@@ -497,6 +555,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
     setConsent(null);
     if (!c || !ctx || genRef.current !== ctx.gen) {
       for (const id of c?.mindIds || []) activeMindsRef.current.delete(id);
+      syncActiveMinds();
       return;
     }
     // mind_joined — the user accepted the auto-suggested minds (app.js 2925).
@@ -504,7 +563,10 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
     setMindsBusy(true);
     await runPanel(ctx.gen, c.mindIds, c.names, ctx.working, ctx.message, ctx.bookCtx, ctx.agentIds);
     setMindsBusy(false);
-  }, [consent, runPanel]);
+    // Latch the once-per-conversation cap after a completed auto-join (app.js 3136).
+    invitedOnceRef.current = true;
+    syncActiveMinds();
+  }, [consent, runPanel, syncActiveMinds]);
 
   const onConsentDecline = useCallback(() => {
     const c = consent;
@@ -512,7 +574,8 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
     // mind_declined — the user dismissed the suggestion (app.js 2929).
     if (c) track("mind_declined", { minds: c.names, count: c.names.length });
     for (const id of c?.mindIds || []) activeMindsRef.current.delete(id);
-  }, [consent]);
+    syncActiveMinds();
+  }, [consent, syncActiveMinds]);
 
   // ── The main send flow ──
   // `override` lets the first send (from the home handoff) supply the seeded
@@ -561,10 +624,12 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
 
       const bookCtx = [...effBooks.values()].map(bookToContext);
       const agentIds = [...effBooks.values()].map((b) => b.agentId);
+      // Persisted context books are {id, title} only — matches production's
+      // userMeta.contextBooks shape (the author-bearing payload goes to
+      // /api/chat via bookCtx, not here) — L6 parity.
       const contextBooks = [...effBooks.values()].map((b) => ({
         id: b.id,
         title: b.title,
-        author: b.author,
       }));
       // Context minds exclude @-mentioned ones — those render inline as mention
       // tags in the message text, not as duplicate context chips (port of
@@ -578,6 +643,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         const title = message.length > 40 ? message.slice(0, 40) + "..." : message;
         renameSession(sessionId, title);
         sessionRef.current.title = title;
+        bumpSessions(); // refresh the sidebar pill from "New chat" → the title
       }
 
       // Append user message + persist.
@@ -755,6 +821,34 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
       return next;
     });
 
+  // Minds @-mentionable in the composer: auto-joined (active) ∪ chip-selected,
+  // deduped by name (port of _getMentionableMinds). Drives the autocomplete +
+  // the composer @-hint.
+  const mentionableMinds = useMemo<MentionMind[]>(() => {
+    const out: MentionMind[] = [];
+    const seen = new Set<string>();
+    for (const m of [...activeMindList, ...minds.values()]) {
+      const key = m.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: m.name, era: m.era, domain: m.domain });
+    }
+    return out;
+  }, [activeMindList, minds]);
+
+  // Names rendered as .mention-tag in user messages: mentionable minds ∪ any
+  // mind that has spoken in this transcript ∪ stored context minds — so both
+  // live and restored @-mentions tag (port of renderUserMsgWithMentions' union).
+  const knownMindNames = useMemo<string[]>(() => {
+    const names = new Set<string>();
+    for (const m of mentionableMinds) names.add(m.name);
+    for (const msg of messages) {
+      if (msg.role === "mind" && msg.mindName) names.add(msg.mindName);
+      for (const cm of msg.contextMinds || []) names.add(cm.name);
+    }
+    return [...names];
+  }, [mentionableMinds, messages]);
+
   // ── Related sidebar source = last assistant message with sources ──
   const sidebarSources = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -799,7 +893,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
         )}
 
         <div className="chat-messages" id="chat-messages" ref={scrollRef}>
-          <MessageList messages={messages} />
+          <MessageList messages={messages} knownMindNames={knownMindNames} />
           {sending && (
             <div className="chat-message assistant">
               <span className="loading-dot">Thinking...</span>
@@ -807,9 +901,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           )}
           {isWriteBook && writeBook.busy && (
             <div className="chat-message assistant">
-              <span className="loading-dot">
-                {writeBook.outline ? "Updating the outline..." : "Building your book outline..."}
-              </span>
+              <WriteLoadingDot refine={!!writeBook.outline} />
             </div>
           )}
           {mindsBusy && (
@@ -834,7 +926,11 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           <Composer
             books={isWriteBook ? EMPTY_BOOKS : books}
             minds={isWriteBook ? EMPTY_MINDS : minds}
-            disabled={isWriteBook ? writeBook.busy : sending}
+            mentionable={isWriteBook ? [] : mentionableMinds}
+            // Never disable the in-chat composer during a Feynman answer — a
+            // fresh send must reach the abort + genRef supersede path (M4 parity,
+            // app.js never disables chat-input). Only write-book start blocks.
+            disabled={isWriteBook ? writeBook.busy : false}
             onSend={onComposerSend}
             onToggleBook={toggleBook}
             onToggleMind={toggleMind}
@@ -850,14 +946,22 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
           outline={writeBook.outline}
           status={writeBook.status}
           agentId={writeBook.agentId}
+          content={writeBook.bookContent}
           confirming={writeBook.confirming}
           error={writeBook.error}
           onConfirm={writeBook.confirm}
           onCancel={writeBook.cancel}
           onRetry={writeBook.retry}
         />
+      ) : rightSidebar !== undefined ? (
+        rightSidebar
       ) : (
-        !isWriteBook && <RelatedBooks sources={sidebarSources} />
+        !isWriteBook && (
+          <RelatedBooks
+            sources={sidebarSources}
+            excludeAgentIds={[...books.values()].map((b) => b.agentId)}
+          />
+        )
       )}
 
       {shareOpen && (
@@ -872,6 +976,7 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
             setPublicUrl(url);
             setShareOpen(false);
             setToastUrl(url);
+            bumpSessions(); // show the public ● dot in the sidebar
           }}
         />
       )}
@@ -885,11 +990,43 @@ export default function ChatView({ sessionId }: { sessionId: string }) {
             setPublicStatus("withdrawn");
             setPublicUrl("");
             setToastUrl("");
+            bumpSessions(); // clear the public ● dot in the sidebar
           }}
         />
       )}
     </div>
   );
+}
+
+// Staged write-book loading copy (port of _OUTLINE_STAGES / _REFINE_STAGES +
+// showLoading's 4000ms rotation). Outline generation cycles 6 stages over ~20s;
+// a refine cycles 3. The label advances every 4s and stops at the last stage.
+const OUTLINE_STAGES = [
+  "Thinking...",
+  "Researching the topic...",
+  "Identifying key themes...",
+  "Structuring chapters...",
+  "Building your book outline...",
+  "Almost there...",
+];
+const REFINE_STAGES = [
+  "Thinking...",
+  "Reviewing your feedback...",
+  "Updating the outline...",
+];
+
+function WriteLoadingDot({ refine }: { refine: boolean }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    setI(0);
+    const stages = refine ? REFINE_STAGES : OUTLINE_STAGES;
+    const id = window.setInterval(() => {
+      setI((prev) => (prev < stages.length - 1 ? prev + 1 : prev));
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [refine]);
+  const stages = refine ? REFINE_STAGES : OUTLINE_STAGES;
+  return <span className="loading-dot">{stages[Math.min(i, stages.length - 1)]}</span>;
 }
 
 /** Build the inline error notice when minds couldn't respond (port of appendChatErrorNotice). */
