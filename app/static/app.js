@@ -1643,6 +1643,38 @@ function _updateSidebarActive(page) {
   if (sel) document.querySelector(sel)?.classList.add('active');
 }
 
+// ─── Back to top ───
+// One floating button anchored in .app-main. On each navigation we (re)bind
+// its scroll listener to the active page-view. The long list/grid pages
+// (library, chats, home, subscription) are themselves the scroll containers
+// (overflow-y:auto); chat-style pages scroll an inner .chat-messages instead,
+// so we only arm the button on the page-view-scrolling routes.
+const _BACK_TO_TOP_PAGES = new Set(['library', 'chats', 'home', 'subscription']);
+let _backToTopEl = null;
+let _backToTopScroller = null;
+let _backToTopRaf = 0;
+
+function _backToTopOnScroll() {
+  if (_backToTopRaf) return;
+  _backToTopRaf = requestAnimationFrame(() => {
+    _backToTopRaf = 0;
+    if (!_backToTopEl || !_backToTopScroller) return;
+    _backToTopEl.classList.toggle('visible', _backToTopScroller.scrollTop > 400);
+  });
+}
+
+function bindBackToTop(scroller) {
+  if (_backToTopEl === null) _backToTopEl = document.getElementById('back-to-top');
+  if (!_backToTopEl) return;
+  if (_backToTopScroller) _backToTopScroller.removeEventListener('scroll', _backToTopOnScroll);
+  _backToTopScroller = scroller || null;
+  _backToTopEl.classList.remove('visible');
+  if (_backToTopScroller) {
+    _backToTopScroller.addEventListener('scroll', _backToTopOnScroll, { passive: true });
+    _backToTopOnScroll(); // sync now in case we landed on an already-scrolled page
+  }
+}
+
 function navigate() {
   const route = getRoute();
   // Reader attaches a document-level keydown handler; remove it when leaving #/read
@@ -1655,6 +1687,7 @@ function navigate() {
   const el = document.getElementById('page-' + route.page);
   if (el) el.classList.remove('hidden');
   _updateSidebarActive(route.page);
+  bindBackToTop(_BACK_TO_TOP_PAGES.has(route.page) ? el : null);
 
   const appLayout = document.getElementById('app-layout');
   if (route.page === 'landing') {
@@ -7428,6 +7461,11 @@ async function init() {
   // Sidebar toggle
   document.getElementById('sidebar-toggle-btn').addEventListener('click', toggleSidebar);
   document.getElementById('sidebar-float-btn').addEventListener('click', toggleSidebar);
+
+  // Back to top — smooth-scroll the currently bound page-view to the top
+  document.getElementById('back-to-top').addEventListener('click', () => {
+    if (_backToTopScroller) _backToTopScroller.scrollTo({ top: 0, behavior: 'smooth' });
+  });
   document.querySelector('.sidebar-logo').addEventListener('click', (e) => {
     if (document.getElementById('app-layout').classList.contains('sidebar-collapsed')) {
       e.preventDefault();
