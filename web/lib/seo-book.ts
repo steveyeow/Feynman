@@ -94,6 +94,24 @@ export function canonicalTopicForCategory(
   return null;
 }
 
+/**
+ * Whether a book's `meta.category` is a real, displayable category rather than
+ * a leaked chat query. Topic-discovery stored the user's raw prompt as the
+ * category for ~50 books ("how game theory can be used in hiring", "who are
+ * you", CJK queries). Those are real books we keep indexed — we just must not
+ * render the junk as "Book · {category}". Real categories are short,
+ * Title-Case and ASCII; chat queries start lowercase / non-Latin, run long, or
+ * are questions.
+ */
+export function isCleanCategory(category: string): boolean {
+  const c = (category || "").trim();
+  if (!c || c.includes("?")) return false;
+  if (!/^[A-Z]/.test(c)) return false; // Title-Case ASCII; chat queries / CJK aren't
+  if (c.split(/\s+/).length > 4) return false; // real categories are short
+  if (/^(How|What|Who|Why|Does|Is|Are|Should|Can|Will|We|My)\b/.test(c)) return false;
+  return true;
+}
+
 // ─── JSON-LD schema builders (ported from seo.py) ──────────────────────
 
 type Json = Record<string, unknown>;
