@@ -1162,9 +1162,9 @@ export function LandingPage({
             <div className={styles.chatHome} ref={homeRef}>
               <div className={styles.chatHomeInner}>
                 <div className={styles.greetingRow}>
-                  <div className={styles.greetingLogoWrap} style={{ width: 28, height: 28 }}>
+                  <div className="greeting-logo-wrap" style={{ width: 28, height: 28 }}>
                     <svg
-                      className={styles.greetingLogo}
+                      className="greeting-logo"
                       width="28"
                       height="28"
                       viewBox="0 0 56 56"
@@ -1184,7 +1184,7 @@ export function LandingPage({
                       <rect x="34" y="38" width="4" height="8" fill="#B8B8B8" />
                     </svg>
                     <svg
-                      className={styles.greetingFeynmanLogo}
+                      className="greeting-feynman-logo"
                       width="28"
                       height="28"
                       viewBox="0 0 64 64"

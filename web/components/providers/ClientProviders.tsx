@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { AuthProvider } from "@/lib/auth";
 import { ProOverlayProvider } from "@/components/pro/ProOverlay";
 import AnalyticsBridge from "./AnalyticsBridge";
+import GreetingLogoSwap from "./GreetingLogoSwap";
 
 /**
  * Single client-side provider tree, mounted once by the (server) root layout.
@@ -21,6 +22,7 @@ export default function ClientProviders({ children }: { children: React.ReactNod
         <Suspense fallback={null}>
           <AnalyticsBridge />
         </Suspense>
+        <GreetingLogoSwap />
         {children}
       </ProOverlayProvider>
     </AuthProvider>
