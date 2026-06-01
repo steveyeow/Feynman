@@ -126,6 +126,9 @@ export default function MindsGraph() {
 
     let nodes: GraphNode[] = [];
     let links: SimLink[] = [];
+    // Flowing particles that travel along links (production's elegant flow).
+    type Particle = { link: SimLink; t: number; speed: number; size: number; opacity: number };
+    let particles: Particle[] = [];
 
     const dpr = window.devicePixelRatio || 1;
     let W = container.clientWidth || 900;
@@ -214,6 +217,20 @@ export default function MindsGraph() {
       const built = buildGraphData(minds, simLinks, layout);
       nodes = built.nodes;
       links = built.links;
+      // Seed flowing particles along the links (port of app.js: cap 1-2 per link).
+      particles = [];
+      for (const l of links) {
+        const count = Math.min(2, Math.max(1, Math.round(l.strength || 0)));
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            link: l,
+            t: Math.random(),
+            speed: 0.001 + Math.random() * 0.003,
+            size: 1 + Math.random() * 1.5,
+            opacity: 0.3 + Math.random() * 0.5,
+          });
+        }
+      }
       sim = buildSimulation(); // auto-starts at alpha 1, like production
     })();
 
@@ -408,36 +425,39 @@ export default function MindsGraph() {
       if (q) for (const n of nodes) if (n.name.toLowerCase().includes(q)) matchIds.add(n.id);
       const filtering = !!q;
 
-      // connected-set when hovering (highlight node + its links)
-      const connected = new Set<string>();
-      if (hoveredNode) {
-        connected.add(hoveredNode.id);
-        for (const l of links) {
-          const s = resolve(l.source);
-          const t = resolve(l.target);
-          if (!s || !t) continue;
-          if (s.id === hoveredNode.id) connected.add(t.id);
-          else if (t.id === hoveredNode.id) connected.add(s.id);
-        }
-      }
-
-      // links
+      // links — always THIN (production never thickens links on hover; only the
+      // node glows). Search-filtering dims non-matches. (Port of app.js 6179-6189.)
       for (const l of links) {
         const s = resolve(l.source);
         const t = resolve(l.target);
         if (!s || !t || s.x == null || s.y == null || t.x == null || t.y == null) continue;
-        const dimmedByQuery = filtering && !matchIds.has(s.id) && !matchIds.has(t.id);
-        const isConn = hoveredNode && connected.has(s.id) && connected.has(t.id);
-        let alpha = dimmedByQuery ? 0.04 : 0.12 + l.strength * 0.08;
-        if (isConn) alpha = Math.min(0.6, alpha + 0.4);
+        const dimmed = filtering && !matchIds.has(s.id) && !matchIds.has(t.id);
+        const alpha = dimmed ? 0.04 : 0.12 + l.strength * 0.08;
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
         ctx.lineTo(t.x, t.y);
-        ctx.strokeStyle = isConn
-          ? `rgba(120,140,200,${alpha})`
-          : `rgba(160,170,190,${alpha})`;
-        ctx.lineWidth = (isConn ? 1.4 : 0.6) + l.strength * 0.4;
+        ctx.strokeStyle = `rgba(160,170,190,${alpha})`;
+        ctx.lineWidth = 0.6 + l.strength * 0.4;
         ctx.stroke();
+      }
+
+      // flowing particles along the links — the elegant flow from production
+      // (app.js 6227-6239). Hidden when zoomed far out.
+      for (const p of particles) {
+        p.t += p.speed;
+        if (p.t > 1) p.t -= 1;
+        const s = resolve(p.link.source);
+        const t = resolve(p.link.target);
+        if (!s || !t || s.x == null || s.y == null || t.x == null || t.y == null) continue;
+        if (filtering && !matchIds.has(s.id) && !matchIds.has(t.id)) continue;
+        const sz = p.size * transform.k < 0.5 ? 0 : p.size;
+        if (sz <= 0) continue;
+        const px = s.x + (t.x - s.x) * p.t;
+        const py = s.y + (t.y - s.y) * p.t;
+        ctx.beginPath();
+        ctx.arc(px, py, sz, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(130,150,200,${p.opacity * 0.45})`;
+        ctx.fill();
       }
 
       // nodes
