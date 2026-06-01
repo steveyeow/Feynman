@@ -4,6 +4,61 @@ import "@/styles/app.css";
 // overriding the design tokens + layering glass onto the control layer.
 import "@/styles/liquid.css";
 import ClientProviders from "@/components/providers/ClientProviders";
+import JsonLd from "@/components/seo/JsonLd";
+
+const SITE_URL = "https://feynman.wiki";
+
+// Site-level structured data (Organization + WebApplication). This @graph lived
+// in the old SPA shell's <head> (app/static/index.html) and was dropped in the
+// Next.js cutover — the homepage was emitting ZERO JSON-LD. Restored here so the
+// site again declares its brand entity (logo + sameAs social profiles, which
+// feed Google's Knowledge Graph) and the app itself.
+//
+// Two things are deliberately NOT copied verbatim from the old shell:
+//   - logo path: old value was /static/favicon.svg, which 404s in the new stack
+//     (only fonts live under /static/ now). The deployed asset is /favicon.svg.
+//   - WebSite + SearchAction (sitelinks search box) is OMITTED: its old target
+//     was the hash route /#/library?q=…, and the new /library route does not
+//     handle a ?q= param. Pointing Google's search box at a non-working URL is
+//     worse than declaring none — restore it once /library supports ?q= search.
+const SITE_JSONLD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      name: "Feynman",
+      url: SITE_URL,
+      logo: `${SITE_URL}/favicon.svg`,
+      description:
+        "An interactive knowledge network built on the world's most important books and great minds.",
+      sameAs: [
+        "https://x.com/steve_yeow",
+        "https://github.com/steveyeow/feynman",
+        "https://discord.gg/bCShwbFnCd",
+      ],
+    },
+    {
+      "@type": "WebApplication",
+      name: "Feynman",
+      url: SITE_URL,
+      applicationCategory: "EducationalApplication",
+      operatingSystem: "Web",
+      description:
+        "Chat with any book using a four-layer RAG system, explore topics with AI-curated book discovery, and discuss ideas with 50+ simulated great minds — scholars, scientists, and practitioners across every field.",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      featureList: [
+        "Chat with books using RAG with passage-level citations",
+        "AI-curated book discovery by topic",
+        "50+ simulated great minds (Aristotle, Feynman, Adam Smith, etc.)",
+        "Cross-book knowledge search",
+        "AI book writing",
+        "Interactive knowledge graph visualization",
+        "Upload custom minds from Twitter, blogs, or text",
+      ],
+      creator: { "@type": "Person", name: "Steve Yao", url: "https://x.com/steve_yeow" },
+    },
+  ],
+};
 
 const SITE_DESCRIPTION =
   "An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.";
@@ -43,6 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <JsonLd data={SITE_JSONLD} />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body>
