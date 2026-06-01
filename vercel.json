@@ -1,22 +1,9 @@
 {
   "builds": [
-    { "src": "app/main.py", "use": "@vercel/python", "config": { "maxDuration": 60 } },
-    { "src": "web/package.json", "use": "@vercel/next" }
+    { "src": "app/main.py", "use": "@vercel/python", "config": { "maxDuration": 60 } }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "app/main.py" },
-    { "src": "/sitemap.xml", "dest": "app/main.py" },
-    { "src": "/sitemap", "dest": "app/main.py" },
-    { "src": "/robots.txt", "dest": "app/main.py" },
-    { "src": "/llms.txt", "dest": "app/main.py" },
-    { "src": "/llms-full.txt", "dest": "app/main.py" },
-    { "src": "/[^/]+\\.txt", "dest": "app/main.py" },
-    { "src": "/book/([^/]+)/og.png", "dest": "app/main.py" },
-    { "src": "/mind/([^/]+)/og.png", "dest": "app/main.py" },
-    { "src": "/share/(.*)", "dest": "app/main.py" },
-    { "src": "/terms", "dest": "app/main.py" },
-    { "src": "/privacy", "dest": "app/main.py" },
-    { "handle": "filesystem" }
+    { "src": "/(.*)", "dest": "app/main.py" }
   ],
   "crons": [
     { "path": "/api/cron/seed-minds", "schedule": "0 0 * * 1" },
