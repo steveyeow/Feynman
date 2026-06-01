@@ -60,6 +60,11 @@
   --glass-bg: var(--glass-regular);
   --glass-bg-strong: var(--glass-thick);
   --glass-border: var(--glass-edge);
+
+  /* app.css references --bg-hover 4× but never defines it (secondary login
+   * submit + share-button hovers), so it fell back to a light gray that was
+   * invisible under white text in dark mode. Define the missing token here. */
+  --bg-hover: #f3f4f6;
 }
 
 /* Dark material — surfaces from the production dark bgs, not tinted. */
@@ -76,6 +81,7 @@
     --depth-1: 0 1px 3px rgba(0, 0, 0, 0.3);
     --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4);
     --depth-3: 0 12px 40px rgba(0, 0, 0, 0.5);
+    --bg-hover: #3a3a3c;
   }
 }
 :root.dark {
@@ -90,6 +96,7 @@
   --depth-1: 0 1px 3px rgba(0, 0, 0, 0.3);
   --depth-2: 0 4px 16px rgba(0, 0, 0, 0.4);
   --depth-3: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --bg-hover: #3a3a3c;
 }
 
 /* App canvas background. The legacy `body` rule sets NO background-color (in
@@ -501,7 +508,32 @@ body { background-color: var(--bg-home); }
   background: transparent; color: var(--text-secondary); cursor: pointer;
 }
 .theme-toggle:hover { color: var(--text); background: rgba(128,128,128,0.12); }
-.login-page-wrap { min-height: 100%; padding: 24px; }
+/* ── Login / sign-up — full-screen (no chrome) + Liquid Glass card ──────────
+ * /login renders OUTSIDE AppShell (no sidebar), so .login-page owns the whole
+ * viewport — this restores the legacy full-screen login instead of a card
+ * sitting next to a signed-in sidebar. A soft cool-blue depth wash sits behind
+ * the card so the frosted glass has something to refract; the card itself uses
+ * --glass-thick (~0.8 opaque), so copy stays fully legible (not see-through). */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  background:
+    radial-gradient(1100px 620px at 12% -10%, rgba(10, 132, 255, 0.12), transparent 60%),
+    radial-gradient(1000px 600px at 110% 114%, rgba(10, 132, 255, 0.07), transparent 58%),
+    var(--bg-home);
+}
+.login-container { flex: 1; }
+.login-card {
+  background: var(--glass-thick);
+  -webkit-backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--blur-thick)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-window);
+  box-shadow:
+    inset 0 1px 0 var(--glass-specular),
+    inset 0 0 0 0.5px var(--glass-inner-line),
+    var(--depth-3);
+}
 
 /* ── Public discussion thread (/discussions/[id]) ─────────────────────── */
 .discussion-thread { display: flex; flex-direction: column; gap: 16px; }
