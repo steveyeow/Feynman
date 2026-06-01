@@ -181,26 +181,7 @@ export default function MindsGraph() {
       return force as d3.Force<GraphNode, SimLink>;
     }
 
-    // ── Build graph data + seed positions from PCA layout (so first paint is
-    //    close to settled instead of an origin starburst) ──
-    const built = buildGraphData(minds, [], []); // placeholder; replaced below
-    nodes = built.nodes;
-    links = built.links;
-
-    function seedPositions() {
-      for (const n of nodes) {
-        if (n.x == null || n.y == null) {
-          if (n.layoutPos) {
-            n.x = n.layoutPos.rx * W;
-            n.y = n.layoutPos.ry * H;
-          } else {
-            n.x = W / 2 + (Math.random() - 0.5) * Math.min(W, H) * 0.6;
-            n.y = H / 2 + (Math.random() - 0.5) * Math.min(W, H) * 0.6;
-          }
-        }
-      }
-    }
-
+    // ── Simulation builder (forces match production _renderMindsGraph) ──
     function buildSimulation(): d3.Simulation<GraphNode, SimLink> {
       const linkForce = d3
         .forceLink<GraphNode, SimLink>(links)
@@ -220,29 +201,20 @@ export default function MindsGraph() {
         });
     }
 
-    seedPositions();
-    sim = buildSimulation();
-
-    // ── Fetch similarities, then rebuild links/positions in place ──────────
+    // ── Fetch the PCA layout FIRST, then build the graph ONCE — exactly like
+    //    production's _renderMindsGraph. We deliberately do NOT pre-seed node
+    //    x/y: d3 then default-places them in a phyllotaxis cluster near the
+    //    origin (top-left of the canvas), and the embedding force flows them
+    //    out to their PCA targets in a single smooth entrance — not a random
+    //    starburst from the center. (Layout fetch failure → empty layout →
+    //    charge-only spread from the origin, still renders.) ──
     (async () => {
       const { links: simLinks, layout } = await getSimilarities();
       if (disposed) return;
-      // Preserve any positions the sim already produced.
-      const pos = new Map(nodes.map((n) => [n.id, { x: n.x, y: n.y }]));
-      const rebuilt = buildGraphData(minds, simLinks, layout);
-      nodes = rebuilt.nodes;
-      links = rebuilt.links;
-      for (const n of nodes) {
-        const p = pos.get(n.id);
-        if (p && p.x != null) {
-          n.x = p.x;
-          n.y = p.y;
-        }
-      }
-      seedPositions();
-      sim?.stop();
-      sim = buildSimulation();
-      sim.alpha(0.6).restart();
+      const built = buildGraphData(minds, simLinks, layout);
+      nodes = built.nodes;
+      links = built.links;
+      sim = buildSimulation(); // auto-starts at alpha 1, like production
     })();
 
     // ── Zoom / pan ─────────────────────────────────────────────────────────
