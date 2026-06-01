@@ -11,7 +11,7 @@ import ThemeToggle from "@/components/theme/ThemeToggle";
  * and just the theme toggle in anonymous mode (auth off, e.g. local dev).
  */
 export default function UserMenu() {
-  const { authEnabled, user } = useAuth();
+  const { authEnabled, user, isPro } = useAuth();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -24,29 +24,59 @@ export default function UserMenu() {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
+  // Production shows the user's NAME + tier (Free/Pro) in the collapsed profile,
+  // NOT the email (email lives only in the expanded menu header). Derive name
+  // like app.js: full_name → email prefix → "Account".
+  const meta = (user?.user_metadata ?? {}) as {
+    full_name?: string;
+    name?: string;
+    avatar_url?: string;
+    picture?: string;
+  };
   const email = user?.email ?? "";
-  const initial = email ? email[0]!.toUpperCase() : "";
-  const label = email || (authEnabled ? "Account" : "Guest");
+  const name =
+    meta.full_name || meta.name || (email ? email.split("@")[0] : "") || "Account";
+  const avatarUrl = meta.avatar_url || meta.picture || "";
+  const tier = isPro ? "Pro" : "Free";
+  const initial = (user ? name[0] : "")?.toUpperCase() ?? "";
+  const guestLabel = authEnabled ? "Account" : "Guest";
 
   return (
     <div className="sidebar-user-wrap" ref={wrapRef}>
       <div
         className="sidebar-profile"
-        title="Account"
+        title={user ? name : "Account"}
         role="button"
         tabIndex={0}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => e.key === "Enter" && setOpen((o) => !o)}
       >
         <div className="profile-avatar">
-          {initial || (
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              referrerPolicy="no-referrer"
+              alt=""
+              style={{ width: 28, height: 28, borderRadius: "50%" }}
+            />
+          ) : initial ? (
+            initial
+          ) : (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
           )}
         </div>
-        <span className="sidebar-label profile-email">{label}</span>
+        {user ? (
+          <div className="sidebar-label profile-info">
+            <span className="profile-name">{name}</span>
+            <span className="profile-tier">{tier}</span>
+          </div>
+        ) : (
+          <span className="sidebar-label profile-name">{guestLabel}</span>
+        )}
         <svg className="sidebar-label profile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="6 9 12 15 18 9" />
         </svg>
@@ -56,7 +86,7 @@ export default function UserMenu() {
           + .user-menu-item rows. Positioned above the profile, bottom-left. */}
       <div className={`sidebar-user-menu${open ? " open" : ""}`} style={{ left: 12, bottom: 60, right: 12 }}>
         <div className="user-menu-header">
-          <span className="user-menu-name">{authEnabled && user ? "Signed in" : "Guest"}</span>
+          <span className="user-menu-name">{user ? name : guestLabel}</span>
           {email && <span className="user-menu-email">{email}</span>}
         </div>
         <div className="user-menu-divider" />
