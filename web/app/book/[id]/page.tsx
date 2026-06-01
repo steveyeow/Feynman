@@ -22,9 +22,11 @@ import {
   detectCapabilities,
   clampDescription,
   slugify,
+  canonicalTopicForCategory,
   bookJsonld,
   breadcrumbJsonld,
 } from "@/lib/seo-book";
+import { fetchTopics } from "@/lib/seo-mind";
 
 // ISR — on-demand revalidation, no generateStaticParams (thousands of books).
 export const revalidate = 86400;
@@ -82,12 +84,18 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages, related, overview] = await Promise.all([
+  const [questions, passages, related, overview, topics] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
     getRelatedForBook(id),
     getBookOverview(id),
+    fetchTopics(),
   ]);
+
+  // Map the book's free-form category to a canonical topic hub (or null) so the
+  // "Topic" rail links to a real /topic/{slug} instead of 404'ing on ad-hoc
+  // categories like "Business" (→ "Business & Strategy") or junk values.
+  const canonicalTopic = canonicalTopicForCategory(data.category, topics);
 
   const caps = detectCapabilities(data.agent);
   const chapterCount = data.chapters.length;
@@ -191,12 +199,12 @@ export default async function BookLandingPage({ params }: PageProps) {
           </ul>
         </div>
       ) : null}
-      {data.category ? (
+      {canonicalTopic ? (
         <div className="seo-rail-card">
           <h3>Topic</h3>
           <ul>
             <li>
-              <Link href={`/topic/${slugify(data.category)}`}>More on {data.category}</Link>
+              <Link href={`/topic/${slugify(canonicalTopic)}`}>More on {canonicalTopic}</Link>
             </li>
           </ul>
         </div>
