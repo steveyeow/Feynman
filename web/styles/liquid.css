@@ -176,6 +176,21 @@ body { background-color: var(--bg-home); }
  * from the rule above — only the background is made legible). */
 .composer-popover { background: var(--glass-menu); }
 
+/* Same bleed-through risk, same fix: other text-dense MENUS / PANELS that float
+ * directly over body content with no dimming scrim. The account menus, the graph
+ * node tooltip, and the reader top bar (which sits over scrolling prose — it was
+ * 0.96 in production, the glass theme dropped it to 0.80). Near-opaque fill so
+ * the content behind stays out of the way; the frosted blur from the rules above
+ * is preserved. (Decorative/transient glass — graph toolbars with opaque controls,
+ * the landing demo card over empty canvas, modals that already sit on a dark
+ * backdrop scrim — intentionally keeps the lighter glass.)
+ * reader-topbar's own html.dark rule (0.95) is more specific and still wins in
+ * class-dark mode; this only lifts light mode (and system-dark) to the menu fill. */
+.user-menu,
+.sidebar-user-menu,
+.minds-tooltip,
+.reader-topbar { background: var(--glass-menu); }
+
 /* Composer — a subtle frosted capsule (it floats above the home/chat surface),
  * but keep it close to production: light glass, production radius, accent focus. */
 .chat-composer {
