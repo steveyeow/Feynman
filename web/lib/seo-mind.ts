@@ -31,10 +31,17 @@ export interface MindDetail {
   bio_summary?: string;
   thinking_style?: string;
   typical_phrases?: string[];
-  /** Stripped by /api/minds and /api/minds/{id} — present only if the API
-   *  ever exposes it. We render it when available, omit it otherwise. */
+  /** Full persona is stripped by /api/minds and /api/minds/{id} (system-prompt
+   *  text, kept private). `persona_excerpt` is the bounded ~900-char public
+   *  snippet the single-mind endpoint exposes for the "Core approach" section. */
   persona?: string;
+  persona_excerpt?: string;
   works?: string[];
+  /** Wikidata/Wikipedia identity URLs — stored per-mind by expand_minds from
+   *  the matched Wikidata candidate. Merged into the Person JSON-LD `sameAs`
+   *  alongside the curated FAMOUS_MIND_SAMEAS table (see mindSameAs). */
+  wikidata_url?: string;
+  wikipedia_url?: string;
   created_at?: string;
   [k: string]: unknown;
 }
@@ -109,7 +116,7 @@ export const FAMOUS_MIND_SAMEAS: Record<string, string[]> = {
   ],
   "friedrich engels": [
     "https://en.wikipedia.org/wiki/Friedrich_Engels",
-    "https://www.wikidata.org/wiki/Q33760",
+    "https://www.wikidata.org/wiki/Q34787",
   ],
   "adam smith": [
     "https://en.wikipedia.org/wiki/Adam_Smith",
@@ -205,6 +212,31 @@ export const FAMOUS_MIND_SAMEAS: Record<string, string[]> = {
 export function lookupSameAs(mindName: string): string[] | undefined {
   if (!mindName) return undefined;
   return FAMOUS_MIND_SAMEAS[mindName.trim().toLowerCase()];
+}
+
+/**
+ * Full `sameAs` set for a mind's Person JSON-LD. The Wikidata/Wikipedia URLs
+ * stored on the row (resolved + verified from Wikidata's action API by
+ * expand_minds / backfill_mind_sameas — P31=Q5 + enwiki-gated) are
+ * AUTHORITATIVE and SUPERSEDE the curated FAMOUS_MIND_SAMEAS table: same two
+ * URL kinds, but correct by construction. The hand-curated table doesn't scale
+ * to 1000 minds and had at least one copy-paste error (Engels pointed at
+ * Russell's QID), so for any mind we've actually resolved we don't risk
+ * re-introducing a curated mistake. The table is the fallback ONLY for minds
+ * without stored links (the few Wikidata can't resolve by name). Deduped;
+ * undefined when empty so dropNulls strips the key rather than emit `sameAs: []`.
+ */
+export function mindSameAs(
+  mind: Pick<MindDetail, "name" | "wikidata_url" | "wikipedia_url">,
+): string[] | undefined {
+  const stored = [mind.wikipedia_url || "", mind.wikidata_url || ""]
+    .map((u) => (u || "").trim())
+    .filter(Boolean);
+  if (stored.length) return [...new Set(stored)];
+  const curated = (lookupSameAs(mind.name) || [])
+    .map((u) => (u || "").trim())
+    .filter(Boolean);
+  return curated.length ? [...new Set(curated)] : undefined;
 }
 
 // ─── JSON-LD builders (drop empty leaves, matching jsonld_script) ───────
@@ -379,14 +411,21 @@ export function metaDescription(text: string): string {
 const MIND_ESSAY_MIN_DOMAIN_OVERLAP_CHARS = 3;
 const STEM_SKIP = new Set(["and", "the", "of", "in", "on", "for", "to", "&"]);
 
-/** Light morphological stem (matches qa._morphological_stem behavior). */
+/**
+ * Light morphological stem — a FAITHFUL port of qa._morphological_stem so the
+ * Next pages and the Python sitemap agree on which (mind, topic) pairs are
+ * related. The previous port diverged: its suffix list/order stripped only
+ * "s" from "economics" → "economic" (vs Python's "ics" → "econom"), so
+ * isMindTopicRelevant returned false for pairs the sitemap lists as true —
+ * which 404'd /mind/{id}/on/economics AND dropped mind↔topic internal links
+ * (e.g. Karl Marx never linked to /topic/economics). Same suffix tuple, same
+ * order, same length guard (len(w) > len(suffix) + 3) as the Python original.
+ */
 function morphologicalStem(word: string): string {
-  let w = word.toLowerCase().trim();
-  if (w.length <= 4) return w;
-  for (const suf of ["ies", "ing", "ed", "es", "s", "al", "ic", "ical", "y"]) {
-    if (w.length - suf.length >= 3 && w.endsWith(suf)) {
-      w = w.slice(0, w.length - suf.length);
-      break;
+  const w = word.toLowerCase();
+  for (const suf of ["ical", "ics", "ing", "ed", "al", "ly", "es", "s", "y"]) {
+    if (w.length > suf.length + 3 && w.endsWith(suf)) {
+      return w.slice(0, w.length - suf.length);
     }
   }
   return w;
@@ -492,6 +531,23 @@ export async function fetchSimilarityLinks(): Promise<SimilarityLink[]> {
   }
 }
 
+/**
+ * Generated 2-paragraph intro for a topic hub (GET /api/topics/{slug}/overview).
+ * On-demand generated + cached server-side; empty string degrades to the
+ * page's existing one-line intro. The Bucket-B density floor for Type-3 hubs.
+ */
+export async function fetchTopicOverview(slug: string): Promise<string> {
+  try {
+    const res = await get<{ overview?: string }>(
+      `/api/topics/${encodeURIComponent(slug)}/overview`,
+      { next: { revalidate: 86400 } } as RequestInit,
+    );
+    return (res?.overview || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 /** Resolve a topic slug to its canonical topic name via the topic list. */
 export async function resolveTopicSlug(slug: string): Promise<string | null> {
   const topics = await fetchTopics();
@@ -592,16 +648,39 @@ export function filterBooksByTopic(
   limit = 30,
 ): AgentRowLite[] {
   const t = topic.toLowerCase();
-  const out: AgentRowLite[] = [];
+  // Dedupe by normalized title: the catalog holds the SAME book as both a
+  // full-title `catalog` stub and a short-title `ready` record ("Competitive
+  // Strategy: Techniques…" vs "Competitive Strategy"; "Good to Great" even has
+  // two stubs differing only in punctuation). Normalize = strip the subtitle
+  // after a colon/dash + punctuation, lowercase, collapse whitespace. On a
+  // collision, prefer the real (ready/indexing) book so the short correct title
+  // wins over the stub — which also makes the page's "N books" count honest.
+  const norm = (a: AgentRowLite) =>
+    (a.name || "")
+      .toLowerCase()
+      .split(/[:—]|\s-\s/)[0]
+      .replace(/[.,;:!?'"()]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const rank = (a: AgentRowLite) =>
+    a.status === "ready" || a.status === "indexing" ? 2 : a.status === "writing" ? 1 : 0;
+
+  const best = new Map<string, AgentRowLite>();
+  const order: string[] = [];
   for (const a of agents) {
     if (a.status === "error" && a.type !== "ai_book") continue;
     const cat = (a.meta?.category || "").toLowerCase();
-    if (cat && (cat === t || cat.includes(t) || t.includes(cat))) {
-      out.push(a);
-      if (out.length >= limit) break;
+    if (!(cat && (cat === t || cat.includes(t) || t.includes(cat)))) continue;
+    const k = norm(a) || a.id; // fall back to id if the title normalizes empty
+    const cur = best.get(k);
+    if (!cur) {
+      best.set(k, a);
+      order.push(k);
+    } else if (rank(a) > rank(cur)) {
+      best.set(k, a);
     }
   }
-  return out;
+  return order.map((k) => best.get(k)!).slice(0, limit);
 }
 
 /** Minds whose domain is relevant to a topic (uses isMindTopicRelevant). */

@@ -9,10 +9,10 @@ import {
   breadcrumbJsonLd,
   fetchMind,
   fetchMindOnTopic,
-  isMindTopicRelevant,
   metaDescription,
   mindEssayJsonLd,
   resolveTopicSlug,
+  topicSlug,
 } from "@/lib/seo-mind";
 
 // The imagined essay comes from GET /api/minds/{id}/on/{slug} (mirrors the
@@ -29,22 +29,33 @@ export async function generateMetadata({
 }: {
   params: { id: string; slug: string };
 }): Promise<Metadata> {
-  const [mind, topic] = await Promise.all([
+  const [mind, topic, onTopic] = await Promise.all([
     fetchMind(params.id),
     resolveTopicSlug(params.slug),
+    fetchMindOnTopic(params.id, params.slug),
   ]);
-  if (!mind || !topic || !isMindTopicRelevant(mind, topic)) {
+  if (!mind || !topic) {
     return { title: "Not found — Feynman" };
   }
-  const canonical = abs(`/mind/${params.id}/on/${params.slug}`);
+  // Canonical = the one true lowercase slug, regardless of how the URL was
+  // typed (resolveTopicSlug matches case-insensitively).
+  const canonical = abs(`/mind/${params.id}/on/${topicSlug(topic)}`);
   const title = `How ${mind.name} might approach ${topic}`;
   const desc = metaDescription(
     `An imagined perspective on ${topic}, grounded in ${mind.name}'s recorded ideas and methods. Explore it in conversation on Feynman.`,
   );
+  // No generated essay yet → keep this URL out of the index. Without an essay
+  // the page is one of ~1000×15 near-identical framed shells (same three
+  // sentences, only the name/topic swapped) — exactly the thin programmatic
+  // combinations behind the GSC "Discovered – not indexed" problem. `follow`
+  // still passes link equity, and once the essay generates + caches on a later
+  // crawl the page becomes indexable.
+  const hasEssay = Boolean(onTopic?.essay && onTopic.essay.trim());
   return {
     title: `${title} — Feynman`,
     description: desc,
     alternates: { canonical },
+    ...(hasEssay ? {} : { robots: { index: false, follow: true } }),
     openGraph: {
       type: "article",
       title,
@@ -74,11 +85,16 @@ export default async function MindOnTopicPage({
   ]);
   if (!mind) notFound();
   if (!topic) notFound();
-  // Relevance gate — mirrors the legacy 404 for implausible (mind, topic)
-  // pairs so we don't expose programmatic combinations.
-  if (!isMindTopicRelevant(mind, topic)) notFound();
+  // Relevance is decided by the backend essay endpoint (same Python
+  // is_mind_topic_relevant the sitemap uses), NOT re-checked here. The old JS
+  // port of the stemmer diverged ("economics" → "economic" vs Python "econom"),
+  // so it 404'd pairs the sitemap advertised (e.g. Karl Marx × Economics) —
+  // self-inflicted 404s on URLs we tell Google to crawl. We now fetch the essay
+  // and fall back to a framed view when it's absent, so every sitemap /on/ URL
+  // resolves 200.
 
-  const canonical = abs(`/mind/${params.id}/on/${params.slug}`);
+  const canonicalSlug = topicSlug(topic);
+  const canonical = abs(`/mind/${params.id}/on/${canonicalSlug}`);
   const mindUrl = abs(`/mind/${params.id}`);
   const readerUrl = `/mind/${params.id}/chat`;
   const desc = `An imagined perspective on ${topic}, grounded in ${mind.name}'s recorded ideas and methods.`;
@@ -100,7 +116,7 @@ export default async function MindOnTopicPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, mindUrl],
     [topic, canonical],
   ]);
@@ -154,7 +170,7 @@ export default async function MindOnTopicPage({
         <a className="primary" href={readerUrl}>
           Chat with {mind.name} →
         </a>
-        <Link className="secondary" href={`/topic/${params.slug}`}>
+        <Link className="secondary" href={`/topic/${canonicalSlug}`}>
           {topic} on Feynman
         </Link>
       </p>
@@ -163,7 +179,7 @@ export default async function MindOnTopicPage({
         <small>
           Read more: <Link href={`/mind/${params.id}`}>About {mind.name}</Link>
           {" · "}
-          <Link href={`/topic/${params.slug}`}>{topic} on Feynman</Link>
+          <Link href={`/topic/${canonicalSlug}`}>{topic} on Feynman</Link>
         </small>
       </footer>
     </SeoColumn>

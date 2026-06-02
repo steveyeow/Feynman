@@ -122,10 +122,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <JsonLd data={SITE_JSONLD} />
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body>
-        <JsonLd data={SITE_JSONLD} />
         <ClientProviders>{children}</ClientProviders>
       </body>
     </html>

@@ -49,6 +49,13 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 _WD_SPARQL = "https://query.wikidata.org/sparql"
+# The MediaWiki action API (CirrusSearch + wbgetentities) — a SEPARATE service
+# from the SPARQL query service (WDQS), so it stays up during WDQS outages. Used
+# as the discovery fallback so mind expansion isn't blocked by WDQS rate limits.
+_WD_ACTION = "https://www.wikidata.org/w/api.php"
+# "auto" (default): try SPARQL, fall back to the action API on failure. "action":
+# skip SPARQL entirely (use when WDQS is known-down). "sparql": SPARQL only.
+_DISCOVERY_MODE = os.getenv("WIKIDATA_DISCOVERY", "auto").strip().lower()
 _WP_REST = "https://en.wikipedia.org/api/rest_v1/page/summary"
 _UA = "Feynman/1.0 (https://feynman.wiki; sequoiayao@gmail.com)"
 _CACHE_DIR = "/tmp/feynman_wikidata_cache"
@@ -97,17 +104,28 @@ DOMAIN_QUERIES: dict[str, str] = {
 
 
 def _http_get(url: str, params: dict[str, str] | None = None,
-              headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
+              headers: dict[str, str] | None = None, timeout: int = 60,
+              retries: int = 2) -> Any:
     """Thin wrapper — lazy-imports httpx so this module stays importable
-    even when sources_wikidata isn't actually used."""
+    even when sources_wikidata isn't actually used. The Wikidata Query
+    Service is slow + flaky under load, so we use a generous timeout and
+    retry transient failures with backoff."""
     import httpx
     h = {"User-Agent": _UA, "Accept": "application/json"}
     if headers:
         h.update(headers)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as c:
-        r = c.get(url, params=params or {}, headers=h)
-    r.raise_for_status()
-    return r.json()
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=True) as c:
+                r = c.get(url, params=params or {}, headers=h)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:  # timeout, 5xx, connection reset…
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(2 * (attempt + 1))
+    raise last_exc  # type: ignore[misc]
 
 
 def _cache_path(key: str) -> str:
@@ -185,6 +203,90 @@ def query_thinkers(occupation_qid: str, limit: int = 50) -> list[dict[str, Any]]
     return out
 
 
+def _claim_year(claims: dict[str, Any], prop: str) -> str:
+    """Best-effort 'YYYY-MM-DD' from a Wikidata time claim (P569 birth / P570
+    death), or '' if absent/unparseable."""
+    try:
+        t = claims[prop][0]["mainsnak"]["datavalue"]["value"]["time"]  # "+1856-05-06T00:00:00Z"
+        return t[1:11]
+    except Exception:
+        return ""
+
+
+def query_thinkers_via_action(occupation_qid: str, limit: int = 50) -> list[dict[str, Any]]:
+    """WDQS-FREE discovery: find people with this occupation via the Wikidata
+    CirrusSearch action API (`haswbstatement:P106={qid}`) — a DIFFERENT service
+    from the SPARQL endpoint, so it works during WDQS outages. A drop-in fallback
+    with the same candidate shape as query_thinkers().
+
+    Quality: CirrusSearch can't sort by sitelinks, so we pull a BROADER pool
+    (incoming-links order), then RE-RANK by sitelink count (SPARQL's notability
+    metric) and gate to humans (P31=Q5, kills test entities like 'Wikidata
+    Sandbox') with an English Wikipedia article. NOTE: Wikidata's own P106 data
+    is noisy (e.g. botanists tagged 'political scientist'), so action-mode
+    candidates are noisier than SPARQL's — always review an expand_minds
+    --dry-run before --apply."""
+    pool = min(max(limit * 4, 50), 200)
+    search = _cached_or_fetch(
+        f"wdsearch_{occupation_qid}_{pool}",
+        lambda: _http_get(_WD_ACTION, params={
+            "action": "query", "list": "search",
+            "srsearch": f"haswbstatement:P106={occupation_qid}",
+            "srsort": "incoming_links_desc", "srlimit": str(pool),
+            "format": "json",
+        }),
+    )
+    qids = [h.get("title") for h in (search.get("query", {}).get("search") or [])
+            if (h.get("title") or "").startswith("Q")]
+    if not qids:
+        return []
+    # Hydrate in batches of 50 (wbgetentities cap). props=sitelinks (no /urls →
+    # smaller) gives every language sitelink, so len() is the notability count.
+    entities: dict[str, Any] = {}
+    for i in range(0, len(qids), 50):
+        batch = qids[i:i + 50]
+        data = _cached_or_fetch(
+            f"wdent_{occupation_qid}_{i}_{len(batch)}",
+            lambda b=batch: _http_get(_WD_ACTION, params={
+                "action": "wbgetentities", "ids": "|".join(b),
+                "props": "labels|descriptions|sitelinks|claims",
+                "languages": "en", "format": "json",
+            }),
+        )
+        entities.update(data.get("entities", {}) or {})
+
+    out: list[dict[str, Any]] = []
+    for qid in qids:
+        ent = entities.get(qid) or {}
+        claims = ent.get("claims") or {}
+        p31 = [((c.get("mainsnak") or {}).get("datavalue") or {}).get("value", {}).get("id")
+               for c in (claims.get("P31") or [])]
+        if "Q5" not in p31:
+            continue  # humans only — drops test entities / non-people
+        name = ((ent.get("labels") or {}).get("en") or {}).get("value", "")
+        sitelinks = ent.get("sitelinks") or {}
+        enwiki = sitelinks.get("enwiki") or {}
+        title = enwiki.get("title", "")
+        if not name or not title:
+            continue  # require an English Wikipedia article (SPARQL parity)
+        slug = title.replace(" ", "_")
+        out.append({
+            "qid": qid,
+            "name": name,
+            "description": ((ent.get("descriptions") or {}).get("en") or {}).get("value", ""),
+            "birth": _claim_year(claims, "P569"),
+            "death": _claim_year(claims, "P570"),
+            "image": "",
+            "wikipedia_url": f"https://en.wikipedia.org/wiki/{slug}",
+            "wikidata_url": f"https://www.wikidata.org/wiki/{qid}",
+            "wikipedia_slug": slug,
+            "sitelinks": len(sitelinks),
+        })
+    # Re-rank by sitelink count (≈ SPARQL's ORDER BY DESC(sitelinks)), top N.
+    out.sort(key=lambda c: c["sitelinks"], reverse=True)
+    return out[:limit]
+
+
 def fetch_wikipedia_intro(slug: str) -> str:
     """Fetch the short summary (first paragraph + key facts) for a
     Wikipedia article via the REST summary API. Returns plain text."""
@@ -202,6 +304,17 @@ def fetch_wikipedia_intro(slug: str) -> str:
     return ""
 
 
+def _format_era(birth: str, death: str) -> str:
+    """A compact 'YYYY–YYYY' (or 'b. YYYY') era from birth/death dates, for the
+    mind's `era` field. Previously unset by discovery — minds got a blank era."""
+    by, dy = (birth or "")[:4], (death or "")[:4]
+    if by and dy:
+        return f"{by}–{dy}"
+    if by:
+        return f"b. {by}"
+    return ""
+
+
 def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> list[dict[str, Any]]:
     """Walk every TOPIC_TAG → top N candidates, deduped by qid.
 
@@ -210,22 +323,44 @@ def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> li
     """
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
+    # "action" forces the WDQS-free path; otherwise try SPARQL first and, in
+    # "auto", switch to the action API for the rest the moment SPARQL fails (so
+    # one WDQS outage doesn't waste 15 slow retries).
+    use_sparql = _DISCOVERY_MODE != "action"
     for domain, occ_qid in DOMAIN_QUERIES.items():
         log.info("Querying domain %s (occupation %s)…", domain, occ_qid)
-        for c in query_thinkers(occ_qid, limit=per_domain_limit):
+        thinkers: list[dict[str, Any]] | None = None
+        if use_sparql:
+            try:
+                thinkers = query_thinkers(occ_qid, limit=per_domain_limit)
+            except Exception as exc:
+                if _DISCOVERY_MODE == "sparql":
+                    log.warning("domain %s SPARQL failed (%s) — skipping", domain, exc)
+                    continue
+                log.warning("SPARQL failed (%s) — switching to action API for remaining domains", exc)
+                use_sparql = False
+        if thinkers is None:
+            try:
+                thinkers = query_thinkers_via_action(occ_qid, limit=per_domain_limit)
+            except Exception as exc:
+                # One failing domain must not abort the whole expansion.
+                log.warning("domain %s action API failed (%s) — skipping", domain, exc)
+                continue
+        for c in thinkers:
             if c["qid"] in seen:
-                # If a person matches multiple occupations (e.g. polymath),
-                # keep the FIRST domain we encountered them in. Could be
-                # smarter (pick the highest-sitelinks domain) but FIRST
-                # is deterministic + fine for the initial scan.
+                # A polymath in multiple occupations → keep the FIRST domain seen
+                # (deterministic + fine for the initial scan).
                 continue
             seen.add(c["qid"])
             c["domain"] = domain
             out.append(c)
         time.sleep(throttle)
-    # Enrich with Wikipedia bio (one extra HTTP call per candidate;
-    # cached on disk so re-runs are free)
+    # Enrich with Wikipedia bio + a human-readable era. Best-effort + disk-cached.
     for c in out:
-        c["bio_summary"] = fetch_wikipedia_intro(c["wikipedia_slug"])
+        try:
+            c["bio_summary"] = fetch_wikipedia_intro(c["wikipedia_slug"])
+        except Exception:
+            c["bio_summary"] = ""
+        c["era"] = _format_era(c.get("birth", ""), c.get("death", ""))
         time.sleep(throttle / 5)  # Wikipedia REST is generous
     return out

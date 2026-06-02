@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -394,8 +395,10 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_mem_type")
 
-            # Migration: add embedding columns to minds table
-            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL")]:
+            # Migration: add embedding columns to minds table; plus Wikidata/
+            # Wikipedia identity URLs (for Person JSON-LD sameAs — the
+            # Knowledge-Graph / LLM entity signal on every expanded mind).
+            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -865,8 +868,9 @@ def init_db() -> None:
             except Exception:
                 pass
 
-            # Migration: add embedding columns to minds table
-            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION")]:
+            # Migration: add embedding columns to minds table; plus Wikidata/
+            # Wikipedia identity URLs for Person JSON-LD sameAs.
+            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -1505,10 +1509,98 @@ def find_existing_upload(name: str) -> dict[str, Any] | None:
         return _row_to_agent(row)
 
 
+_TITLE_SUBTITLE = re.compile(r"[:—]|\s-\s")
+_TITLE_PUNCT = re.compile(r"[.,;:!?'\"()]")
+_TITLE_WS = re.compile(r"\s+")
+
+
+def _norm_title(title: str) -> str:
+    """lowercase, drop punctuation, collapse whitespace — subtitle KEPT. Mirrors
+    the frontend `filterBooksByTopic` normalization so display and data agree."""
+    t = _TITLE_PUNCT.sub("", (title or "").lower())
+    return _TITLE_WS.sub(" ", t).strip()
+
+
+def title_stem(title: str) -> str:
+    """The main title with any subtitle dropped (everything after the first ':',
+    '—', or ' - '), normalized like `_norm_title`. The shared 'same book' key;
+    `scripts/dedup_catalog.py` mirrors it. 'Good to Great', 'Good to Great: Why
+    Some Companies…', and 'A World Brewed,' all collapse to one stem."""
+    head = _TITLE_SUBTITLE.split((title or ""), maxsplit=1)[0]
+    return _norm_title(head)
+
+
+def same_book(a: str, b: str) -> bool:
+    """Do two titles denote the SAME book? True when they're equal once
+    normalized, OR one is the other plus a subtitle (a prefix at a ':' / '—' /
+    ' - ' boundary): 'Good to Great' ≡ 'Good to Great: Why Some Companies…',
+    'A World Brewed' ≡ 'A World Brewed,'. Crucially, two DIFFERENT subtitles of a
+    shared subject stay distinct — 'Wittgenstein: Mind and Will (Vol 4)' is NOT
+    'Wittgenstein: Rules and Grammar (Vol 1)' — which a bare stem-equality check
+    would wrongly merge (and delete a real volume)."""
+    fa, fb = _norm_title(a), _norm_title(b)
+    if not fa or not fb:
+        return False
+    if fa == fb:
+        return True
+    # one side is the bare main title of the other (short ≡ short+subtitle)
+    return title_stem(a) == fb or title_stem(b) == fa
+
+
+def _agent_author(a: dict[str, Any]) -> str:
+    """An agent's author, normalized for comparison. meta.author is canonical;
+    `source` is the fallback (older catalog rows stashed the author there)."""
+    return (((a.get("meta") or {}).get("author")) or a.get("source") or "").strip().lower()
+
+
+def find_agent_by_normalized_name(title: str, author: str = "") -> dict[str, Any] | None:
+    """Dedup-at-SOURCE: find an existing, non-deleted agent that is the SAME BOOK
+    as `title` modulo subtitle / punctuation (via `same_book`) — so the catalog
+    stops minting subtitle/comma variants of one book as separate rows. Prefers a
+    ready/indexing record over a writing one over a bare catalog stub.
+
+    `author` guards against merging two genuinely different books that share a
+    title stem ("Leadership" by X vs by Y): a candidate is rejected only when
+    BOTH it and the incoming book name a (different) author — an empty author on
+    either side (the common catalog-stub case) still merges. Returns None if no
+    such book exists yet.
+
+    Mint is not a hot path (discovery is a background batch; chat book-context is
+    per-conversation), so a lightweight stem-scan is fine — only the handful of
+    stem matches are hydrated. Revisit with a stored stem column if the catalog
+    grows large."""
+    if not _norm_title(title):
+        return None
+    new_author = (author or "").strip().lower()
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            "SELECT id, name, status FROM agents WHERE is_deleted = ?"
+        ), (False if _USE_PG else 0,))
+    cand_ids = [r["id"] for r in rows if same_book(title, r["name"] or "")]
+
+    best: dict[str, Any] | None = None
+    best_rank = -1
+    for cid in cand_ids:
+        a = get_agent(cid)
+        if not a:
+            continue
+        a_author = _agent_author(a)
+        if new_author and a_author and new_author != a_author:
+            continue  # same title, different known author → a different book
+        s = a.get("status") or ""
+        rank = 2 if s in ("ready", "indexing") else 1 if s == "writing" else 0
+        if rank > best_rank:
+            best, best_rank = a, rank
+    return best
+
+
 def create_catalog_agent(title: str, author: str = "", isbn: str | None = None,
                          category: str = "", description: str = "") -> str:
-    """Create a new catalog agent for a dynamically discovered book. Returns agent_id."""
-    existing = find_agent_by_name(title)
+    """Create a new catalog agent for a dynamically discovered book. Returns
+    agent_id. Deduplicates at the SOURCE: if the same book already exists under
+    any subtitle/punctuation variant, returns that row instead of minting a new
+    one (this is the chokepoint every catalog mint funnels through)."""
+    existing = find_agent_by_normalized_name(title, author) or find_agent_by_name(title)
     if existing:
         return existing["id"]
     meta = {"title": title, "author": author, "isbn": isbn, "category": category, "description": description}
@@ -1572,7 +1664,8 @@ def list_minds(limit: int | None = None) -> list[dict[str, Any]]:
     """
     sql = (
         "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
-        "typical_phrases, works, avatar_seed, version, chat_count, created_at "
+        "typical_phrases, works, avatar_seed, wikidata_url, wikipedia_url, "
+        "version, chat_count, created_at "
         "FROM minds ORDER BY chat_count DESC, created_at ASC"
     )
     params: tuple[Any, ...] = ()
@@ -1596,6 +1689,10 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
         "typical_phrases": json.loads(row["typical_phrases"] or "[]"),
         "works": json.loads(row["works"] or "[]"),
         "avatar_seed": row["avatar_seed"] or "",
+        # Wikidata/Wikipedia identity links (sameAs). `.get` — older rows
+        # predate the migration; absent → "".
+        "wikidata_url": row.get("wikidata_url") or "",
+        "wikipedia_url": row.get("wikipedia_url") or "",
         "version": row["version"],
         "chat_count": row["chat_count"],
         "created_at": row["created_at"],
@@ -1608,6 +1705,51 @@ def update_mind_embedding(mind_id: str, vector_bytes: bytes, dim: int, norm: flo
         _execute(conn, _q(
             "UPDATE minds SET embedding = ?, embedding_dim = ?, embedding_norm = ? WHERE id = ?"
         ), (blob, dim, norm, mind_id))
+
+
+def update_mind_links(mind_id: str, wikidata_url: str | None = None, wikipedia_url: str | None = None) -> None:
+    """Store a mind's Wikidata/Wikipedia identity URLs — the canonical entity
+    signal rendered into the Person JSON-LD `sameAs` (Knowledge Graph + LLM
+    grounding). Empty strings are normalized to NULL so a blank candidate field
+    never overwrites a previously-resolved link with junk."""
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "UPDATE minds SET wikidata_url = ?, wikipedia_url = ? WHERE id = ?"
+        ), (wikidata_url or None, wikipedia_url or None, mind_id))
+
+
+def get_mind_meta(mind_id: str) -> dict[str, Any]:
+    """A mind's PRIVATE meta dict — pre-stored SEO content (Type-2 essays under
+    `essays`). Deliberately NOT surfaced by `_row_to_mind` / the public mind API,
+    so it never leaks; read it explicitly where needed."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT meta_json FROM minds WHERE id = ?"), (mind_id,))
+    if not row:
+        return {}
+    try:
+        return json.loads(row.get("meta_json") or "{}") or {}
+    except Exception:
+        return {}
+
+
+def get_mind_essay(mind_id: str, topic: str) -> str | None:
+    """A pre-stored Type-2 essay for (mind, topic), or None — the check-first
+    half of the lazy-gen+cache pattern (mirrors overview's meta.overview)."""
+    essay = (get_mind_meta(mind_id).get("essays") or {}).get(topic)
+    return essay or None
+
+
+def save_mind_essay(mind_id: str, topic: str, essay: str) -> None:
+    """Persist a generated Type-2 essay into the mind's meta so the hot path
+    serves it without re-generating (read-modify-write of meta.essays)."""
+    if not (essay or "").strip():
+        return
+    meta = get_mind_meta(mind_id)
+    essays = meta.get("essays") or {}
+    essays[topic] = essay
+    meta["essays"] = essays
+    with get_conn() as conn:
+        _execute(conn, _q("UPDATE minds SET meta_json = ? WHERE id = ?"), (json.dumps(meta), mind_id))
 
 
 def list_minds_with_embeddings() -> list[dict[str, Any]]:

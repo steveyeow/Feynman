@@ -14,6 +14,7 @@ import {
   fetchAgents,
   fetchMinds,
   fetchTopics,
+  fetchTopicOverview,
   filterBooksByTopic,
   filterMindsByTopic,
   metaDescription,
@@ -70,10 +71,11 @@ export default async function TopicPage({
   const topic = await resolveTopicSlug(params.slug);
   if (!topic) notFound();
 
-  const [agents, minds, topics] = await Promise.all([
+  const [agents, minds, topics, overview] = await Promise.all([
     fetchAgents(),
     fetchMinds(),
     fetchTopics(),
+    fetchTopicOverview(params.slug),
   ]);
 
   const books = filterBooksByTopic(agents, topic, 30);
@@ -100,7 +102,7 @@ export default async function TopicPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Topics", `${SITE_URL}/#/library`],
+    ["Topics", `${SITE_URL}/library`],
     [topic, canonical],
   ]);
 
@@ -122,42 +124,26 @@ export default async function TopicPage({
     </>
   );
 
-  const rail = (
-    <>
-      {books.length ? (
-        <div className="seo-rail-card">
-          <h3>Books in this topic</h3>
-          <ul>
-            {books.slice(0, 8).map((b) => (
-              <li key={b.id}>
-                <Link href={`/book/${b.id}`}>{b.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {topicMinds.length ? (
-        <div className="seo-rail-card">
-          <h3>Great minds</h3>
-          <ul>
-            {topicMinds.slice(0, 8).map((m) => (
-              <li key={m.id}>
-                <Link href={`/mind/${m.id}`}>{m.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </>
-  );
-
-  const hasRail = books.length > 0 || topicMinds.length > 0;
-
+  // No right rail on topic pages — the page body IS the books + minds lists, so
+  // a rail of the same items would just duplicate the content on-screen. (Book/
+  // mind pages use the rail for complementary "related" items; a topic hub has
+  // no such secondary content.)
   return (
-    <EntityLayout hero={hero} rail={hasRail ? rail : undefined}>
+    <EntityLayout hero={hero}>
       <JsonLd data={collectionLd} />
       <JsonLd data={breadcrumbLd} />
 
+      {overview
+        ? overview
+            .split(/\n\n+/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((p, i) => (
+              <p key={i} className="topic-intro">
+                {p}
+              </p>
+            ))
+        : null}
       <p className="topic-intro">{introText(topic, books.length, topicMinds.length)}</p>
 
       {books.length ? (
@@ -185,6 +171,13 @@ export default async function TopicPage({
               <li key={m.id}>
                 <Link href={`/mind/${m.id}`}>{m.name}</Link>
                 {m.era ? ` — ${m.era}` : ""}
+                {" · "}
+                <Link
+                  href={`/mind/${m.id}/on/${params.slug}`}
+                  className="seo-inline-link"
+                >
+                  How {m.name} might approach {topic} →
+                </Link>
               </li>
             ))}
           </ul>
@@ -202,7 +195,7 @@ export default async function TopicPage({
       ) : null}
 
       <p className="seo-cta-row">
-        <a className="primary" href={`${SITE_URL}/#/library`}>
+        <a className="primary" href={`${SITE_URL}/library`}>
           Explore the full Feynman library →
         </a>
       </p>

@@ -99,6 +99,7 @@ from .core import seo as seo_render
 from .core import qa as qa_module
 from .core import ugc as ugc_module
 from .core import insights as insights_module
+from .core import overview as overview_module
 from .core import llm_analytics as llm_analytics_module
 from .core import indexnow as indexnow_module
 from .core.minds import (
@@ -462,6 +463,26 @@ def _learn_agent(agent_id: str) -> None:
 
 # ─── Scheduled discovery ───
 
+def _clean_catalog_category(topic: str) -> str:
+    """Topic discovery passes the user's raw chat query as ``topic``; storing it
+    verbatim as a book's category pollutes the catalog (e.g. "how game theory
+    can be used in hiring", "who are you", CJK queries) and self-propagates
+    through scheduled discovery, which re-discovers by existing category. Keep it
+    as the category only when it actually looks like a category — short,
+    Title-Case ASCII, not a question/sentence — else return "" so we never
+    persist a chat prompt as a category. Mirrors the frontend isCleanCategory."""
+    t = (topic or "").strip()
+    if not t or "?" in t:
+        return ""
+    if not (t[:1].isascii() and t[:1].isupper()):
+        return ""
+    if len(t.split()) > 4:
+        return ""
+    if re.match(r"(?i)^(how|what|who|why|does|is|are|should|can|will|we|i|my)\b", t):
+        return ""
+    return t
+
+
 def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT, exclude_titles: list[str] | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Use LLM to discover top books for a topic. Returns (books, usage)."""
     exclude_clause = ""
@@ -497,7 +518,8 @@ def _discover_books_for_topic(topic: str, count: int = TOPIC_DISCOVER_COUNT, exc
             continue
         already_existed = find_agent_by_name(title) is not None
         agent_id = create_catalog_agent(
-            title=title, author=author, category=topic, description=desc,
+            title=title, author=author,
+            category=_clean_catalog_category(topic), description=desc,
         )
         results.append({"id": agent_id, "title": title, "author": author, "new": not already_existed})
         log.info("Discovered book: %s by %s [%s] new=%s", title, author, topic, not already_existed)
@@ -3186,19 +3208,43 @@ def _verify_cron(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+# Hobby Active-CPU guard. Book indexing (parse + chunk) is the heaviest
+# on-Vercel CPU, and this cron used to queue _learn_agent for EVERY catalog
+# agent every run — unbounded as the catalog grows (Task-2 scale), which would
+# blow the 4h/mo Hobby cap. Two knobs:
+#   ENABLE_DISCOVER_CRON=false        → skip the cron entirely (do all discovery
+#                                       + indexing off-Vercel via scripts/).
+#   DISCOVER_CRON_MAX_INDEX=<n>       → at most n catalog agents indexed per run
+#                                       (bounds CPU regardless of catalog size).
+_DISCOVER_CRON_ENABLED = os.getenv("ENABLE_DISCOVER_CRON", "true").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+_DISCOVER_CRON_MAX_INDEX = int(os.getenv("DISCOVER_CRON_MAX_INDEX", "5"))
+
+
 @app.get("/api/cron/discover")
 def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    """Cron-triggered book discovery. Replaces the daemon discovery loop."""
+    """Cron-triggered book discovery. Replaces the daemon discovery loop.
+
+    On-Vercel indexing is bounded per run (DISCOVER_CRON_MAX_INDEX) so a large
+    catalog can't exhaust the Hobby Active-CPU budget; bulk (re)indexing runs
+    off-Vercel via scripts/reindex_via_gutenberg.py."""
     _verify_cron(request)
+    if not _DISCOVER_CRON_ENABLED:
+        return {"status": "disabled"}
     agents = list_agents(limit=5000)
     if not agents:
         return {"status": "skip", "reason": "no agents yet"}
     _discover_books()
-    # Trigger learning for any new catalog agents
+    # Bounded learning for new catalog agents (cap per run → bounded CPU).
+    queued = 0
     for a in list_agents(limit=5000):
         if a["status"] == "catalog":
             background_tasks.add_task(_learn_agent, a["id"])
-    return {"status": "ok"}
+            queued += 1
+            if queued >= _DISCOVER_CRON_MAX_INDEX:
+                break
+    return {"status": "ok", "indexed_queued": queued}
 
 
 @app.get("/api/cron/indexnow")
@@ -3886,7 +3932,9 @@ def api_agent_qa(agent_id: str, question: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail="Agent not found")
     title_raw = agent.get("name", "") or ""
     try:
-        qa_result = qa_module.generate_grounded_answer(
+        # Check-first: serve the pre-stored answer if present, else generate +
+        # persist into the book's meta.qa — keeps programmatic Q&A off the LLM path.
+        qa_result = qa_module.get_or_generate_grounded_answer(
             agent_id, question, book_title=title_raw,
         )
     except Exception as exc:
@@ -3899,6 +3947,67 @@ def api_agent_qa(agent_id: str, question: str) -> JSONResponse:
             "passages": qa_result.get("passages", []),
         },
         # Mirror the SSR Q&A cache window (answers are stable once generated).
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/agents/{agent_id}/overview")
+def api_agent_overview(agent_id: str) -> JSONResponse:
+    """Unique "About this book" overview + key concepts for the /book/{id} hub
+    (Bucket B content-density floor). Generated on demand — grounded in the
+    book's chunks when it has full text, general-knowledge for catalog stubs —
+    and cached (in-process TTL + long edge Cache-Control), exactly like the Q&A
+    and mind-essay endpoints. Degrades to an empty payload, in which case the
+    hub falls back to its synthesized about-line."""
+    agent = get_agent(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    cache_key = f"book_overview:{agent_id}"
+    cached = _cache_get(cache_key, 21600)  # 6h — overviews are stable
+    if cached is None:
+        try:
+            cached = overview_module.generate_book_overview(agent)
+        except Exception as exc:
+            log.error("overview failed for %s: %s", agent_id, exc)
+            cached = {"overview": "", "concepts": [], "grounded": False}
+        # Cache only non-empty results so a transient LLM/quota failure doesn't
+        # pin an empty overview in-process; empty falls through and retries.
+        if cached.get("overview"):
+            _cache_set(cache_key, cached)
+    return JSONResponse(
+        content={
+            "overview": cached.get("overview", ""),
+            "concepts": cached.get("concepts", []),
+            "grounded": cached.get("grounded", False),
+        },
+        headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
+    )
+
+
+@app.get("/api/topics/{slug}/overview")
+def api_topic_overview(slug: str) -> JSONResponse:
+    """Generated 2-paragraph intro for a topic hub (Bucket B). Resolves the
+    slug to a canonical topic, generates once, caches. Empty payload degrades
+    to the page's existing one-line intro."""
+    topic = None
+    for t in TOPIC_TAGS:
+        if seo_render.topic_slug(t) == slug:
+            topic = t
+            break
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    cache_key = f"topic_overview:{slug}"
+    cached = _cache_get(cache_key, 86400)  # 24h — topic intros are static
+    if cached is None:
+        try:
+            cached = overview_module.generate_topic_overview(topic)
+        except Exception as exc:
+            log.error("topic overview failed for %s: %s", topic, exc)
+            cached = {"overview": ""}
+        if cached.get("overview"):
+            _cache_set(cache_key, cached)
+    return JSONResponse(
+        content={"topic": topic, "overview": cached.get("overview", "")},
         headers={"Cache-Control": "public, max-age=3600, s-maxage=86400"},
     )
 
@@ -4081,7 +4190,9 @@ def api_mind_on_topic(mind_id: str, topic_slug: str) -> JSONResponse:
     if not topic or not qa_module.is_mind_topic_relevant(mind, topic):
         raise HTTPException(status_code=404, detail="Not found")
     try:
-        essay_result = qa_module.generate_mind_on_topic_essay(mind, topic)
+        # Check-first: serve the pre-stored essay if present, else generate +
+        # persist (so the next crawl is free) — keeps ~15K essays off the LLM path.
+        essay_result = qa_module.get_or_generate_mind_essay(mind, topic)
     except Exception as exc:
         log.error("mind essay failed for %s/%s: %s", mind_id, topic, exc)
         essay_result = {"essay": ""}
@@ -4673,7 +4784,18 @@ def api_get_mind(mind_id: str) -> dict[str, Any]:
     mind = get_mind(mind_id)
     if not mind:
         raise HTTPException(status_code=404, detail="Mind not found")
+    # Expose a bounded, plain-text persona EXCERPT for the SEO "Core approach"
+    # section. The legacy SSR rendered this (render_mind_persona_excerpt); the
+    # JSON port lost it when the full persona got stripped, leaving every mind
+    # page ~150 words thinner. The FULL persona stays private — it's
+    # system-prompt-style text not meant for public display — but a ~900-char
+    # excerpt is real, citable content. Mirrors seo.render_mind_persona_excerpt.
+    persona = (mind.get("persona") or "").strip()
     mind.pop("persona", None)
+    if persona:
+        mind["persona_excerpt"] = (
+            persona if len(persona) <= 900 else persona[:900].rsplit(" ", 1)[0] + "…"
+        )
     return mind
 
 

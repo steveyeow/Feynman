@@ -66,6 +66,52 @@ export function findQuestionBySlug(
   return null;
 }
 
+/**
+ * Map a book's free-form `meta.category` to one of the 15 canonical topic
+ * hubs, so the "More on …" link resolves to a real /topic/{slug} (200) instead
+ * of 404'ing. Books carry 46+ ad-hoc categories ("Business" vs the canonical
+ * "Business & Strategy", plus "Chemistry", "Contemporary Fiction", and some
+ * leaked chat prompts) — only those that map to a canonical topic get a link;
+ * the rest return null and the caller omits the link rather than sending a
+ * crawler to a dead end. `topics` is the canonical list from /api/topics.
+ */
+export function canonicalTopicForCategory(
+  category: string,
+  topics: string[],
+): string | null {
+  const cat = (category || "").trim().toLowerCase();
+  if (!cat || !topics?.length) return null;
+  const catSlug = slugify(category);
+  // 1) exact slug match (Psychology, Economics, Computer Science, …)
+  for (const t of topics) {
+    if (slugify(t) === catSlug) return t;
+  }
+  // 2) loose containment either way (Business → Business & Strategy)
+  for (const t of topics) {
+    const tl = t.toLowerCase();
+    if (tl.includes(cat) || cat.includes(tl)) return t;
+  }
+  return null;
+}
+
+/**
+ * Whether a book's `meta.category` is a real, displayable category rather than
+ * a leaked chat query. Topic-discovery stored the user's raw prompt as the
+ * category for ~50 books ("how game theory can be used in hiring", "who are
+ * you", CJK queries). Those are real books we keep indexed — we just must not
+ * render the junk as "Book · {category}". Real categories are short,
+ * Title-Case and ASCII; chat queries start lowercase / non-Latin, run long, or
+ * are questions.
+ */
+export function isCleanCategory(category: string): boolean {
+  const c = (category || "").trim();
+  if (!c || c.includes("?")) return false;
+  if (!/^[A-Z]/.test(c)) return false; // Title-Case ASCII; chat queries / CJK aren't
+  if (c.split(/\s+/).length > 4) return false; // real categories are short
+  if (/^(How|What|Who|Why|Does|Is|Are|Should|Can|Will|We|My)\b/.test(c)) return false;
+  return true;
+}
+
 // ─── JSON-LD schema builders (ported from seo.py) ──────────────────────
 
 type Json = Record<string, unknown>;
@@ -447,7 +493,13 @@ export async function getSamplePassages(
 ): Promise<SamplePassage[]> {
   let res: ReadResponse | null = null;
   try {
-    res = await get<ReadResponse>(`/api/agents/${encodeURIComponent(id)}/read`);
+    // Public, edge-cached read endpoint (serves ready books without auth).
+    // The authed /api/agents/{id}/read is gated for the in-app reader, so the
+    // SSR (no user cookie) must use the public mirror or it 401s and renders
+    // a passage-less — and thus thin — book page.
+    res = await get<ReadResponse>(
+      `/api/public/book/${encodeURIComponent(id)}/read`,
+    );
   } catch {
     return [];
   }
@@ -514,6 +566,39 @@ export async function getInsights(
     return cards.slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+export interface BookConcept {
+  term: string;
+  note: string;
+}
+export interface BookOverview {
+  overview: string;
+  concepts: BookConcept[];
+  grounded: boolean;
+}
+
+/**
+ * Fetch the generated "About this book" overview + key concepts
+ * (GET /api/agents/{id}/overview). On-demand generated + cached server-side;
+ * returns null when empty/disabled/failed so the hub falls back to its
+ * synthesized about-line. This is the Bucket-B content-density floor — it
+ * fills on the first crawl of each book, no upfront batch.
+ */
+export async function getBookOverview(id: string): Promise<BookOverview | null> {
+  try {
+    const res = await get<BookOverview>(
+      `/api/agents/${encodeURIComponent(id)}/overview`,
+    );
+    if (!res || !res.overview) return null;
+    return {
+      overview: res.overview,
+      concepts: Array.isArray(res.concepts) ? res.concepts.filter((c) => c?.term && c?.note) : [],
+      grounded: !!res.grounded,
+    };
+  } catch {
+    return null;
   }
 }
 

@@ -23,7 +23,7 @@ import {
   fetchMindLibrary,
   fetchMindThemes,
   isMindTopicRelevant,
-  lookupSameAs,
+  mindSameAs,
   metaDescription,
   personJsonLd,
   topicSlug,
@@ -116,12 +116,12 @@ export default async function MindPage({
     domain: mind.domain || "",
     url: canonical,
     image: ogImage,
-    sameAs: lookupSameAs(mind.name),
+    sameAs: mindSameAs(mind),
     dateModified: mind.created_at || "",
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, canonical],
   ]);
 
@@ -138,34 +138,22 @@ export default async function MindPage({
     </>
   );
 
-  const rail = (
-    <>
-      {related.length ? (
-        <div className="seo-rail-card">
-          <h3>Related minds</h3>
-          <ul>
-            {related.slice(0, 8).map((rm) => (
-              <li key={rm.id}>
-                <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {matchingTopics.length ? (
-        <div className="seo-rail-card">
-          <h3>Topics</h3>
-          <ul>
-            {matchingTopics.slice(0, 6).map((t) => (
-              <li key={t}>
-                <Link href={`/topic/${topicSlug(t)}`}>{t}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </>
-  );
+  // Rail = genuinely complementary "Related minds" only. The topic list lives in
+  // the body ("How {mind} approaches key topics"); a rail "Topics" card repeated
+  // the same labels on-screen (the bug the /topic review removed), so the
+  // body section now carries BOTH the essay link and the topic-hub link instead.
+  const rail = related.length ? (
+    <div className="seo-rail-card">
+      <h3>Related minds</h3>
+      <ul>
+        {related.slice(0, 8).map((rm) => (
+          <li key={rm.id}>
+            <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
 
   return (
     <EntityLayout hero={hero} rail={rail}>
@@ -175,9 +163,32 @@ export default async function MindPage({
       <MindBio bio={mind.bio_summary} />
       <MindThinkingStyle style={mind.thinking_style} />
       <MindPhrases phrases={mind.typical_phrases} />
-      {/* persona is stripped by the JSON API — renders only if ever present */}
-      <MindPersonaExcerpt persona={mind.persona} />
+      {/* Full persona stays private; the API exposes a bounded excerpt. */}
+      <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
       <MindWorks works={mind.works} agents={agents} />
+
+      {matchingTopics.length ? (
+        <section className="seo-section">
+          <h2>How {mind.name} approaches key topics</h2>
+          <p className="seo-meta">
+            Imagined, persona-grounded perspectives — read how {mind.name} would
+            reason about each field, then take the question further in conversation.
+          </p>
+          <ul className="mind-on-topics">
+            {matchingTopics.slice(0, 8).map((t) => (
+              <li key={t}>
+                <Link href={`/mind/${params.id}/on/${topicSlug(t)}`}>
+                  How {mind.name} approaches {t}
+                </Link>
+                {" · "}
+                <Link href={`/topic/${topicSlug(t)}`} className="seo-inline-link">
+                  {t} hub
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {libraryExtra.length ? (
         <section className="seo-section">

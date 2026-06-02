@@ -18,13 +18,16 @@ import {
   getQuestions,
   getSamplePassages,
   getRelatedForBook,
+  getBookOverview,
   detectCapabilities,
   clampDescription,
   slugify,
+  canonicalTopicForCategory,
+  isCleanCategory,
   bookJsonld,
   breadcrumbJsonld,
-  faqJsonld,
 } from "@/lib/seo-book";
+import { fetchTopics } from "@/lib/seo-mind";
 
 // ISR — on-demand revalidation, no generateStaticParams (thousands of books).
 export const revalidate = 86400;
@@ -52,6 +55,19 @@ export async function generateMetadata({
   if (!data) {
     return { title: "Book not found — Feynman" };
   }
+  // A bare catalog stub — no sample passages, no chapters, no questions — is a
+  // low-unique-value page we can't ground. Keep it out of the index to
+  // concentrate crawl budget on real books (it's already excluded from the
+  // sitemap; this stops indexing via internal links too). It still renders for
+  // users; `follow` keeps its cross-links live. These two fetches are shared
+  // with the body (Next dedupes within the request), so no extra round trips.
+  const [stubQuestions, stubPassages] = await Promise.all([
+    getQuestions(params.id),
+    getSamplePassages(params.id, 3),
+  ]);
+  const isStub =
+    stubPassages.length === 0 && data.chapters.length === 0 && stubQuestions.length === 0;
+
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}`;
   const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
   const desc = bookDescription(data.subtitle, data.author);
@@ -59,6 +75,7 @@ export async function generateMetadata({
     title: `${data.title} — Feynman`,
     description: desc,
     alternates: { canonical },
+    ...(isStub ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "book",
       title: data.title,
@@ -82,11 +99,21 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages, related] = await Promise.all([
+  const [questions, passages, related, overview, topics] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
     getRelatedForBook(id),
+    getBookOverview(id),
+    fetchTopics(),
   ]);
+
+  // Map the book's free-form category to a canonical topic hub (or null) so the
+  // "Topic" rail links to a real /topic/{slug} instead of 404'ing on ad-hoc
+  // categories like "Business" (→ "Business & Strategy") or junk values.
+  const canonicalTopic = canonicalTopicForCategory(data.category, topics);
+  // Only surface the category in display chrome when it's a real category, not
+  // a leaked chat query stored as the category by topic-discovery.
+  const cleanCategory = isCleanCategory(data.category) ? data.category : "";
 
   const caps = detectCapabilities(data.agent);
   const chapterCount = data.chapters.length;
@@ -118,12 +145,6 @@ export default async function BookLandingPage({ params }: PageProps) {
     { name: "Books", url: `${SITE_URL}/library` },
     { name: data.title, url: canonical },
   ]);
-  const reader = `${SITE_URL}/read/${encodeURIComponent(id)}`;
-  const deflect = `Open Feynman to chat with this book and explore the answer in depth: ${reader}`;
-  const faqLd = questions.length
-    ? faqJsonld(questions.filter(Boolean).map((q) => ({ question: q, answer: deflect })))
-    : null;
-
   // ── Top actions (per product direction) ───────────────────────────────
   // Chat ALWAYS available → routes to the conversational surface (home
   // composer preselects the book), NOT the reader — so catalog stubs with no
@@ -156,7 +177,7 @@ export default async function BookLandingPage({ params }: PageProps) {
         <span>{coverInitials(data.title)}</span>
       </div>
       <div className="seo-hero-body">
-        <p className="seo-meta">Book{data.category ? ` · ${data.category}` : ""}</p>
+        <p className="seo-meta">Book{cleanCategory ? ` · ${cleanCategory}` : ""}</p>
         <h1>{data.title}</h1>
         {data.author ? <p className="seo-author">by {data.author}</p> : null}
         {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
@@ -196,12 +217,12 @@ export default async function BookLandingPage({ params }: PageProps) {
           </ul>
         </div>
       ) : null}
-      {data.category ? (
+      {canonicalTopic ? (
         <div className="seo-rail-card">
           <h3>Topic</h3>
           <ul>
             <li>
-              <Link href={`/topic/${slugify(data.category)}`}>More on {data.category}</Link>
+              <Link href={`/topic/${slugify(canonicalTopic)}`}>More on {canonicalTopic}</Link>
             </li>
           </ul>
         </div>
@@ -216,7 +237,7 @@ export default async function BookLandingPage({ params }: PageProps) {
     data.subtitle?.trim() ||
     [
       data.author ? `${data.title} by ${data.author}` : data.title,
-      data.category ? `a work on ${data.category}` : "",
+      cleanCategory ? `a work on ${cleanCategory}` : "",
     ]
       .filter(Boolean)
       .join(" — ") +
@@ -226,10 +247,21 @@ export default async function BookLandingPage({ params }: PageProps) {
     <EntityLayout hero={hero} rail={rail}>
       <JsonLd data={bookLd} />
       <JsonLd data={breadcrumbLd} />
-      {faqLd ? <JsonLd data={faqLd} /> : null}
 
       <section className="seo-section">
-        <p className="book-about">{aboutLine}</p>
+        {overview ? (
+          overview.overview
+            .split(/\n\n+/)
+            .map((p) => p.trim())
+            .filter(Boolean)
+            .map((p, i) => (
+              <p key={i} className="book-about">
+                {p}
+              </p>
+            ))
+        ) : (
+          <p className="book-about">{aboutLine}</p>
+        )}
         {isStub ? (
           <p className="seo-availability">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -243,10 +275,25 @@ export default async function BookLandingPage({ params }: PageProps) {
         ) : null}
       </section>
 
+      {overview && overview.concepts.length ? (
+        <section className="seo-section">
+          <h2>Key concepts in {data.title}</h2>
+          <ul className="key-concepts">
+            {overview.concepts.map((c, i) => (
+              <li key={i}>
+                <strong>{c.term}</strong> — {c.note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
       <PopularQuestions questions={questions} bookId={id} />
-      <LiveContentLink entityName={data.title} bookId={id} />
+      {/* A bare stub has had no chats, so /insights is an empty state — don't
+          point readers (or crawlers) at it. */}
+      {isStub ? null : <LiveContentLink entityName={data.title} bookId={id} />}
     </EntityLayout>
   );
 }

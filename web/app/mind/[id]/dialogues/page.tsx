@@ -14,15 +14,14 @@ import {
   metaDescription,
 } from "@/lib/seo-mind";
 
-// NOTE — missing endpoint:
-// The legacy /mind/{id}/dialogues page rendered aggregated, PII-sanitized
-// assistant messages from real chats (db.list_assistant_messages_for_mind +
-// insights.select_publishable, behind the ENABLE_LIVE_INSIGHTS flag). There
-// is NO public JSON API exposing that aggregation, so this route renders the
-// empty-state (a chat invitation) plus the page chrome and Article JSON-LD.
-// When a `GET /api/minds/{id}/dialogues` (publishable assistant cards) lands,
-// map each card to an <article class="insight-card"> and add a dateModified
-// to the Article schema.
+// Type-4 auto-fill surface: renders aggregated, PII-sanitized assistant
+// messages from real chats via GET /api/minds/{id}/dialogues (the public
+// mirror of insights.select_publishable). The page renders cards when the
+// corpus exists and an empty-state chat invitation when it doesn't — so it
+// fills automatically as chat volume grows, no code change needed. The
+// sitemap gates this URL at ≥3 publishable messages, so empty pages aren't
+// advertised; dateModified below tracks the latest message so Google re-crawls
+// when fresh dialogue lands.
 
 export const revalidate = 86400;
 export const dynamicParams = true;
@@ -83,10 +82,13 @@ export default async function MindDialoguesPage({
     url: canonical,
     aboutUrl: entityCanonical,
     aboutName: mind.name,
+    // Freshness signal: latest contributing dialogue → Google re-crawls as the
+    // corpus grows (the Type-4 auto-fill loop).
+    dateModified: dialogues[0]?.created_at || "",
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, entityCanonical],
     ["Dialogues", canonical],
   ]);
