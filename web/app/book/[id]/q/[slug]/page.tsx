@@ -9,6 +9,7 @@ import JsonLd from "@/components/seo/JsonLd";
 import QaAnswer from "@/components/seo/book/QaAnswer";
 import QaPassages from "@/components/seo/book/QaPassages";
 import SiblingQuestions from "@/components/seo/book/SiblingQuestions";
+import EntityComposer from "@/components/chat/EntityComposer";
 
 import {
   SITE_URL,
@@ -118,10 +119,6 @@ export default async function BookQuestionPage({ params }: PageProps) {
 
   const bookUrl = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const canonical = `${bookUrl}/q/${slug}`;
-  // Chat ALWAYS routes to the conversational composer (preselects the book),
-  // never the reader — catalog stubs have no readable text, so /read would be
-  // a dead end here.
-  const chatHref = `/?book=${encodeURIComponent(id)}`;
   const createdAt = data.agent.created_at || "";
 
   const qaLd = qaPageJsonld({
@@ -140,9 +137,8 @@ export default async function BookQuestionPage({ params }: PageProps) {
     { name: "Q&A", url: canonical },
   ]);
 
-  const actions: EntityAction[] = [
-    { label: `Chat about this book`, href: chatHref, variant: "primary" },
-  ];
+  // Chat lives in the in-page composer below the answer (no redundant button).
+  const actions: EntityAction[] = [];
 
   const hero = (
     <>
@@ -178,6 +174,18 @@ export default async function BookQuestionPage({ params }: PageProps) {
       <QaPassages
         passages={passages.map((p) => ({ text: p.text, chunk_index: p.index }))}
       />
+
+      {/* Activation: read the answer, then keep going — start the real grounded
+          chat (book pre-set, great minds can join) instead of bouncing. */}
+      <section className="seo-section">
+        <h2>Continue the conversation</h2>
+        <EntityComposer
+          book={{ id, title: data.title, author: data.author }}
+          source="q"
+          placeholder={`Ask a follow-up about ${data.title} — great minds will join in…`}
+        />
+      </section>
+
       <SiblingQuestions
         siblings={questions}
         bookId={id}

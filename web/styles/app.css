@@ -1000,6 +1000,12 @@ body {
   max-width: 720px; margin: 0 auto;
 }
 
+/* SEO entity-page composer (the activation bridge). Reuses the in-chat
+   <Composer> verbatim for a unified UI; fills the content column so it aligns
+   with the article body rendered below it. */
+.entity-composer { margin: 18px 0 30px; }
+.entity-composer .chat-composer-inline { max-width: 100%; }
+
 /* Messages */
 .chat-message {
   font-size: 14px; line-height: 1.7; word-break: break-word; margin-bottom: 24px;

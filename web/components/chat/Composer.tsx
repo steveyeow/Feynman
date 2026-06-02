@@ -33,6 +33,8 @@ export default function Composer({
   onToggleMind,
   onRemoveBook,
   onRemoveMind,
+  direction = "up",
+  placeholder: placeholderProp,
 }: {
   books: Map<string, SelectedBook>;
   minds: Map<string, SelectedMind>;
@@ -44,6 +46,11 @@ export default function Composer({
   onToggleMind: (mind: SelectedMind) => void;
   onRemoveBook: (id: string) => void;
   onRemoveMind: (id: string) => void;
+  /** Popover open direction. "up" (default) for the bottom-of-chat composer;
+   *  "down" when the composer sits near the TOP of the page (SEO entity pages). */
+  direction?: "up" | "down";
+  /** Override the textarea placeholder (default: the in-chat "Ask a follow-up…"). */
+  placeholder?: string;
 }) {
   const [value, setValue] = useState("");
   const [booksOpen, setBooksOpen] = useState(false);
@@ -69,9 +76,10 @@ export default function Composer({
   // The @-hint shows when minds are mentionable — chip-selected OR auto-joined
   // (port of _updateComposerMentionHint: activeMinds ∪ selectedMinds).
   const hasMinds = minds.size > 0 || mentionable.length > 0;
+  const basePlaceholder = placeholderProp ?? "Ask a follow-up question...";
   const placeholder = hasMinds
-    ? "Ask a follow-up question... Type @ to mention a mind"
-    : "Ask a follow-up question...";
+    ? `${basePlaceholder} Type @ to mention a mind`
+    : basePlaceholder;
 
   return (
     <div className="chat-composer chat-composer-inline">
@@ -124,7 +132,7 @@ export default function Composer({
             </button>
             <BookPopover
               open={booksOpen}
-              direction="up"
+              direction={direction}
               selected={books}
               onToggle={onToggleBook}
               onClose={() => setBooksOpen(false)}
@@ -146,7 +154,7 @@ export default function Composer({
             </button>
             <MindsPopover
               open={mindsOpen}
-              direction="up"
+              direction={direction}
               selected={minds}
               onToggle={onToggleMind}
               onClose={() => setMindsOpen(false)}
