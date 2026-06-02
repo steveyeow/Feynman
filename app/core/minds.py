@@ -26,7 +26,7 @@ from .db import (
     update_mind_embedding,
     upsert_compiled_memory,
 )
-from .providers import ProviderError, chat_with_fallback, pick_provider
+from .providers import ProviderError, bulk_chat, chat_with_fallback, pick_provider
 from .rag import build_context, retrieve_cross_book
 
 log = logging.getLogger(__name__)
@@ -474,7 +474,7 @@ def get_or_create_mind(name: str, era: str = "", domain: str = "", link_works: b
 
     prompt = _generate_persona_prompt(name, era, domain)
     try:
-        result, _ = chat_with_fallback(
+        result, _ = bulk_chat(
             system="You are an expert on intellectual history. Return only valid JSON.",
             user=prompt,
             timeout=90,
@@ -594,7 +594,7 @@ def create_mind_from_content(
     )
 
     try:
-        result, _ = chat_with_fallback(
+        result, _ = bulk_chat(
             system="You are an expert at analyzing writing to build persona profiles. Return only valid JSON.",
             user=prompt,
             timeout=90,
@@ -752,7 +752,7 @@ def suggest_minds_hybrid(
         "Return ONLY a JSON array: [{\"name\": \"...\", \"reason\": \"one-sentence why\"}]"
     )
     try:
-        result, _ = chat_with_fallback(
+        result, _ = bulk_chat(
             system="You are an expert on intellectual history selecting panelists.",
             user=prompt,
             provider_order=["gemini", "deepseek", "openai", "kimi", "anthropic"],
@@ -827,7 +827,7 @@ def suggest_minds_for_book(
         "Return ONLY a JSON array: [{\"name\": \"...\", \"era\": \"...\", "
         "\"domain\": \"...\", \"reason\": \"...\"}]"
     )
-    result, _ = chat_with_fallback(
+    result, _ = bulk_chat(
         system="You are an expert on intellectual history.",
         user=prompt,
     )
@@ -876,7 +876,7 @@ def suggest_minds_for_topic(
         "Return ONLY a JSON array: [{\"name\": \"...\", \"era\": \"...\", "
         "\"domain\": \"...\", \"reason\": \"...\"}]"
     )
-    result, _ = chat_with_fallback(
+    result, _ = bulk_chat(
         system="You are an expert on intellectual history.",
         user=prompt,
     )

@@ -24,7 +24,7 @@ import logging
 import os
 from typing import Any
 
-from .providers import chat_with_fallback, ProviderError
+from .providers import bulk_chat, ProviderError
 from .rag import retrieve, build_context
 
 log = logging.getLogger(__name__)
@@ -183,7 +183,7 @@ def generate_book_overview(
         user += f'\n\n(The book\'s own subtitle/description: "{subtitle}")'
 
     try:
-        chat_result, provider_obj = chat_with_fallback(system=system, user=user)
+        chat_result, provider_obj = bulk_chat(system=system, user=user)
         text = (chat_result.content or "").strip()
         provider_name = getattr(provider_obj, "name", "") or ""
     except ProviderError as exc:
@@ -230,7 +230,7 @@ def generate_topic_overview(topic: str) -> dict[str, Any]:
         "those are shown separately on the page. No headings."
     )
     try:
-        chat_result, provider_obj = chat_with_fallback(system=system, user=user)
+        chat_result, provider_obj = bulk_chat(system=system, user=user)
         text = (chat_result.content or "").strip()
         provider_name = getattr(provider_obj, "name", "") or ""
     except ProviderError as exc:
