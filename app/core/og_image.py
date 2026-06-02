@@ -1,6 +1,7 @@
 """Generate Open Graph / Twitter Card images for books and minds."""
 from __future__ import annotations
 
+import functools
 import io
 import math
 from pathlib import Path
@@ -78,6 +79,12 @@ def _draw_feynman_mark(draw: ImageDraw.ImageDraw, cx: int, cy: int, s: float, co
         draw.line(pts, fill=color, width=lw)
 
 
+# Render-once-per-content cache. OG inputs are all hashable (str/int) and the
+# rendered PNG is deterministic, so an LRU keyed on the args lets a warm Fluid
+# instance skip the Pillow render entirely on repeat/crawl-wave hits — the main
+# CPU sink on this project. Bounded so memory can't grow unbounded
+# (~256 × ~40 KB ≈ 10 MB). The 7-day edge cache still handles cross-instance.
+@functools.lru_cache(maxsize=256)
 def generate_og_image(
     title: str,
     subtitle: str = "",
@@ -170,7 +177,7 @@ def generate_og_image(
               "FEYNMAN", fill=TEXT_LIGHT, font=ft_imprint)
 
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
+    img.save(buf, format="PNG")
     return buf.getvalue()
 
 
@@ -186,6 +193,7 @@ def _mind_color(name: str) -> tuple[int, int, int]:
     return MIND_COLORS[h % len(MIND_COLORS)]
 
 
+@functools.lru_cache(maxsize=256)
 def generate_mind_og_image(
     name: str,
     domain: str = "",
@@ -273,5 +281,5 @@ def generate_mind_og_image(
     )
 
     buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
+    img.save(buf, format="PNG")
     return buf.getvalue()
