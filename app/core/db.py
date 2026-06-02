@@ -398,7 +398,7 @@ def init_db() -> None:
             # Migration: add embedding columns to minds table; plus Wikidata/
             # Wikipedia identity URLs (for Person JSON-LD sameAs — the
             # Knowledge-Graph / LLM entity signal on every expanded mind).
-            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT")]:
+            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -870,7 +870,7 @@ def init_db() -> None:
 
             # Migration: add embedding columns to minds table; plus Wikidata/
             # Wikipedia identity URLs for Person JSON-LD sameAs.
-            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT")]:
+            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -1716,6 +1716,40 @@ def update_mind_links(mind_id: str, wikidata_url: str | None = None, wikipedia_u
         _execute(conn, _q(
             "UPDATE minds SET wikidata_url = ?, wikipedia_url = ? WHERE id = ?"
         ), (wikidata_url or None, wikipedia_url or None, mind_id))
+
+
+def get_mind_meta(mind_id: str) -> dict[str, Any]:
+    """A mind's PRIVATE meta dict — pre-stored SEO content (Type-2 essays under
+    `essays`). Deliberately NOT surfaced by `_row_to_mind` / the public mind API,
+    so it never leaks; read it explicitly where needed."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT meta_json FROM minds WHERE id = ?"), (mind_id,))
+    if not row:
+        return {}
+    try:
+        return json.loads(row.get("meta_json") or "{}") or {}
+    except Exception:
+        return {}
+
+
+def get_mind_essay(mind_id: str, topic: str) -> str | None:
+    """A pre-stored Type-2 essay for (mind, topic), or None — the check-first
+    half of the lazy-gen+cache pattern (mirrors overview's meta.overview)."""
+    essay = (get_mind_meta(mind_id).get("essays") or {}).get(topic)
+    return essay or None
+
+
+def save_mind_essay(mind_id: str, topic: str, essay: str) -> None:
+    """Persist a generated Type-2 essay into the mind's meta so the hot path
+    serves it without re-generating (read-modify-write of meta.essays)."""
+    if not (essay or "").strip():
+        return
+    meta = get_mind_meta(mind_id)
+    essays = meta.get("essays") or {}
+    essays[topic] = essay
+    meta["essays"] = essays
+    with get_conn() as conn:
+        _execute(conn, _q("UPDATE minds SET meta_json = ? WHERE id = ?"), (json.dumps(meta), mind_id))
 
 
 def list_minds_with_embeddings() -> list[dict[str, Any]]:
