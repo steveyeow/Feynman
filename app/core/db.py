@@ -1225,6 +1225,24 @@ def get_sample_chunks_text(agent_id: str, limit: int = 3) -> list[dict[str, Any]
         ), (agent_id, limit))
 
 
+def get_mid_chunks_text(agent_id: str, limit: int = 8) -> list[dict[str, Any]]:
+    """Chunk text sampled from the MIDDLE of the book (skips the first ~25%).
+
+    The opening chunks of a Project Gutenberg book are headers, the title page,
+    and transcription notes ("italics marked with _", "Greek words transliterated",
+    margin-note conventions). Feeding those to LLM question-generation produces
+    questions about typography/printing/e-text artifacts instead of the actual
+    content. Sampling from the middle gives real prose to ask about."""
+    with get_conn() as conn:
+        total = _fetchall(conn, _q(
+            "SELECT count(*) AS c FROM chunks WHERE agent_id = ?"), (agent_id,))[0]["c"]
+        skip = max(0, int(total) // 4)
+        return _fetchall(conn, _q(
+            "SELECT chunk_index, text FROM chunks WHERE agent_id = ? "
+            "ORDER BY chunk_index ASC LIMIT ? OFFSET ?"
+        ), (agent_id, limit, skip))
+
+
 def get_chunks_batch(agent_ids: list[str]) -> list[dict[str, Any]]:
     """Fetch chunks for multiple agents in a single query."""
     if not agent_ids:
@@ -1401,6 +1419,15 @@ def add_questions(agent_id: str, questions: list[str]) -> None:
         _executemany(conn, _q(
             "INSERT INTO questions (id, agent_id, text, created_at) VALUES (?, ?, ?, ?)"
         ), [(str(uuid.uuid4()), agent_id, q, _utcnow()) for q in questions])
+
+
+def clear_questions(agent_id: str) -> None:
+    """Delete all stored questions for an agent. Used to regenerate genuinely
+    book-specific questions over the generic LLM-failed fallback set (the 5
+    templated questions that, duplicated across books, read as thin/mass-produced
+    to search engines)."""
+    with get_conn() as conn:
+        _execute(conn, _q("DELETE FROM questions WHERE agent_id = ?"), (agent_id,))
 
 
 def list_questions(agent_id: str) -> list[str]:
