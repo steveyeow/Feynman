@@ -132,14 +132,15 @@ def main() -> int:
 
     # ── Type-1 Q&A: READY books × their curated questions. ─────────────────
     if do_qa and not _cap_hit():
-        # Only books with REAL embeddings — thin catalog stubs carry a single
-        # NULL-vector chunk that can't be RAG-retrieved (and are noindex-gated
-        # anyway), so pre-storing Q&A for them is pointless + wastes embed calls.
-        embedded = embedded_agent_ids()
+        # Only books substantial enough to get an INDEXABLE /q page: the sitemap
+        # gates /q on >=5 real chunks (_MIN_CHUNKS_FOR_Q_URLS in main.py), so
+        # books below that are noindex + absent from the sitemap — pre-storing
+        # their Q&A has no SEO value. Match that gate so we generate exactly what
+        # gets indexed (thin books still lazy-gen on a direct hit if ever needed).
+        embedded = embedded_agent_ids(min_chunks=5)
         books = [a for a in list_agents(limit=10000)
                  if a.get("status") in ("ready", "indexing") and a.get("id") in embedded]
-        print(f"qa: {len(books)} embedded ready/indexing books × questions "
-              f"({len(embedded)} books have real vectors)", file=sys.stderr)
+        print(f"qa: {len(books)} books with >=5 real chunks (indexable /q) × questions", file=sys.stderr)
         for a in books:
             aid = a.get("id")
             if not aid:
