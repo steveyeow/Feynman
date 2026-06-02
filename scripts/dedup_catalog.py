@@ -8,10 +8,14 @@ stub plus a short-title `ready` record ("Competitive Strategy: Techniques…" vs
 the duplicate rows still waste indexing + overview generation and pollute the
 library / sitemap. This collapses each duplicate group to one canonical row.
 
-Grouping = normalized title (subtitle after colon/dash stripped, punctuation
-removed, CJK kept) + author. Within a group the KEEetainer is the row with the
-best (status, chunk_count): ready/indexing > writing > catalog, then most
-chunks (the keeper). The losers' chunks + agent rows are deleted.
+Grouping = connected components of `db.same_book()` within author-compatible
+buckets — two rows merge when their titles are equal or one is the other plus a
+subtitle ("Good to Great" ≡ "Good to Great: Why…"), but NOT when they're distinct
+subtitles of a shared subject (the Wittgenstein volumes stay separate). This is
+the SAME relation the minting path (`find_agent_by_normalized_name`) uses, so the
+cleanup and the source-dedup never disagree. Within a group the retained row is
+the best (status, chunk_count): ready/indexing > writing > catalog, then most
+chunks. The losers' chunks + agent rows are deleted.
 
 Usage
 -----
@@ -28,7 +32,6 @@ Required env: DATABASE_URL (same as the app). No LLM calls.
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 
 from app.core import config  # noqa: F401 — ensures env is loaded
@@ -38,18 +41,8 @@ from app.core.db import (
     delete_chunks_for_agent,
     init_db,
     list_agents,
+    same_book,
 )
-
-_PUNCT = re.compile(r"[.,;:!?'\"()]")
-_WS = re.compile(r"\s+")
-
-
-def _norm(name: str) -> str:
-    """Normalized title stem for grouping — must mirror the frontend
-    filterBooksByTopic dedupe so display + data agree."""
-    stem = re.split(r"[:—]|\s-\s", (name or "").lower())[0]
-    stem = _PUNCT.sub("", stem)
-    return _WS.sub(" ", stem).strip()
 
 
 def _rank(a: dict) -> int:
@@ -73,15 +66,35 @@ def main() -> int:
     init_db()
 
     agents = list(list_agents(limit=10000))
-    # Author lives in meta; key on title-stem + author so different books that
-    # share a title prefix aren't merged.
-    groups: dict[str, list[dict]] = {}
-    for a in agents:
-        author = ((a.get("meta") or {}).get("author") or "").strip().lower()
-        key = f"{_norm(a.get('name') or '') or a['id']}|{author}"
-        groups.setdefault(key, []).append(a)
+    # Group by CONNECTED COMPONENTS of same_book(), within author-compatible
+    # buckets. same_book() only links a title to itself-plus-a-subtitle, so the
+    # Wittgenstein volumes (distinct subtitles, no bare stem) stay SEPARATE —
+    # a flat title-stem key used to merge (and delete) them. O(n²) over the
+    # roster; fine for a manual review tool at today's scale.
+    def _author(a: dict) -> str:
+        return ((a.get("meta") or {}).get("author") or a.get("source") or "").strip().lower()
 
-    dup_groups = [g for g in groups.values() if len(g) > 1]
+    names = [a.get("name") or "" for a in agents]
+    authors = [_author(a) for a in agents]
+    parent = list(range(len(agents)))
+
+    def _find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(len(agents)):
+        for j in range(i + 1, len(agents)):
+            if authors[i] and authors[j] and authors[i] != authors[j]:
+                continue  # different known authors → different books
+            if same_book(names[i], names[j]):
+                parent[_find(i)] = _find(j)
+
+    comps: dict[int, list[dict]] = {}
+    for i, a in enumerate(agents):
+        comps.setdefault(_find(i), []).append(a)
+    dup_groups = [g for g in comps.values() if len(g) > 1]
     print(f"{len(agents)} agents → {len(dup_groups)} duplicate groups", file=sys.stderr)
 
     chunk_counts = count_chunks_batch([a["id"] for g in dup_groups for a in g]) or {}
