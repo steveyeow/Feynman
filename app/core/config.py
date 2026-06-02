@@ -41,7 +41,7 @@ GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash").strip()
 # personas), not live user chat. Empty → fall back to GEMINI_CHAT_MODEL. Set to a
 # cheaper tier (e.g. gemini-2.5-flash-lite) to cut scale costs further; combined
 # with thinking-off (bulk_chat) it's the lever for the programmatic supply.
-GEMINI_BULK_CHAT_MODEL = os.getenv("GEMINI_BULK_CHAT_MODEL", "").strip()
+GEMINI_BULK_CHAT_MODEL = os.getenv("GEMINI_BULK_CHAT_MODEL", "gemini-2.5-flash-lite").strip()
 GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001").strip()
 
 KIMI_API_KEY = os.getenv("KIMI_API_KEY", "").strip()

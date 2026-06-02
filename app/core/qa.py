@@ -25,6 +25,7 @@ import os
 import re
 from typing import Any
 
+from . import db
 from .providers import bulk_chat, ProviderError
 from .rag import retrieve, build_context
 
@@ -187,6 +188,26 @@ def generate_mind_on_topic_essay(
     return result
 
 
+def get_or_generate_mind_essay(mind: dict[str, Any], topic: str) -> dict[str, Any]:
+    """Check-first wrapper for the Type-2 essay (lazy-gen + PERSISTENT cache,
+    mirroring overview's meta.overview): return the pre-stored essay if present
+    (zero LLM), else generate AND persist it so the next crawl is free. The /on
+    endpoint and the pre-store script both call this — keeping ~15K programmatic
+    essays off the per-crawl LLM path (the master-plan quota-blowout risk)."""
+    mind_id = mind.get("id") or ""
+    if mind_id:
+        cached = db.get_mind_essay(mind_id, topic)
+        if cached:
+            return {"essay": cached, "provider": "cache"}
+    result = generate_mind_on_topic_essay(mind, topic)
+    if mind_id and result.get("essay"):
+        try:
+            db.save_mind_essay(mind_id, topic, result["essay"])
+        except Exception as exc:
+            log.warning("save_mind_essay failed for %s/%s: %s", mind_id, topic, exc)
+    return result
+
+
 def generate_grounded_answer(
     agent_id: str,
     question: str,
@@ -262,4 +283,37 @@ def generate_grounded_answer(
         text = text[:_QA_ANSWER_MAX_CHARS].rsplit(" ", 1)[0] + "…"
     result["answer"] = text
     result["provider"] = provider_name
+    return result
+
+
+def get_or_generate_grounded_answer(
+    agent_id: str,
+    question: str,
+    *,
+    book_title: str = "",
+) -> dict[str, Any]:
+    """Check-first wrapper for the Type-1 grounded answer (lazy-gen + PERSISTENT
+    cache in the book's meta.qa): return the pre-stored {answer, passages} if
+    present (zero LLM + zero retrieval), else generate AND persist it. The /q
+    endpoint and the pre-store script both call this — keeping the programmatic
+    Q&A answers off the per-crawl LLM path. Cache key is the full question text,
+    so editing a question naturally invalidates its stored answer."""
+    agent = db.get_agent(agent_id)
+    if agent:
+        stored = ((agent.get("meta") or {}).get("qa") or {}).get(question)
+        if stored and stored.get("answer"):
+            return {
+                "answer": stored.get("answer", ""),
+                "passages": stored.get("passages", []),
+                "provider": "cache",
+            }
+    result = generate_grounded_answer(agent_id, question, book_title=book_title)
+    if agent and result.get("answer"):
+        try:
+            meta = agent.get("meta") or {}
+            qa = meta.get("qa") or {}
+            qa[question] = {"answer": result.get("answer", ""), "passages": result.get("passages", [])}
+            db.update_agent_meta(agent_id, {"qa": qa})
+        except Exception as exc:
+            log.warning("save book qa failed for %s: %s", agent_id, exc)
     return result

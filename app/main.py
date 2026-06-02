@@ -3932,7 +3932,9 @@ def api_agent_qa(agent_id: str, question: str) -> JSONResponse:
         raise HTTPException(status_code=404, detail="Agent not found")
     title_raw = agent.get("name", "") or ""
     try:
-        qa_result = qa_module.generate_grounded_answer(
+        # Check-first: serve the pre-stored answer if present, else generate +
+        # persist into the book's meta.qa — keeps programmatic Q&A off the LLM path.
+        qa_result = qa_module.get_or_generate_grounded_answer(
             agent_id, question, book_title=title_raw,
         )
     except Exception as exc:
@@ -4188,7 +4190,9 @@ def api_mind_on_topic(mind_id: str, topic_slug: str) -> JSONResponse:
     if not topic or not qa_module.is_mind_topic_relevant(mind, topic):
         raise HTTPException(status_code=404, detail="Not found")
     try:
-        essay_result = qa_module.generate_mind_on_topic_essay(mind, topic)
+        # Check-first: serve the pre-stored essay if present, else generate +
+        # persist (so the next crawl is free) — keeps ~15K essays off the LLM path.
+        essay_result = qa_module.get_or_generate_mind_essay(mind, topic)
     except Exception as exc:
         log.error("mind essay failed for %s/%s: %s", mind_id, topic, exc)
         essay_result = {"essay": ""}
