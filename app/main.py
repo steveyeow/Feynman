@@ -3208,19 +3208,43 @@ def _verify_cron(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+# Hobby Active-CPU guard. Book indexing (parse + chunk) is the heaviest
+# on-Vercel CPU, and this cron used to queue _learn_agent for EVERY catalog
+# agent every run — unbounded as the catalog grows (Task-2 scale), which would
+# blow the 4h/mo Hobby cap. Two knobs:
+#   ENABLE_DISCOVER_CRON=false        → skip the cron entirely (do all discovery
+#                                       + indexing off-Vercel via scripts/).
+#   DISCOVER_CRON_MAX_INDEX=<n>       → at most n catalog agents indexed per run
+#                                       (bounds CPU regardless of catalog size).
+_DISCOVER_CRON_ENABLED = os.getenv("ENABLE_DISCOVER_CRON", "true").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+_DISCOVER_CRON_MAX_INDEX = int(os.getenv("DISCOVER_CRON_MAX_INDEX", "5"))
+
+
 @app.get("/api/cron/discover")
 def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    """Cron-triggered book discovery. Replaces the daemon discovery loop."""
+    """Cron-triggered book discovery. Replaces the daemon discovery loop.
+
+    On-Vercel indexing is bounded per run (DISCOVER_CRON_MAX_INDEX) so a large
+    catalog can't exhaust the Hobby Active-CPU budget; bulk (re)indexing runs
+    off-Vercel via scripts/reindex_via_gutenberg.py."""
     _verify_cron(request)
+    if not _DISCOVER_CRON_ENABLED:
+        return {"status": "disabled"}
     agents = list_agents(limit=5000)
     if not agents:
         return {"status": "skip", "reason": "no agents yet"}
     _discover_books()
-    # Trigger learning for any new catalog agents
+    # Bounded learning for new catalog agents (cap per run → bounded CPU).
+    queued = 0
     for a in list_agents(limit=5000):
         if a["status"] == "catalog":
             background_tasks.add_task(_learn_agent, a["id"])
-    return {"status": "ok"}
+            queued += 1
+            if queued >= _DISCOVER_CRON_MAX_INDEX:
+                break
+    return {"status": "ok", "indexed_queued": queued}
 
 
 @app.get("/api/cron/indexnow")
