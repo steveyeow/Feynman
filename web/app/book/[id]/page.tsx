@@ -30,8 +30,16 @@ import {
 } from "@/lib/seo-book";
 import { fetchTopics } from "@/lib/seo-mind";
 
-// ISR — on-demand revalidation, no generateStaticParams (thousands of books).
+// ISR. The EMPTY generateStaticParams() is load-bearing: it opts this dynamic
+// route into the static/ISR path — prerender NONE at build (there are thousands
+// of books) but render each on-demand on first hit, then CACHE it. Without it,
+// Next 14 renders the route dynamically on EVERY request (Cache-Control:
+// no-store), so every crawl re-hit Supabase — the egress that dominated usage.
 export const revalidate = 86400;
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return [];
+}
 
 interface PageProps {
   params: { id: string };

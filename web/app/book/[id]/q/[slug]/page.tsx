@@ -23,7 +23,14 @@ import {
   breadcrumbJsonld,
 } from "@/lib/seo-book";
 
+// Empty generateStaticParams() opts this dynamic route into ISR caching (render
+// on-demand on first hit, then CACHE) instead of dynamic-render-every-request
+// (no-store), which re-hit Supabase on every crawl.
 export const revalidate = 86400;
+export const dynamicParams = true;
+export function generateStaticParams() {
+  return [];
+}
 
 interface PageProps {
   params: { id: string; slug: string };
