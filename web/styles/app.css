@@ -992,7 +992,9 @@ body {
 .chat-input-area {
   padding: 12px 32px 20px;
   flex-shrink: 0;
-  background: var(--bg-chat);
+  /* Match the message scroll area above (which shows the body's --bg-home);
+     the rounded composer pill keeps its own --bg-chat for floating contrast. */
+  background: var(--bg-home);
   position: relative;
   z-index: 10;
 }
