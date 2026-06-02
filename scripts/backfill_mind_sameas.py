@@ -88,10 +88,22 @@ def main() -> int:
                         help="Re-resolve minds that already have a wikidata_url.")
     parser.add_argument("--max-candidates", type=int, default=5,
                         help="Search hits to consider per name before giving up.")
+    parser.add_argument("--no-init", action="store_true",
+                        help="Skip init_db(). Use against PROD: the schema is already "
+                             "managed by the app, and a full init_db() there re-runs every "
+                             "CREATE INDEX / migration (statement-timeout + lock risk). The "
+                             "backfill itself is single-row UPDATEs, which need no schema work.")
+    parser.add_argument("--skip-names", default="",
+                        help="Comma-separated mind names to exclude — junk/fragment names "
+                             "(e.g. \"s'te\", a bare \"Joseph\") that wbsearchentities fuzzy-"
+                             "matches to the wrong real person. These minds want cleanup, not "
+                             "a sameAs link.")
     args = parser.parse_args()
+    skip_names = {s.strip().lower() for s in args.skip_names.split(",") if s.strip()}
 
-    print(f"--- backfill_mind_sameas (apply={args.apply}) ---", file=sys.stderr)
-    init_db()
+    print(f"--- backfill_mind_sameas (apply={args.apply}, no_init={args.no_init}) ---", file=sys.stderr)
+    if not args.no_init:
+        init_db()
 
     minds = list(list_minds(limit=10000))
     todo = [m for m in minds if args.force or not (m.get("wikidata_url") or "").strip()]
@@ -103,6 +115,10 @@ def main() -> int:
             break
         name = (m.get("name") or "").strip()
         if not name:
+            continue
+        if name.lower() in skip_names:
+            skipped += 1
+            print(f"  skip   {name!r} (denylisted — junk name)", file=sys.stderr)
             continue
         try:
             resolved = None
