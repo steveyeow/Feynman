@@ -47,11 +47,13 @@ import time
 from app.core import config  # noqa: F401 — ensures env is loaded
 from app.core.catalog import TOPIC_TAGS
 from app.core.db import (
+    embedded_agent_ids,
     get_mind_essay,
     init_db,
     list_agents,
     list_minds,
     list_questions,
+    probe_pgvector,
 )
 from app.core.qa import (
     get_or_generate_grounded_answer,
@@ -82,6 +84,12 @@ def main() -> int:
     print(f"--- prestore_seo_content (apply={args.apply}) ---", file=sys.stderr)
     if not args.no_init:
         init_db()
+    else:
+        # --no-init skips the slow PROD schema migrations, but RAG retrieve still
+        # needs _HAS_PGVECTOR set or it falls back to the legacy BYTEA path and
+        # crashes on pgvector-migrated books (BYTEA vector is NULL there). The
+        # probe is a single cheap information_schema lookup.
+        probe_pgvector()
 
     made = skipped = failed = 0
 
@@ -124,8 +132,14 @@ def main() -> int:
 
     # ── Type-1 Q&A: READY books × their curated questions. ─────────────────
     if do_qa and not _cap_hit():
-        books = [a for a in list_agents(limit=10000) if a.get("status") in ("ready", "indexing")]
-        print(f"qa: {len(books)} ready/indexing books × questions", file=sys.stderr)
+        # Only books with REAL embeddings — thin catalog stubs carry a single
+        # NULL-vector chunk that can't be RAG-retrieved (and are noindex-gated
+        # anyway), so pre-storing Q&A for them is pointless + wastes embed calls.
+        embedded = embedded_agent_ids()
+        books = [a for a in list_agents(limit=10000)
+                 if a.get("status") in ("ready", "indexing") and a.get("id") in embedded]
+        print(f"qa: {len(books)} embedded ready/indexing books × questions "
+              f"({len(embedded)} books have real vectors)", file=sys.stderr)
         for a in books:
             aid = a.get("id")
             if not aid:

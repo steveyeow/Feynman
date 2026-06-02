@@ -1165,6 +1165,23 @@ def get_chunks(agent_id: str) -> list[dict[str, Any]]:
         ), (agent_id,))
 
 
+def embedded_agent_ids() -> set[str]:
+    """Agent IDs that have >=1 real (non-NULL) embedding vector.
+
+    "Embedded" means a chunk with a real vector in EITHER store: the pgvector
+    ``embedding`` column (post-migration — the vast majority) or the legacy
+    BYTEA ``vector`` column. Thin catalog stubs carry a single placeholder chunk
+    that is NULL in both and can't be RAG-retrieved, so bulk passes (e.g. Q&A
+    pre-store) skip them. The ``embedding`` column is Postgres-only, so guard for
+    SQLite dev DBs."""
+    with get_conn() as conn:
+        if _USE_PG:
+            q = "SELECT DISTINCT agent_id FROM chunks WHERE vector IS NOT NULL OR embedding IS NOT NULL"
+        else:
+            q = "SELECT DISTINCT agent_id FROM chunks WHERE vector IS NOT NULL"
+        return {r["agent_id"] for r in _fetchall(conn, q)}
+
+
 def get_chunks_text_only(agent_id: str) -> list[dict[str, Any]]:
     """Lightweight variant that skips vector/dim/norm — for the reader.
 

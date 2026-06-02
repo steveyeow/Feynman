@@ -40,7 +40,7 @@ import sys
 import time
 
 from app.core import config  # noqa: F401 — ensures env is loaded
-from app.core.db import init_db, list_minds, update_mind_links
+from app.core.db import init_db, list_minds, probe_pgvector, update_mind_links
 from app.core.minds import backfill_mind_embeddings, get_or_create_mind
 from app.core.sources_wikidata import discover_candidates
 
@@ -76,6 +76,11 @@ def main() -> int:
     print(f"--- expand_minds (dry_run={args.dry_run}) ---", file=sys.stderr)
     if not args.no_init:
         init_db()
+    else:
+        # --no-init skips the slow PROD migrations, but embedding writes/reads
+        # need _HAS_PGVECTOR set or they fall back to the legacy BYTEA store
+        # (inconsistent with the pgvector-migrated corpus). Cheap probe.
+        probe_pgvector()
 
     # name → id, so we can attach sameAs links to minds that already exist
     # (created before #3 landed) without an LLM round trip.
