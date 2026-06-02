@@ -62,6 +62,9 @@ def main() -> int:
                              "avoid until you want the extra cross-links).")
     parser.add_argument("--no-embed", action="store_true",
                         help="Skip the embedding backfill pass at the end.")
+    parser.add_argument("--no-init", action="store_true",
+                        help="Skip init_db() — use against PROD (schema is app-managed; a "
+                             "full init_db there hits a statement-timeout on the big tables).")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
@@ -71,7 +74,8 @@ def main() -> int:
     )
 
     print(f"--- expand_minds (dry_run={args.dry_run}) ---", file=sys.stderr)
-    init_db()
+    if not args.no_init:
+        init_db()
 
     # name → id, so we can attach sameAs links to minds that already exist
     # (created before #3 landed) without an LLM round trip.
