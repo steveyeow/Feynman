@@ -20,6 +20,16 @@ const SSR_BASE =
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://127.0.0.1:8001");
 const isServer = typeof window === "undefined";
 
+// Revalidation window for PUBLIC server-side reads (the SEO pages). Without an
+// explicit cache directive, an SSR `fetch` here defaults to uncached, which
+// forces the whole page into dynamic rendering (`Cache-Control: no-store`,
+// `x-vercel-cache: MISS`) — so every crawl re-renders + re-hits Supabase, which
+// was the dominant egress. Caching these reads makes the pages CDN-cacheable
+// (repeat crawls serve from the edge, not the DB). 1 day balances egress vs
+// content freshness; new content still appears within the window, and brand-new
+// pages (e.g. a freshly-minted mind) render on first crawl regardless.
+const SSR_REVALIDATE = 86400;
+
 let _authToken: string | null = null;
 export function setAuthToken(token: string | null) {
   _authToken = token;
@@ -95,7 +105,17 @@ export async function apiFetch<T = unknown>(
     return h;
   };
 
-  let res = await fetch(`${base}${path}`, { ...opts, headers: buildHeaders() });
+  // Cache public SSR reads (server-side GET, no auth token) so the SEO pages
+  // become CDN-cacheable — repeat crawls hit the edge, not Supabase. Never
+  // caches authenticated/user fetches (a token present); a caller can opt out
+  // explicitly via opts.cache or opts.next.
+  const isGet = !opts.method || opts.method.toUpperCase() === "GET";
+  const cacheInit: { next?: { revalidate: number } } =
+    isServer && isGet && !_authToken && !("cache" in opts) && !("next" in opts)
+      ? { next: { revalidate: SSR_REVALIDATE } }
+      : {};
+
+  let res = await fetch(`${base}${path}`, { ...opts, ...cacheInit, headers: buildHeaders() });
   if (!res.ok) {
     let body: unknown = null;
     try {
@@ -123,7 +143,7 @@ export async function apiFetch<T = unknown>(
       }
       if (newToken) {
         _authToken = newToken;
-        res = await fetch(`${base}${path}`, { ...opts, headers: buildHeaders() });
+        res = await fetch(`${base}${path}`, { ...opts, ...cacheInit, headers: buildHeaders() });
         if (res.ok) {
           if (res.status === 204) return undefined as T;
           return (await res.json()) as T;
