@@ -61,6 +61,17 @@ export default function Library() {
     load();
   }, [load]);
 
+  // Seed the search box from a `?q=` deep link (the WebSite SearchAction target,
+  // or any shared /library?q=… URL). Runs once post-hydration (window only
+  // exists client-side, and seeding in an effect avoids an SSR/client value
+  // mismatch on the input). Setting `query` then cascades into the existing
+  // local filter + the debounced "find & add it in real time" auto-search, so a
+  // title not yet in the catalog gets discovered automatically.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setQuery(q);
+  }, []);
+
   function showToast(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2600);
