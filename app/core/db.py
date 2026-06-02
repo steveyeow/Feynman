@@ -394,8 +394,10 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_mem_type")
 
-            # Migration: add embedding columns to minds table
-            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL")]:
+            # Migration: add embedding columns to minds table; plus Wikidata/
+            # Wikipedia identity URLs (for Person JSON-LD sameAs — the
+            # Knowledge-Graph / LLM entity signal on every expanded mind).
+            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -865,8 +867,9 @@ def init_db() -> None:
             except Exception:
                 pass
 
-            # Migration: add embedding columns to minds table
-            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION")]:
+            # Migration: add embedding columns to minds table; plus Wikidata/
+            # Wikipedia identity URLs for Person JSON-LD sameAs.
+            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -1596,6 +1599,10 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
         "typical_phrases": json.loads(row["typical_phrases"] or "[]"),
         "works": json.loads(row["works"] or "[]"),
         "avatar_seed": row["avatar_seed"] or "",
+        # Wikidata/Wikipedia identity links (sameAs). `.get` — older rows
+        # predate the migration; absent → "".
+        "wikidata_url": row.get("wikidata_url") or "",
+        "wikipedia_url": row.get("wikipedia_url") or "",
         "version": row["version"],
         "chat_count": row["chat_count"],
         "created_at": row["created_at"],
@@ -1608,6 +1615,17 @@ def update_mind_embedding(mind_id: str, vector_bytes: bytes, dim: int, norm: flo
         _execute(conn, _q(
             "UPDATE minds SET embedding = ?, embedding_dim = ?, embedding_norm = ? WHERE id = ?"
         ), (blob, dim, norm, mind_id))
+
+
+def update_mind_links(mind_id: str, wikidata_url: str | None = None, wikipedia_url: str | None = None) -> None:
+    """Store a mind's Wikidata/Wikipedia identity URLs — the canonical entity
+    signal rendered into the Person JSON-LD `sameAs` (Knowledge Graph + LLM
+    grounding). Empty strings are normalized to NULL so a blank candidate field
+    never overwrites a previously-resolved link with junk."""
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "UPDATE minds SET wikidata_url = ?, wikipedia_url = ? WHERE id = ?"
+        ), (wikidata_url or None, wikipedia_url or None, mind_id))
 
 
 def list_minds_with_embeddings() -> list[dict[str, Any]]:

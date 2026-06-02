@@ -37,6 +37,11 @@ export interface MindDetail {
   persona?: string;
   persona_excerpt?: string;
   works?: string[];
+  /** Wikidata/Wikipedia identity URLs — stored per-mind by expand_minds from
+   *  the matched Wikidata candidate. Merged into the Person JSON-LD `sameAs`
+   *  alongside the curated FAMOUS_MIND_SAMEAS table (see mindSameAs). */
+  wikidata_url?: string;
+  wikipedia_url?: string;
   created_at?: string;
   [k: string]: unknown;
 }
@@ -207,6 +212,29 @@ export const FAMOUS_MIND_SAMEAS: Record<string, string[]> = {
 export function lookupSameAs(mindName: string): string[] | undefined {
   if (!mindName) return undefined;
   return FAMOUS_MIND_SAMEAS[mindName.trim().toLowerCase()];
+}
+
+/**
+ * Full `sameAs` set for a mind's Person JSON-LD: the curated
+ * FAMOUS_MIND_SAMEAS table (hand-verified for the ~25 headline thinkers)
+ * UNION the Wikidata/Wikipedia URLs expand_minds stored on the row. This is
+ * what makes the entity link scale past the 25 hardcoded names to every
+ * Wikidata-sourced mind. Deduped, order-stable (curated first, then
+ * Wikipedia, then Wikidata). Returns undefined when empty so dropNulls strips
+ * the key rather than emitting `sameAs: []`.
+ */
+export function mindSameAs(
+  mind: Pick<MindDetail, "name" | "wikidata_url" | "wikipedia_url">,
+): string[] | undefined {
+  const urls = [
+    ...(lookupSameAs(mind.name) || []),
+    mind.wikipedia_url || "",
+    mind.wikidata_url || "",
+  ]
+    .map((u) => (u || "").trim())
+    .filter(Boolean);
+  const deduped = [...new Set(urls)];
+  return deduped.length ? deduped : undefined;
 }
 
 // ─── JSON-LD builders (drop empty leaves, matching jsonld_script) ───────
