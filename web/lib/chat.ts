@@ -167,7 +167,25 @@ function normalizeSession(s: SessionRow): Session {
  * update without a navigation (renderChatHistory was called on every mutation).
  */
 export const SESSIONS_CHANGED = "feynman:sessions-changed";
+
+// Module-level cache of the last sessions list. The left-sidebar ChatHistory is
+// NOT in a persistent layout (each page mounts its own AppShell/EntityLayout),
+// so it REMOUNTS on every navigation. Without a cache it paints empty → fetches
+// → refills — a visible flicker on every nav. ChatHistory seeds its state from
+// this cache so a remount paints the last-known list instantly, and only
+// revalidates when the cache is stale (TTL) or after a mutation (bumpSessions).
+let _sessionsCache: Session[] | null = null;
+let _sessionsCachedAt = 0;
+export const SESSIONS_TTL_MS = 30_000;
+export function getCachedSessions(): Session[] | null {
+  return _sessionsCache;
+}
+export function sessionsCacheFresh(ttl = SESSIONS_TTL_MS): boolean {
+  return _sessionsCache !== null && Date.now() - _sessionsCachedAt < ttl;
+}
+
 export function bumpSessions(): void {
+  _sessionsCachedAt = 0; // invalidate so the next load revalidates from the server
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(SESSIONS_CHANGED));
   }
@@ -176,7 +194,10 @@ export function bumpSessions(): void {
 /** GET /api/sessions → normalized list (newest first per server order). */
 export async function listSessions(): Promise<Session[]> {
   const rows = await get<SessionRow[]>("/api/sessions");
-  return (rows || []).map(normalizeSession);
+  const list = (rows || []).map(normalizeSession);
+  _sessionsCache = list;
+  _sessionsCachedAt = Date.now();
+  return list;
 }
 
 /** GET /api/sessions/{id} → single session (no messages loaded yet). */

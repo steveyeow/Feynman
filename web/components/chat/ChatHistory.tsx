@@ -18,6 +18,8 @@ import {
   listSessions,
   deleteSession as apiDeleteSession,
   bumpSessions,
+  getCachedSessions,
+  sessionsCacheFresh,
   SESSIONS_CHANGED,
   type Session,
 } from "@/lib/chat";
@@ -33,7 +35,9 @@ function WriteBookIcon() {
 
 export default function ChatHistory() {
   const { ready, authEnabled, user } = useAuth();
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // Seed from the module cache so a shell remount (every navigation) paints the
+  // last-known list immediately instead of flashing empty → fetch → refill.
+  const [sessions, setSessions] = useState<Session[]>(() => getCachedSessions() ?? []);
   const pathname = usePathname() || "";
   const router = useRouter();
 
@@ -45,32 +49,42 @@ export default function ChatHistory() {
   // we still load.
   const canLoad = ready && (!authEnabled || !!user);
 
-  const load = useCallback(() => {
+  const load = useCallback((force = false) => {
     if (!canLoad) return;
+    // Fresh cache → paint it and skip the network round-trip. This is what
+    // removes the per-navigation flicker: on a remount the list is already in
+    // state (seeded from cache), so we only re-fetch when stale or forced.
+    if (!force && sessionsCacheFresh()) {
+      const cached = getCachedSessions();
+      if (cached) setSessions(cached);
+      return;
+    }
     listSessions()
       .then(setSessions)
       .catch((e) => {
         // Non-fatal: an empty history is a valid state (and the common one in
-        // dev before any chats exist). Never throw into the shell.
+        // dev before any chats exist). Never throw into the shell. Keep the
+        // last-known list (cache) rather than blanking on a transient failure.
         console.warn("Failed to load sessions:", e);
-        setSessions([]);
+        if (!getCachedSessions()) setSessions([]);
       });
   }, [canLoad]);
 
+  // Mount: TTL-gated (no fetch when the cache is fresh) → no remount flicker.
   useEffect(() => {
     load();
   }, [load]);
 
   // Re-fetch when navigating between chats so a freshly created session and
-  // updated titles show up without a full reload.
+  // updated titles show up without a full reload (force past the TTL).
   useEffect(() => {
-    if (canLoad && pathname.startsWith("/chat/")) load();
+    if (canLoad && pathname.startsWith("/chat/")) load(true);
   }, [pathname, load, canLoad]);
 
   // Live-refresh on any session mutation (create / rename / delete / public flip)
   // so the pill text + public dot update without navigation (M16).
   useEffect(() => {
-    const onChanged = () => load();
+    const onChanged = () => load(true);
     window.addEventListener(SESSIONS_CHANGED, onChanged);
     return () => window.removeEventListener(SESSIONS_CHANGED, onChanged);
   }, [load]);
