@@ -243,7 +243,11 @@ def generate_topic_overview(topic: str) -> dict[str, Any]:
     if not text:
         return result
     if len(text) > _TOPIC_OVERVIEW_MAX_CHARS:
-        text = text[:_TOPIC_OVERVIEW_MAX_CHARS].rsplit(" ", 1)[0] + "…"
+        cut = text[:_TOPIC_OVERVIEW_MAX_CHARS]
+        # Prefer ending on a sentence boundary so the intro doesn't trail off
+        # mid-thought ("…applicable to…"); fall back to a word boundary + ellipsis.
+        end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+        text = cut[:end + 1] if end > _TOPIC_OVERVIEW_MAX_CHARS // 2 else cut.rsplit(" ", 1)[0] + "…"
     result["overview"] = text
     result["provider"] = provider_name
     return result
