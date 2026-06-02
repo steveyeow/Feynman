@@ -137,6 +137,8 @@ def retrieve(agent_id: str, query: str, top_k: int | None = None, provider_name:
         rows = get_chunks(agent_id)
         vector_results = []
         for row in rows:
+            if row["vector"] is None:
+                continue  # un-embedded chunk (e.g. a catalog stub) — skip, don't crash on bytes(None)
             vec = _bytes_to_vector(row["vector"], row["dim"])
             denom = float(query_norm * row["norm"]) or 1.0
             score = float(np.dot(query_vec, vec) / denom)
@@ -168,6 +170,8 @@ def _score_rows(rows: list[dict], ready_agents: dict, query_vec: np.ndarray, que
         agent = ready_agents.get(agent_id)
         if not agent:
             continue
+        if row["vector"] is None:
+            continue  # un-embedded chunk (catalog stub) — skip, don't crash on bytes(None)
         vec = _bytes_to_vector(row["vector"], row["dim"])
         denom = float(query_norm * row["norm"]) or 1.0
         score = float(np.dot(query_vec, vec) / denom)
