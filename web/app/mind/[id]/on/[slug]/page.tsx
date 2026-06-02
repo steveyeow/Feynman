@@ -103,7 +103,7 @@ export default async function MindOnTopicPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, mindUrl],
     [topic, canonical],
   ]);
