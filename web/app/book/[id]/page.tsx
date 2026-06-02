@@ -55,6 +55,19 @@ export async function generateMetadata({
   if (!data) {
     return { title: "Book not found — Feynman" };
   }
+  // A bare catalog stub — no sample passages, no chapters, no questions — is a
+  // low-unique-value page we can't ground. Keep it out of the index to
+  // concentrate crawl budget on real books (it's already excluded from the
+  // sitemap; this stops indexing via internal links too). It still renders for
+  // users; `follow` keeps its cross-links live. These two fetches are shared
+  // with the body (Next dedupes within the request), so no extra round trips.
+  const [stubQuestions, stubPassages] = await Promise.all([
+    getQuestions(params.id),
+    getSamplePassages(params.id, 3),
+  ]);
+  const isStub =
+    stubPassages.length === 0 && data.chapters.length === 0 && stubQuestions.length === 0;
+
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}`;
   const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
   const desc = bookDescription(data.subtitle, data.author);
@@ -62,6 +75,7 @@ export async function generateMetadata({
     title: `${data.title} — Feynman`,
     description: desc,
     alternates: { canonical },
+    ...(isStub ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       type: "book",
       title: data.title,
@@ -277,7 +291,9 @@ export default async function BookLandingPage({ params }: PageProps) {
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
       <PopularQuestions questions={questions} bookId={id} />
-      <LiveContentLink entityName={data.title} bookId={id} />
+      {/* A bare stub has had no chats, so /insights is an empty state — don't
+          point readers (or crawlers) at it. */}
+      {isStub ? null : <LiveContentLink entityName={data.title} bookId={id} />}
     </EntityLayout>
   );
 }

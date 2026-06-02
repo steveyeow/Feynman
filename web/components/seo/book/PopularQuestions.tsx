@@ -2,8 +2,10 @@
  * "Popular questions readers ask" — each question links to its own
  * /book/{id}/q/{slug} compound page (the long-tail SEO play). Port of
  * seo.py render_popular_questions (book_id + site_url branch). Uses
- * next/link with real paths (no hash). Companion FAQPage JSON-LD is
- * emitted by the page, not here.
+ * next/link with real paths (no hash). NO FAQPage JSON-LD here, by design:
+ * the answers aren't visible on this page (only the question links are), so
+ * FAQPage markup would violate Google's "answer must be on the page" rule.
+ * Each /q/{slug} page carries the compliant QAPage instead.
  */
 import Link from "next/link";
 import { slugify } from "@/lib/seo-book";

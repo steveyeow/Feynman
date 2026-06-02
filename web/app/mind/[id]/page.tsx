@@ -138,34 +138,22 @@ export default async function MindPage({
     </>
   );
 
-  const rail = (
-    <>
-      {related.length ? (
-        <div className="seo-rail-card">
-          <h3>Related minds</h3>
-          <ul>
-            {related.slice(0, 8).map((rm) => (
-              <li key={rm.id}>
-                <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {matchingTopics.length ? (
-        <div className="seo-rail-card">
-          <h3>Topics</h3>
-          <ul>
-            {matchingTopics.slice(0, 6).map((t) => (
-              <li key={t}>
-                <Link href={`/topic/${topicSlug(t)}`}>{t}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </>
-  );
+  // Rail = genuinely complementary "Related minds" only. The topic list lives in
+  // the body ("How {mind} approaches key topics"); a rail "Topics" card repeated
+  // the same labels on-screen (the bug the /topic review removed), so the
+  // body section now carries BOTH the essay link and the topic-hub link instead.
+  const rail = related.length ? (
+    <div className="seo-rail-card">
+      <h3>Related minds</h3>
+      <ul>
+        {related.slice(0, 8).map((rm) => (
+          <li key={rm.id}>
+            <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
 
   return (
     <EntityLayout hero={hero} rail={rail}>
@@ -191,6 +179,10 @@ export default async function MindPage({
               <li key={t}>
                 <Link href={`/mind/${params.id}/on/${topicSlug(t)}`}>
                   How {mind.name} approaches {t}
+                </Link>
+                {" · "}
+                <Link href={`/topic/${topicSlug(t)}`} className="seo-inline-link">
+                  {t} hub
                 </Link>
               </li>
             ))}

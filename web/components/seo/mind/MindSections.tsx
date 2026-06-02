@@ -28,7 +28,9 @@ export function Section({
 }) {
   return (
     <section className="seo-section">
-      <h2>{heading}</h2>
+      {/* Skip the heading when empty — DialoguesLink renders its own <h2>, and an
+          empty <h2></h2> is an a11y/SEO nit that would repeat on every page. */}
+      {heading ? <h2>{heading}</h2> : null}
       {children}
     </section>
   );
