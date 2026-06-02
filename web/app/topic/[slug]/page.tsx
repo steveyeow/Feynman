@@ -102,7 +102,7 @@ export default async function TopicPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Topics", `${SITE_URL}/#/library`],
+    ["Topics", `${SITE_URL}/library`],
     [topic, canonical],
   ]);
 
@@ -124,39 +124,12 @@ export default async function TopicPage({
     </>
   );
 
-  const rail = (
-    <>
-      {books.length ? (
-        <div className="seo-rail-card">
-          <h3>Books in this topic</h3>
-          <ul>
-            {books.slice(0, 8).map((b) => (
-              <li key={b.id}>
-                <Link href={`/book/${b.id}`}>{b.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {topicMinds.length ? (
-        <div className="seo-rail-card">
-          <h3>Great minds</h3>
-          <ul>
-            {topicMinds.slice(0, 8).map((m) => (
-              <li key={m.id}>
-                <Link href={`/mind/${m.id}`}>{m.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </>
-  );
-
-  const hasRail = books.length > 0 || topicMinds.length > 0;
-
+  // No right rail on topic pages — the page body IS the books + minds lists, so
+  // a rail of the same items would just duplicate the content on-screen. (Book/
+  // mind pages use the rail for complementary "related" items; a topic hub has
+  // no such secondary content.)
   return (
-    <EntityLayout hero={hero} rail={hasRail ? rail : undefined}>
+    <EntityLayout hero={hero}>
       <JsonLd data={collectionLd} />
       <JsonLd data={breadcrumbLd} />
 
@@ -222,7 +195,7 @@ export default async function TopicPage({
       ) : null}
 
       <p className="seo-cta-row">
-        <a className="primary" href={`${SITE_URL}/#/library`}>
+        <a className="primary" href={`${SITE_URL}/library`}>
           Explore the full Feynman library →
         </a>
       </p>

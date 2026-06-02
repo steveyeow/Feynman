@@ -618,22 +618,39 @@ export function filterBooksByTopic(
   limit = 30,
 ): AgentRowLite[] {
   const t = topic.toLowerCase();
-  const out: AgentRowLite[] = [];
-  const seen = new Set<string>();
+  // Dedupe by normalized title: the catalog holds the SAME book as both a
+  // full-title `catalog` stub and a short-title `ready` record ("Competitive
+  // Strategy: Techniques…" vs "Competitive Strategy"; "Good to Great" even has
+  // two stubs differing only in punctuation). Normalize = strip the subtitle
+  // after a colon/dash + punctuation, lowercase, collapse whitespace. On a
+  // collision, prefer the real (ready/indexing) book so the short correct title
+  // wins over the stub — which also makes the page's "N books" count honest.
+  const norm = (a: AgentRowLite) =>
+    (a.name || "")
+      .toLowerCase()
+      .split(/[:—]|\s-\s/)[0]
+      .replace(/[.,;:!?'"()]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const rank = (a: AgentRowLite) =>
+    a.status === "ready" || a.status === "indexing" ? 2 : a.status === "writing" ? 1 : 0;
+
+  const best = new Map<string, AgentRowLite>();
+  const order: string[] = [];
   for (const a of agents) {
     if (a.status === "error" && a.type !== "ai_book") continue;
     const cat = (a.meta?.category || "").toLowerCase();
-    if (cat && (cat === t || cat.includes(t) || t.includes(cat))) {
-      // Dedupe title-vs-subtitle catalog dupes ("Competitive Strategy" vs
-      // "Competitive Strategy: Techniques…") by the title stem before any colon.
-      const key = (a.name || "").toLowerCase().split(":")[0].replace(/\s+/g, " ").trim();
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      out.push(a);
-      if (out.length >= limit) break;
+    if (!(cat && (cat === t || cat.includes(t) || t.includes(cat)))) continue;
+    const k = norm(a) || a.id; // fall back to id if the title normalizes empty
+    const cur = best.get(k);
+    if (!cur) {
+      best.set(k, a);
+      order.push(k);
+    } else if (rank(a) > rank(cur)) {
+      best.set(k, a);
     }
   }
-  return out;
+  return order.map((k) => best.get(k)!).slice(0, limit);
 }
 
 /** Minds whose domain is relevant to a topic (uses isMindTopicRelevant). */

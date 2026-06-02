@@ -88,7 +88,7 @@ export default async function MindDialoguesPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, entityCanonical],
     ["Dialogues", canonical],
   ]);

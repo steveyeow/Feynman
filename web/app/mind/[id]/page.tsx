@@ -121,7 +121,7 @@ export default async function MindPage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Great Minds", `${SITE_URL}/#/minds`],
+    ["Great Minds", `${SITE_URL}/minds`],
     [mind.name, canonical],
   ]);
 
