@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -1508,10 +1509,98 @@ def find_existing_upload(name: str) -> dict[str, Any] | None:
         return _row_to_agent(row)
 
 
+_TITLE_SUBTITLE = re.compile(r"[:—]|\s-\s")
+_TITLE_PUNCT = re.compile(r"[.,;:!?'\"()]")
+_TITLE_WS = re.compile(r"\s+")
+
+
+def _norm_title(title: str) -> str:
+    """lowercase, drop punctuation, collapse whitespace — subtitle KEPT. Mirrors
+    the frontend `filterBooksByTopic` normalization so display and data agree."""
+    t = _TITLE_PUNCT.sub("", (title or "").lower())
+    return _TITLE_WS.sub(" ", t).strip()
+
+
+def title_stem(title: str) -> str:
+    """The main title with any subtitle dropped (everything after the first ':',
+    '—', or ' - '), normalized like `_norm_title`. The shared 'same book' key;
+    `scripts/dedup_catalog.py` mirrors it. 'Good to Great', 'Good to Great: Why
+    Some Companies…', and 'A World Brewed,' all collapse to one stem."""
+    head = _TITLE_SUBTITLE.split((title or ""), maxsplit=1)[0]
+    return _norm_title(head)
+
+
+def same_book(a: str, b: str) -> bool:
+    """Do two titles denote the SAME book? True when they're equal once
+    normalized, OR one is the other plus a subtitle (a prefix at a ':' / '—' /
+    ' - ' boundary): 'Good to Great' ≡ 'Good to Great: Why Some Companies…',
+    'A World Brewed' ≡ 'A World Brewed,'. Crucially, two DIFFERENT subtitles of a
+    shared subject stay distinct — 'Wittgenstein: Mind and Will (Vol 4)' is NOT
+    'Wittgenstein: Rules and Grammar (Vol 1)' — which a bare stem-equality check
+    would wrongly merge (and delete a real volume)."""
+    fa, fb = _norm_title(a), _norm_title(b)
+    if not fa or not fb:
+        return False
+    if fa == fb:
+        return True
+    # one side is the bare main title of the other (short ≡ short+subtitle)
+    return title_stem(a) == fb or title_stem(b) == fa
+
+
+def _agent_author(a: dict[str, Any]) -> str:
+    """An agent's author, normalized for comparison. meta.author is canonical;
+    `source` is the fallback (older catalog rows stashed the author there)."""
+    return (((a.get("meta") or {}).get("author")) or a.get("source") or "").strip().lower()
+
+
+def find_agent_by_normalized_name(title: str, author: str = "") -> dict[str, Any] | None:
+    """Dedup-at-SOURCE: find an existing, non-deleted agent that is the SAME BOOK
+    as `title` modulo subtitle / punctuation (via `same_book`) — so the catalog
+    stops minting subtitle/comma variants of one book as separate rows. Prefers a
+    ready/indexing record over a writing one over a bare catalog stub.
+
+    `author` guards against merging two genuinely different books that share a
+    title stem ("Leadership" by X vs by Y): a candidate is rejected only when
+    BOTH it and the incoming book name a (different) author — an empty author on
+    either side (the common catalog-stub case) still merges. Returns None if no
+    such book exists yet.
+
+    Mint is not a hot path (discovery is a background batch; chat book-context is
+    per-conversation), so a lightweight stem-scan is fine — only the handful of
+    stem matches are hydrated. Revisit with a stored stem column if the catalog
+    grows large."""
+    if not _norm_title(title):
+        return None
+    new_author = (author or "").strip().lower()
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            "SELECT id, name, status FROM agents WHERE is_deleted = ?"
+        ), (False if _USE_PG else 0,))
+    cand_ids = [r["id"] for r in rows if same_book(title, r["name"] or "")]
+
+    best: dict[str, Any] | None = None
+    best_rank = -1
+    for cid in cand_ids:
+        a = get_agent(cid)
+        if not a:
+            continue
+        a_author = _agent_author(a)
+        if new_author and a_author and new_author != a_author:
+            continue  # same title, different known author → a different book
+        s = a.get("status") or ""
+        rank = 2 if s in ("ready", "indexing") else 1 if s == "writing" else 0
+        if rank > best_rank:
+            best, best_rank = a, rank
+    return best
+
+
 def create_catalog_agent(title: str, author: str = "", isbn: str | None = None,
                          category: str = "", description: str = "") -> str:
-    """Create a new catalog agent for a dynamically discovered book. Returns agent_id."""
-    existing = find_agent_by_name(title)
+    """Create a new catalog agent for a dynamically discovered book. Returns
+    agent_id. Deduplicates at the SOURCE: if the same book already exists under
+    any subtitle/punctuation variant, returns that row instead of minting a new
+    one (this is the chokepoint every catalog mint funnels through)."""
+    existing = find_agent_by_normalized_name(title, author) or find_agent_by_name(title)
     if existing:
         return existing["id"]
     meta = {"title": title, "author": author, "isbn": isbn, "category": category, "description": description}
