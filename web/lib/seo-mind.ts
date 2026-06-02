@@ -116,7 +116,7 @@ export const FAMOUS_MIND_SAMEAS: Record<string, string[]> = {
   ],
   "friedrich engels": [
     "https://en.wikipedia.org/wiki/Friedrich_Engels",
-    "https://www.wikidata.org/wiki/Q33760",
+    "https://www.wikidata.org/wiki/Q34787",
   ],
   "adam smith": [
     "https://en.wikipedia.org/wiki/Adam_Smith",
@@ -215,26 +215,28 @@ export function lookupSameAs(mindName: string): string[] | undefined {
 }
 
 /**
- * Full `sameAs` set for a mind's Person JSON-LD: the curated
- * FAMOUS_MIND_SAMEAS table (hand-verified for the ~25 headline thinkers)
- * UNION the Wikidata/Wikipedia URLs expand_minds stored on the row. This is
- * what makes the entity link scale past the 25 hardcoded names to every
- * Wikidata-sourced mind. Deduped, order-stable (curated first, then
- * Wikipedia, then Wikidata). Returns undefined when empty so dropNulls strips
- * the key rather than emitting `sameAs: []`.
+ * Full `sameAs` set for a mind's Person JSON-LD. The Wikidata/Wikipedia URLs
+ * stored on the row (resolved + verified from Wikidata's action API by
+ * expand_minds / backfill_mind_sameas — P31=Q5 + enwiki-gated) are
+ * AUTHORITATIVE and SUPERSEDE the curated FAMOUS_MIND_SAMEAS table: same two
+ * URL kinds, but correct by construction. The hand-curated table doesn't scale
+ * to 1000 minds and had at least one copy-paste error (Engels pointed at
+ * Russell's QID), so for any mind we've actually resolved we don't risk
+ * re-introducing a curated mistake. The table is the fallback ONLY for minds
+ * without stored links (the few Wikidata can't resolve by name). Deduped;
+ * undefined when empty so dropNulls strips the key rather than emit `sameAs: []`.
  */
 export function mindSameAs(
   mind: Pick<MindDetail, "name" | "wikidata_url" | "wikipedia_url">,
 ): string[] | undefined {
-  const urls = [
-    ...(lookupSameAs(mind.name) || []),
-    mind.wikipedia_url || "",
-    mind.wikidata_url || "",
-  ]
+  const stored = [mind.wikipedia_url || "", mind.wikidata_url || ""]
     .map((u) => (u || "").trim())
     .filter(Boolean);
-  const deduped = [...new Set(urls)];
-  return deduped.length ? deduped : undefined;
+  if (stored.length) return [...new Set(stored)];
+  const curated = (lookupSameAs(mind.name) || [])
+    .map((u) => (u || "").trim())
+    .filter(Boolean);
+  return curated.length ? [...new Set(curated)] : undefined;
 }
 
 // ─── JSON-LD builders (drop empty leaves, matching jsonld_script) ───────

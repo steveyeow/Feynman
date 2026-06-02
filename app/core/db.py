@@ -1575,7 +1575,8 @@ def list_minds(limit: int | None = None) -> list[dict[str, Any]]:
     """
     sql = (
         "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
-        "typical_phrases, works, avatar_seed, version, chat_count, created_at "
+        "typical_phrases, works, avatar_seed, wikidata_url, wikipedia_url, "
+        "version, chat_count, created_at "
         "FROM minds ORDER BY chat_count DESC, created_at ASC"
     )
     params: tuple[Any, ...] = ()
