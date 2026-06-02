@@ -53,29 +53,46 @@ export async function generateMetadata({
   const resolved = await resolveQuestion(params.id, params.slug);
   if (!resolved) return { title: "Question not found — Feynman" };
 
+  // Grounded-content presence drives BOTH the snippet and indexability. Cached
+  // server-side, so this is not an extra LLM call vs the body's fetch.
+  const qa = await getBookQa(params.id, resolved.question);
+  const answer = (qa?.answer || "").trim();
+  const hasGrounded = Boolean(answer || qa?.passages?.length);
+
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}/q/${params.slug}`;
+  const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
   let pageTitle = `${resolved.question} — ${data.title}`;
   if (pageTitle.length > 120) {
     pageTitle = pageTitle.slice(0, 117).replace(/\s+\S*$/, "") + "...";
   }
+  // The synthesized answer is the strongest, least-duplicative snippet; fall
+  // back to boilerplate only when there's no answer yet.
   const desc = clampDescription(
-    `Discuss "${resolved.question}" with the book "${data.title}" on Feynman.`,
+    answer || `Discuss "${resolved.question}" with the book "${data.title}" on Feynman.`,
   );
   return {
     title: pageTitle,
     description: desc,
     alternates: { canonical },
+    // No grounded answer or cited passage yet → keep this thin question page out
+    // of the index (its only on-page content would be generic fallback passages,
+    // not an answer to THIS question). It indexes once the answer is generated +
+    // cached on a later crawl; `follow` keeps link equity flowing meanwhile.
+    ...(hasGrounded ? {} : { robots: { index: false, follow: true } }),
     openGraph: {
       type: "article",
       title: resolved.question,
       description: desc,
       url: canonical,
       siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: data.title }],
     },
     twitter: {
       card: "summary_large_image",
+      site: "@steve_yeow",
       title: resolved.question,
       description: desc,
+      images: [ogImage],
     },
   };
 }

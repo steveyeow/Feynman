@@ -176,7 +176,7 @@ export default async function TopicPage({
                   href={`/mind/${m.id}/on/${params.slug}`}
                   className="seo-inline-link"
                 >
-                  How {m.name} approaches {topic} →
+                  How {m.name} might approach {topic} →
                 </Link>
               </li>
             ))}
