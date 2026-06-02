@@ -24,6 +24,11 @@ import {
 
 export const revalidate = 86400;
 export const dynamicParams = true;
+// Empty generateStaticParams() opts this dynamic route into ISR caching (render
+// on-demand, then CACHE) instead of dynamic-render-every-request (no-store).
+export function generateStaticParams() {
+  return [];
+}
 
 function introText(topic: string, bookCount: number, mindCount: number): string {
   const parts: string[] = [];

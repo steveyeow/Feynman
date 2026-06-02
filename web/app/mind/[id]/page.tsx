@@ -30,10 +30,16 @@ import {
   type MindDetail,
 } from "@/lib/seo-mind";
 
-// Daily ISR; no generateStaticParams — minds are minted continuously and the
-// set is large, so we render on-demand and cache.
+// Daily ISR. The EMPTY generateStaticParams() is load-bearing: it opts this
+// dynamic route into the static/ISR path — prerender NONE (minds are minted
+// continuously and the set is large) but render on-demand on first hit, then
+// CACHE. Without it, Next 14 renders dynamically on every request (no-store),
+// so every crawl re-hit Supabase.
 export const revalidate = 86400;
 export const dynamicParams = true;
+export function generateStaticParams() {
+  return [];
+}
 
 function descFor(mind: MindDetail): string {
   const base =
