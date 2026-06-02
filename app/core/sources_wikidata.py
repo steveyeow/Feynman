@@ -97,17 +97,28 @@ DOMAIN_QUERIES: dict[str, str] = {
 
 
 def _http_get(url: str, params: dict[str, str] | None = None,
-              headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
+              headers: dict[str, str] | None = None, timeout: int = 60,
+              retries: int = 2) -> Any:
     """Thin wrapper — lazy-imports httpx so this module stays importable
-    even when sources_wikidata isn't actually used."""
+    even when sources_wikidata isn't actually used. The Wikidata Query
+    Service is slow + flaky under load, so we use a generous timeout and
+    retry transient failures with backoff."""
     import httpx
     h = {"User-Agent": _UA, "Accept": "application/json"}
     if headers:
         h.update(headers)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as c:
-        r = c.get(url, params=params or {}, headers=h)
-    r.raise_for_status()
-    return r.json()
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            with httpx.Client(timeout=timeout, follow_redirects=True) as c:
+                r = c.get(url, params=params or {}, headers=h)
+            r.raise_for_status()
+            return r.json()
+        except Exception as exc:  # timeout, 5xx, connection reset…
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(2 * (attempt + 1))
+    raise last_exc  # type: ignore[misc]
 
 
 def _cache_path(key: str) -> str:
@@ -212,7 +223,14 @@ def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> li
     out: list[dict[str, Any]] = []
     for domain, occ_qid in DOMAIN_QUERIES.items():
         log.info("Querying domain %s (occupation %s)…", domain, occ_qid)
-        for c in query_thinkers(occ_qid, limit=per_domain_limit):
+        try:
+            thinkers = query_thinkers(occ_qid, limit=per_domain_limit)
+        except Exception as exc:
+            # One slow/timed-out domain must not abort the whole expansion —
+            # skip it and keep going (re-run picks it up from the disk cache).
+            log.warning("domain %s query failed (%s) — skipping", domain, exc)
+            continue
+        for c in thinkers:
             if c["qid"] in seen:
                 # If a person matches multiple occupations (e.g. polymath),
                 # keep the FIRST domain we encountered them in. Could be
@@ -223,9 +241,12 @@ def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> li
             c["domain"] = domain
             out.append(c)
         time.sleep(throttle)
-    # Enrich with Wikipedia bio (one extra HTTP call per candidate;
-    # cached on disk so re-runs are free)
+    # Enrich with Wikipedia bio (one extra HTTP call per candidate; cached on
+    # disk so re-runs are free). Best-effort: a failed bio just stays blank.
     for c in out:
-        c["bio_summary"] = fetch_wikipedia_intro(c["wikipedia_slug"])
+        try:
+            c["bio_summary"] = fetch_wikipedia_intro(c["wikipedia_slug"])
+        except Exception:
+            c["bio_summary"] = ""
         time.sleep(throttle / 5)  # Wikipedia REST is generous
     return out

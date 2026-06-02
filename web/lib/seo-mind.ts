@@ -619,10 +619,16 @@ export function filterBooksByTopic(
 ): AgentRowLite[] {
   const t = topic.toLowerCase();
   const out: AgentRowLite[] = [];
+  const seen = new Set<string>();
   for (const a of agents) {
     if (a.status === "error" && a.type !== "ai_book") continue;
     const cat = (a.meta?.category || "").toLowerCase();
     if (cat && (cat === t || cat.includes(t) || t.includes(cat))) {
+      // Dedupe title-vs-subtitle catalog dupes ("Competitive Strategy" vs
+      // "Competitive Strategy: Techniques…") by the title stem before any colon.
+      const key = (a.name || "").toLowerCase().split(":")[0].replace(/\s+/g, " ").trim();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
       out.push(a);
       if (out.length >= limit) break;
     }
