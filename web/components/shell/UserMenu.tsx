@@ -90,10 +90,13 @@ export default function UserMenu() {
           {email && <span className="user-menu-email">{email}</span>}
         </div>
         <div className="user-menu-divider" />
-        <button type="button" className="user-menu-item" onClick={(e) => e.stopPropagation()}>
+        {/* A row that *contains* the ThemeToggle <button>, so it must NOT be a
+            <button> itself (button-in-button = invalid HTML → hydration error).
+            A div with stopPropagation keeps the menu open on in-row clicks. */}
+        <div className="user-menu-item" onClick={(e) => e.stopPropagation()}>
           <span>Theme</span>
           <span style={{ marginLeft: "auto" }}><ThemeToggle /></span>
-        </button>
+        </div>
         {authEnabled && user && (
           <Link className="user-menu-item" href="/subscription" onClick={() => setOpen(false)}>
             Subscription
