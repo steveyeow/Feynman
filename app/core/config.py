@@ -37,6 +37,11 @@ GEMINI_API_KEYS = [k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",")
 GEMINI_API_KEY = GEMINI_API_KEYS[0] if GEMINI_API_KEYS else ""
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta").strip()
 GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-2.5-flash").strip()
+# Model used ONLY for bulk programmatic generation (SEO essays/Q&A/overviews/
+# personas), not live user chat. Empty → fall back to GEMINI_CHAT_MODEL. Set to a
+# cheaper tier (e.g. gemini-2.5-flash-lite) to cut scale costs further; combined
+# with thinking-off (bulk_chat) it's the lever for the programmatic supply.
+GEMINI_BULK_CHAT_MODEL = os.getenv("GEMINI_BULK_CHAT_MODEL", "").strip()
 GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "gemini-embedding-001").strip()
 
 KIMI_API_KEY = os.getenv("KIMI_API_KEY", "").strip()

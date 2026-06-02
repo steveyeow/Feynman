@@ -209,7 +209,7 @@ class GeminiProvider(BaseProvider):
                 all_embeddings.append(item.get("values", []))
         return all_embeddings
 
-    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None) -> ChatResult:
+    def chat(self, system: str, user: str, history: list[dict[str, str]] | None = None, use_grounding: bool = False, timeout: int | None = None, thinking_budget: int | None = None, model: str | None = None) -> ChatResult:
         parts: list[dict[str, str]] = []
         prompt = system.strip()
         if prompt:
@@ -224,9 +224,16 @@ class GeminiProvider(BaseProvider):
                 }
             ]
         }
+        # thinking_budget=0 disables gemini-2.5-flash's (default-on) thinking. The
+        # thinking tokens bill as OUTPUT ($2.50/1M), so disabling it is ~3× cheaper
+        # for the programmatic generators that don't need deep reasoning. None =
+        # model default (kept for live user chat). `model` overrides the chat model
+        # per-call (e.g. a cheaper bulk tier) without affecting live chat.
+        if thinking_budget is not None:
+            payload["generationConfig"] = {"thinkingConfig": {"thinkingBudget": thinking_budget}}
         if use_grounding:
             payload["tools"] = [{"google_search": {}}]
-        path = f"/models/{self.chat_model}:generateContent"
+        path = f"/models/{model or self.chat_model}:generateContent"
         data = self._post(path, payload, timeout=timeout)
         candidates = data.get("candidates", [])
         if not candidates:
@@ -407,8 +414,15 @@ def chat_with_fallback(
     max_total_seconds: float | None = None,
     timeout: int | None = None,
     provider_order: list[str] | None = None,
+    thinking_budget: int | None = None,
+    gemini_model: str | None = None,
 ) -> tuple[ChatResult, BaseProvider]:
     """Try each provider in order until one succeeds. Returns (result, provider).
+
+    *thinking_budget* and *gemini_model* apply ONLY to the Gemini provider (other
+    providers ignore them): thinking_budget=0 disables thinking, gemini_model
+    swaps the model per call. See bulk_chat() for the programmatic-generation
+    preset that uses both.
 
     *timeout* is the per-provider HTTP timeout (defaults to _CHAT_TIMEOUT = 30s).
     Callers expecting long outputs (e.g. mind persona generation) should pass a
@@ -432,12 +446,20 @@ def chat_with_fallback(
         if not provider.has_key():
             continue
         try:
+            # thinking_budget / model are Gemini-only kwargs; don't pass them to
+            # providers whose chat() signature doesn't accept them.
+            extra: dict[str, Any] = {}
+            if isinstance(provider, GeminiProvider):
+                extra["thinking_budget"] = thinking_budget
+                if gemini_model:
+                    extra["model"] = gemini_model
             result = provider.chat(
                 system=system,
                 user=user,
                 history=history,
                 use_grounding=use_grounding and isinstance(provider, GeminiProvider),
                 timeout=per_timeout,
+                **extra,
             )
             return result, provider
         except Exception as exc:
@@ -445,3 +467,16 @@ def chat_with_fallback(
             errors.append(f"{name}: {exc}")
             continue
     raise ProviderError("All providers failed: " + "; ".join(errors))
+
+
+def bulk_chat(system: str, user: str, **kwargs: Any) -> tuple[ChatResult, BaseProvider]:
+    """chat_with_fallback tuned for PROGRAMMATIC BULK generation — SEO essays,
+    grounded Q&A, book overviews, mind personas, mind suggestions. Disables
+    Gemini thinking (~3× cheaper output; these tasks don't need deep reasoning)
+    and uses the optional cheaper bulk model (config.GEMINI_BULK_CHAT_MODEL, e.g.
+    gemini-2.5-flash-lite). LIVE user chat (mind_chat, book RAG, book writing)
+    does NOT route through here — it keeps full thinking + the primary model.
+    Extra kwargs (timeout, provider_order, …) pass through unchanged."""
+    kwargs.setdefault("thinking_budget", 0)
+    kwargs.setdefault("gemini_model", config.GEMINI_BULK_CHAT_MODEL or None)
+    return chat_with_fallback(system, user, **kwargs)
