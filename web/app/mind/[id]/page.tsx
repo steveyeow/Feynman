@@ -23,7 +23,7 @@ import {
   fetchMindLibrary,
   fetchMindThemes,
   isMindTopicRelevant,
-  lookupSameAs,
+  mindSameAs,
   metaDescription,
   personJsonLd,
   topicSlug,
@@ -116,7 +116,7 @@ export default async function MindPage({
     domain: mind.domain || "",
     url: canonical,
     image: ogImage,
-    sameAs: lookupSameAs(mind.name),
+    sameAs: mindSameAs(mind),
     dateModified: mind.created_at || "",
   });
   const breadcrumbLd = breadcrumbJsonLd([
