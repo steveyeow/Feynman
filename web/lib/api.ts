@@ -110,9 +110,13 @@ export async function apiFetch<T = unknown>(
   // caches authenticated/user fetches (a token present); a caller can opt out
   // explicitly via opts.cache or opts.next.
   const isGet = !opts.method || opts.method.toUpperCase() === "GET";
-  const cacheInit: { next?: { revalidate: number } } =
+  // The "ssr" tag lets POST /api/revalidate bust every cached SSR read at once
+  // (after a content batch), so data changes go live in seconds instead of
+  // waiting out the 1-day revalidate window — without shortening it (no constant
+  // egress cost; the cache only refreshes when we explicitly invalidate it).
+  const cacheInit: { next?: { revalidate: number; tags?: string[] } } =
     isServer && isGet && !_authToken && !("cache" in opts) && !("next" in opts)
-      ? { next: { revalidate: SSR_REVALIDATE } }
+      ? { next: { revalidate: SSR_REVALIDATE, tags: ["ssr"] } }
       : {};
 
   let res = await fetch(`${base}${path}`, { ...opts, ...cacheInit, headers: buildHeaders() });
