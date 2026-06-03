@@ -19,15 +19,48 @@
   overflow: hidden;
 }
 
-/* The scroll container for the reading column. */
+/* The page-flip viewport — clips the multi-column flow; nav arrows + page bar
+   overlay it absolutely. */
 .stage {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  position: relative;
+  overflow: hidden;
+}
+
+/* The whole book, laid out in viewport-height CSS columns (one page wide,
+   centered); we translateX to flip between pages. width / column-width /
+   column-gap / padding / --page-h / transform are set inline from measured
+   metrics (see Reader.tsx). */
+.flow {
+  height: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  column-fill: auto;
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+.pageBreakBefore {
+  break-before: column;
+}
+.pageBreakAfter {
+  break-after: column;
+}
+
+/* Loading / error / empty states are simple centered overlays (the stage is no
+   longer a flex column). */
+.stage > :global(.reader-loading),
+.stage > :global(.reader-empty) {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
 }
 
 .dot {
@@ -54,21 +87,17 @@
 /* ── The book: one comfortable measure, centered ───────────────────────── */
 .book {
   width: 100%;
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 44px 48px 96px;
-  flex: 1 0 auto;
 }
 
-/* Cover block at the top of the scroll. */
+/* Cover — its own centered first page (break-after sends ch.1 to a new column). */
 .cover {
   text-align: center;
-  padding: 24px 0 40px;
-  margin-bottom: 36px;
-  border-bottom: 1px solid var(--border);
+  min-height: var(--page-h, 70vh);
+  padding: 0 0 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
 }
 .coverTitle {
   font: 700 30px/1.35 "Libre Baskerville", "Georgia", serif;
@@ -117,11 +146,9 @@
 }
 
 /* ── Chapters / sections ──────────────────────────────────────────────── */
+/* Chapters start on fresh pages (pageBreakBefore), so no inter-section margin. */
 .section {
   scroll-margin-top: 20px;
-}
-.section + .section {
-  margin-top: 56px;
 }
 .chapterHeader {
   margin-bottom: 24px;
@@ -179,15 +206,14 @@
 }
 
 /* ── End page ─────────────────────────────────────────────────────────── */
+/* End — its own centered final page (pageBreakBefore). */
 .endPage {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-top: 64px;
-  padding-top: 32px;
-  border-top: 1px solid var(--border);
+  min-height: var(--page-h, 70vh);
   color: var(--text-muted);
   font: 400 13px/1.6 "Inter", sans-serif;
   text-align: center;
@@ -229,6 +255,74 @@
 }
 .copyLinkInline:hover {
   opacity: 0.85;
+}
+
+/* ── Page-flip controls: edge arrows + bottom page bar ────────────────── */
+.navBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  z-index: 5;
+  transition: background 0.15s, color 0.15s;
+}
+.navBtn:hover {
+  background: var(--glass-regular, rgba(0, 0, 0, 0.05));
+  color: var(--text);
+}
+.navPrev {
+  left: 10px;
+}
+.navNext {
+  right: 10px;
+}
+
+.pageBar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--glass-regular, rgba(255, 255, 255, 0.7));
+  border: 1px solid var(--glass-edge, var(--border));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 5;
+  pointer-events: none;
+}
+.pageNum {
+  font: 500 11px/1 "Inter", sans-serif;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.progressTrack {
+  width: 130px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border, rgba(0, 0, 0, 0.12));
+  overflow: hidden;
+}
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.38s ease;
 }
 
 /* ── Right sidebar: related questions ─────────────────────────────────── */
@@ -345,9 +439,6 @@
   .toc {
     display: none;
   }
-  .book {
-    padding: 32px 22px 80px;
-  }
   .prose {
     font-size: 16px;
   }
@@ -357,9 +448,24 @@
   .chapterTitle {
     font-size: 20px;
   }
+  .navBtn {
+    width: 34px;
+    height: 60px;
+  }
+  .navPrev {
+    left: 2px;
+  }
+  .navNext {
+    right: 2px;
+  }
+  .progressTrack {
+    width: 84px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .flow,
+  .progressFill,
   .endChatBtn,
   .questionBtn,
   .toast {
