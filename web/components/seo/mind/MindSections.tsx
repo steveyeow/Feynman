@@ -132,7 +132,7 @@ export function RelatedMinds({ minds }: { minds: MindDetail[] }) {
       <ul className="related-minds">
         {list.map((m) => (
           <li key={m.id}>
-            <Link href={`/mind/${m.id}`}>{m.name}</Link>
+            <Link href={`/mind/${m.slug || m.id}`}>{m.name}</Link>
             {m.era ? ` — ${m.era}` : ""}
           </li>
         ))}
