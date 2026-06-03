@@ -29,6 +29,8 @@ export interface MindDetail {
   era?: string;
   domain?: string;
   bio_summary?: string;
+  /** Generated first-person self-intro (imagined). Drives the first-person About. */
+  voice?: string;
   thinking_style?: string;
   typical_phrases?: string[];
   /** Full persona is stripped by /api/minds and /api/minds/{id} (system-prompt
