@@ -10,7 +10,6 @@ import { coverStyleFromTitle, coverInitials } from "@/lib/books";
 import SamplePassages from "@/components/seo/book/SamplePassages";
 import TableOfContents from "@/components/seo/book/TableOfContents";
 import PopularQuestions from "@/components/seo/book/PopularQuestions";
-import LiveContentLink from "@/components/seo/book/LiveContentLink";
 
 import {
   SITE_URL,
@@ -252,6 +251,19 @@ export default async function BookLandingPage({ params }: PageProps) {
           </ul>
         </div>
       ) : null}
+      {isStub ? null : (
+        <div className="seo-rail-card">
+          <h3>AI insights</h3>
+          <ul>
+            <li>
+              <Link href={`/book/${encodeURIComponent(id)}/insights`}>
+                AI insights about {data.title}
+              </Link>
+            </li>
+          </ul>
+          <p>Accumulated AI commentary, drawn from real reader chat sessions.</p>
+        </div>
+      )}
       {related.books.length ? (
         <div className="seo-rail-card">
           <h3>Related books</h3>
@@ -338,9 +350,6 @@ export default async function BookLandingPage({ params }: PageProps) {
       <SamplePassages passages={passages} />
       <TableOfContents chapters={data.chapters} />
       <PopularQuestions questions={questions} bookId={id} />
-      {/* A bare stub has had no chats, so /insights is an empty state — don't
-          point readers (or crawlers) at it. */}
-      {isStub ? null : <LiveContentLink entityName={data.title} bookId={id} />}
     </EntityLayout>
   );
 }
