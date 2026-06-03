@@ -178,7 +178,10 @@ async def _llm_referer_middleware(request: Request, call_next):
 # the canonical UUID BEFORE routing, so every endpoint works unchanged. UUID
 # segments skip the lookup (fast path); unknown segments fall through untouched.
 _UUID_SEG = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-_SLUG_PATH = re.compile(r"^(/api/agents/|/api/minds/|/book/|/mind/)([^/]+)(/.*)?$")
+# /api/public/book/ is the public reader mirror SSR uses for sample passages; it
+# resolves by UUID (get_agent), so without slug rewriting it 404s for every
+# slug-based book page — leaving the "Sample passages" SEO section empty.
+_SLUG_PATH = re.compile(r"^(/api/agents/|/api/minds/|/api/public/book/|/book/|/mind/)([^/]+)(/.*)?$")
 
 
 @app.middleware("http")

@@ -487,6 +487,11 @@ interface ReadResponse {
  * We coalesce whichever is present into leading SamplePassage objects.
  * Returns [] on any failure (catalog stubs / no content / API down).
  */
+// Gutenberg / scan boilerplate that makes a useless "sample passage" if it
+// leaks past the front-matter skip below.
+const FRONT_MATTER_RE =
+  /transcriber|project\s+gutenberg|gutenberg-tm|produced\s+by|distributed\s+proofread|all\s+rights\s+reserved|electronic\s+edition/i;
+
 export async function getSamplePassages(
   id: string,
   count = 3,
@@ -517,12 +522,25 @@ export async function getSamplePassages(
   }
 
   if (Array.isArray(res.paragraphs) && res.paragraphs.length) {
-    for (const p of res.paragraphs) {
-      const text = (p || "").trim();
-      if (text.length < 40) continue; // skip headers / stray fragments
-      out.push({ index: out.length, text });
-      if (out.length >= count) break;
-    }
+    const paras = res.paragraphs;
+    // Skip front matter (transcriber's notes, title page, contents) — for a long
+    // book the opening paragraphs are boilerplate that makes a poor, non-
+    // representative sample. Start ~10% in, require real prose length, and drop
+    // Gutenberg boilerplate; fall back to any substantive paragraph if empty.
+    const start = Math.min(
+      Math.floor(paras.length * 0.1),
+      Math.max(paras.length - count, 0),
+    );
+    const pick = (from: number, minLen: number) => {
+      for (let i = from; i < paras.length && out.length < count; i++) {
+        const text = (paras[i] || "").trim();
+        if (text.length < minLen) continue;
+        if (FRONT_MATTER_RE.test(text)) continue;
+        out.push({ index: out.length, text });
+      }
+    };
+    pick(start, 100);
+    if (!out.length) pick(0, 40);
     return out;
   }
 
