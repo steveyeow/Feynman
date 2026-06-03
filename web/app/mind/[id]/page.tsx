@@ -135,11 +135,41 @@ export default async function MindPage({
     { label: `Chat with ${mind.name}`, href: chatHref, variant: "primary" },
   ];
 
+  // First-person hook — the mind's own signature line (a real quote, no
+  // generation). Turns the page from "an article about X" into "X's voice".
+  const signatureQuote = (mind.typical_phrases || []).find(
+    (p) => p && p.trim().length > 12,
+  );
+  // Starter prompts deep-link into the chat funnel (/?mind=&q=), preselecting the
+  // mind AND prefilling the question — interaction entries, not a dead-end button.
+  const starters = [
+    ...matchingTopics.slice(0, 3).map((t) => ({
+      label: t,
+      q: `How would you approach ${t}?`,
+    })),
+    { label: "Where might you be wrong?", q: `Where might your own ideas be wrong or incomplete?` },
+  ];
+
   const hero = (
     <>
       <p className="seo-meta">Great mind</p>
       <h1>{mind.name}</h1>
       {eraDomain ? <p className="seo-meta">{eraDomain}</p> : null}
+      {signatureQuote ? (
+        <blockquote className="mind-signature">{`“${signatureQuote}”`}</blockquote>
+      ) : null}
+      <div className="mind-starters">
+        <span className="mind-starters-label">Think with {mind.name}:</span>
+        {starters.map((s) => (
+          <Link
+            key={s.q}
+            href={`/?mind=${encodeURIComponent(params.id)}&q=${encodeURIComponent(s.q)}`}
+            className="mind-starter-chip"
+          >
+            {s.label}
+          </Link>
+        ))}
+      </div>
       <EntityActions actions={actions} shareUrl={canonical} shareTitle={mind.name} />
     </>
   );
@@ -166,35 +196,61 @@ export default async function MindPage({
       <JsonLd data={personLd} />
       <JsonLd data={breadcrumbLd} />
 
-      <MindBio bio={mind.bio_summary} />
-      <MindThinkingStyle style={mind.thinking_style} />
-      <MindPhrases phrases={mind.typical_phrases} />
-      {/* Full persona stays private; the API exposes a bounded excerpt. */}
-      <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
-      <MindWorks works={mind.works} agents={agents} />
-
+      {/* ① The distinctive supply, up front: imagined, persona-grounded
+          perspectives (Type 2) Wikipedia structurally can't have — as clickable
+          cards, not a buried list. */}
       {matchingTopics.length ? (
         <section className="seo-section">
-          <h2>How {mind.name} approaches key topics</h2>
+          <h2>Think with {mind.name}</h2>
           <p className="seo-meta">
-            Imagined, persona-grounded perspectives — read how {mind.name} would
-            reason about each field, then take the question further in conversation.
+            Imagined, persona-grounded perspectives — how {mind.name} would reason
+            about each field. Read one, then take the question further in conversation.
           </p>
-          <ul className="mind-on-topics">
+          <div className="mind-topic-cards">
             {matchingTopics.slice(0, 8).map((t) => (
-              <li key={t}>
-                <Link href={`/mind/${params.id}/on/${topicSlug(t)}`}>
-                  How {mind.name} approaches {t}
-                </Link>
-                {" · "}
-                <Link href={`/topic/${topicSlug(t)}`} className="seo-inline-link">
-                  {t} hub
-                </Link>
+              <Link
+                key={t}
+                href={`/mind/${params.id}/on/${topicSlug(t)}`}
+                className="mind-topic-card"
+              >
+                <span className="mind-topic-card-eyebrow">How {mind.name} approaches</span>
+                <span className="mind-topic-card-title">{t}</span>
+                <span className="mind-topic-card-cta">Read the perspective →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* ② A LIVING mind: what people actually discuss + recent dialogues (Type 4). */}
+      {themes.length ? (
+        <section className="seo-section">
+          <h2>What people explore with {mind.name}</h2>
+          <p className="seo-meta">
+            Topics readers have actually been discussing with {mind.name} on Feynman.
+            Updates as new conversations happen.
+          </p>
+          <ul className="theme-list">
+            {themes.map((t) => (
+              <li key={t.topic} className="theme-chip">
+                {t.topic}
+                {t.count > 1 ? <span className="theme-count"> ×{t.count}</span> : null}
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+      <DialoguesLink mindId={params.id} name={mind.name} />
+
+      {/* ③ In their voice — signature phrases + core approach (first-person feel). */}
+      <MindPhrases phrases={mind.typical_phrases} />
+      {/* Full persona stays private; the API exposes a bounded excerpt. */}
+      <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
+
+      {/* ④ Encyclopedic context — demoted below the distinctive content. */}
+      <MindBio bio={mind.bio_summary} />
+      <MindThinkingStyle style={mind.thinking_style} />
+      <MindWorks works={mind.works} agents={agents} />
 
       {libraryExtra.length ? (
         <section className="seo-section">
@@ -208,26 +264,6 @@ export default async function MindPage({
           </ul>
         </section>
       ) : null}
-
-      {themes.length ? (
-        <section className="seo-section">
-          <h2>Recent themes in conversations</h2>
-          <p className="seo-meta">
-            Topics readers have actually been discussing with {mind.name} on
-            Feynman, aggregated across sessions. Updates as new conversations happen.
-          </p>
-          <ul className="theme-list">
-            {themes.map((t) => (
-              <li key={t.topic} className="theme-chip">
-                {t.topic}
-                {t.count > 1 ? <span className="theme-count"> ×{t.count}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <DialoguesLink mindId={params.id} name={mind.name} />
     </EntityLayout>
   );
 }
