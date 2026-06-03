@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
@@ -22,9 +22,28 @@ function handle(req: NextRequest): NextResponse {
   if (token !== TOKEN) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
-  const tag = req.nextUrl.searchParams.get("tag") || "ssr";
-  revalidateTag(tag);
-  return NextResponse.json({ ok: true, revalidated: tag, at: Date.now() });
+  // revalidateTag("ssr") only busts entries CREATED after the tag shipped; to
+  // refresh pages cached before then, revalidatePath purges a route's Data +
+  // Route cache outright. type=page is REQUIRED to bust a dynamic-route PATTERN
+  // like /mind/[id] (all instances) — without it Next treats the brackets as a
+  // literal path and matches nothing.
+  const path = req.nextUrl.searchParams.get("path");
+  const tag = req.nextUrl.searchParams.get("tag");
+  const done: string[] = [];
+  if (path) {
+    const type = req.nextUrl.searchParams.get("type");
+    revalidatePath(path, type === "page" || type === "layout" ? type : undefined);
+    done.push(`path:${path}${type ? `:${type}` : ""}`);
+  }
+  if (tag) {
+    revalidateTag(tag);
+    done.push(`tag:${tag}`);
+  }
+  if (!path && !tag) {
+    revalidateTag("ssr");
+    done.push("tag:ssr");
+  }
+  return NextResponse.json({ ok: true, revalidated: done, at: Date.now() });
 }
 
 export const POST = handle;
