@@ -196,6 +196,15 @@ export default async function MindPage({
       <JsonLd data={personLd} />
       <JsonLd data={breadcrumbLd} />
 
+      {/* First-person About — the mind in their own (imagined) voice, up top.
+          Turns "an article about X" into "X, talking to you". */}
+      {mind.voice ? (
+        <section className="seo-section mind-voice-section">
+          <p className="mind-voice-label">In {mind.name}&apos;s own words · imagined</p>
+          <p className="mind-voice-text">{mind.voice}</p>
+        </section>
+      ) : null}
+
       {/* ① The distinctive supply, up front: imagined, persona-grounded
           perspectives (Type 2) Wikipedia structurally can't have — as clickable
           cards, not a buried list. */}

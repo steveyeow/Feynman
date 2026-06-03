@@ -1794,6 +1794,9 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
         "era": row["era"] or "",
         "domain": row["domain"] or "",
         "bio_summary": row["bio_summary"] or "",
+        # First-person "voice" self-intro (generated; meta_json.voice). Drives the
+        # Feynman-native first-person About. `.get` — absent on list SELECTs / older rows.
+        "voice": (json.loads(row["meta_json"]) if row.get("meta_json") else {}).get("voice") or "",
         "persona": row["persona"],
         "thinking_style": row["thinking_style"] or "",
         "typical_phrases": json.loads(row["typical_phrases"] or "[]"),
