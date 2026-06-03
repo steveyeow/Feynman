@@ -40,7 +40,7 @@ export default async function BookDiscussionsPage({
   const canonical = abs(`/book/${params.id}/discussions`);
   const chatHref = `/?book=${encodeURIComponent(params.id)}`;
   const actions: EntityAction[] = [
-    { label: `Chat about this book`, href: chatHref, variant: "primary" },
+    { label: `Chat with this book`, href: chatHref, variant: "primary" },
     { label: `About ${book.title}`, href: `/book/${params.id}`, variant: "secondary" },
   ];
 

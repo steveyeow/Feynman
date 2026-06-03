@@ -11,7 +11,6 @@ import SamplePassages from "@/components/seo/book/SamplePassages";
 import TableOfContents from "@/components/seo/book/TableOfContents";
 import PopularQuestions from "@/components/seo/book/PopularQuestions";
 import LiveContentLink from "@/components/seo/book/LiveContentLink";
-import EntityComposer from "@/components/chat/EntityComposer";
 
 import {
   SITE_URL,
@@ -154,16 +153,21 @@ export default async function BookLandingPage({ params }: PageProps) {
     { name: "Books", url: `${SITE_URL}/library` },
     { name: data.title, url: canonical },
   ]);
-  // ── Top actions ───────────────────────────────────────────────────────
-  // Chat now lives in the in-page <EntityComposer> right below the hero (the
-  // real grounded chat, book pre-set) — so the hero keeps only Read/Preview (a
-  // redundant "Chat about this book" button would just duplicate the composer).
-  // Catalog stubs simply have no Read/Preview; the composer is their entry.
+  // ── Top actions (per product direction) ───────────────────────────────
+  // Chat ALWAYS available → routes to the conversational surface (home composer
+  // preselects the book), NOT the reader — so catalog stubs with no readable
+  // text still start a chat (fixes the dead-end). Read/Preview appear only when
+  // the book actually has content, and go to the reader.
+  const chatHref = `/?book=${encodeURIComponent(id)}`;
   const actions: EntityAction[] = [];
   if (caps.read) {
     actions.push({ label: `Read`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
+    actions.push({ label: `Chat with this book`, href: chatHref, variant: "secondary" });
   } else if (caps.preview) {
     actions.push({ label: `Preview`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
+    actions.push({ label: `Chat with this book`, href: chatHref, variant: "secondary" });
+  } else {
+    actions.push({ label: `Chat with this book`, href: chatHref, variant: "primary" });
   }
 
   const metaBits: string[] = [];
@@ -252,14 +256,6 @@ export default async function BookLandingPage({ params }: PageProps) {
       <JsonLd data={bookLd} />
       <JsonLd data={breadcrumbLd} />
 
-      {/* Activation bridge: start the real grounded chat right here (book
-          pre-set, free, great minds auto-join) instead of bouncing off a
-          static page. */}
-      <EntityComposer
-        book={{ id, title: data.title, author: data.author }}
-        source="book"
-      />
-
       <section className="seo-section">
         {overview ? (
           overview.overview
@@ -281,15 +277,15 @@ export default async function BookLandingPage({ params }: PageProps) {
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            Full text isn&apos;t indexed yet — chat still works, drawing on general
-            knowledge and the book&apos;s metadata.
+            Full text isn&apos;t indexed yet — this overview draws on general
+            knowledge of the book and its metadata, and chat works the same way.
           </p>
         ) : null}
       </section>
 
       {overview && overview.concepts.length ? (
         <section className="seo-section">
-          <h2>Key concepts in {data.title}</h2>
+          <h2>Key concepts</h2>
           <ul className="key-concepts">
             {overview.concepts.map((c, i) => (
               <li key={i}>
