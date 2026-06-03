@@ -46,6 +46,9 @@ export default function Reader({ id }: { id: string }) {
   // ── Page-flip state ───────────────────────────────────────────────────
   const viewportRef = useRef<HTMLDivElement | null>(null); // overflow-clip box
   const flowRef = useRef<HTMLDivElement | null>(null); // the multi-column flow
+  const windowRef = useRef<HTMLDivElement | null>(null); // the one-page clip window
+  const flipDir = useRef<"left" | "right">("right");
+  const firstFlip = useRef(true);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   // colW = one page's text measure; gap = off-screen spacing; step = flip stride;
@@ -163,9 +166,28 @@ export default function Reader({ id }: { id: string }) {
     setActiveChapter(active);
   }, [page, content, totalPages]);
 
+  // Replay the legacy fade-shift on each page turn — the flow is positioned
+  // instantly (no transition); the window plays flipLeft/flipRight (opacity +
+  // 12px shift), matching the old innerHTML page swap. Skip the initial mount.
+  useEffect(() => {
+    if (firstFlip.current) {
+      firstFlip.current = false;
+      return;
+    }
+    const el = windowRef.current;
+    if (!el) return;
+    el.classList.remove(styles.flipLeft, styles.flipRight);
+    void el.offsetWidth; // reflow to restart the CSS animation
+    el.classList.add(
+      flipDir.current === "left" ? styles.flipLeft : styles.flipRight,
+    );
+  }, [page]);
+
   // ── Navigation ──────────────────────────────────────────────────────────
   const goToPage = useCallback((n: number) => {
-    setPage(Math.max(0, Math.min(n, totalRef.current - 1)));
+    const clamped = Math.max(0, Math.min(n, totalRef.current - 1));
+    flipDir.current = clamped < pageRef.current ? "left" : "right";
+    setPage(clamped);
   }, []);
   const prev = useCallback(() => goToPage(pageRef.current - 1), [goToPage]);
   const next = useCallback(() => goToPage(pageRef.current + 1), [goToPage]);
@@ -389,10 +411,16 @@ export default function Reader({ id }: { id: string }) {
             <nav className={styles.tocNav}>
               <button
                 type="button"
-                className={`${styles.tocItem}${activeChapter === "cover" ? " " + styles.tocActive : ""}`}
+                className={`${styles.tocItem} ${styles.tocCover}${activeChapter === "cover" ? " " + styles.tocActive : ""}`}
                 onClick={() => jumpToChapter("cover")}
               >
-                Cover
+                <span className={styles.tocNum}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                  </svg>
+                </span>
+                <span className={styles.tocLabel}>Cover</span>
               </button>
               {toc.map((t) => (
                 <button
@@ -446,6 +474,7 @@ export default function Reader({ id }: { id: string }) {
           {paginated && content && (
             <div
               className={styles.window}
+              ref={windowRef}
               style={{ width: metrics.colW || undefined }}
             >
             <div
@@ -465,26 +494,40 @@ export default function Reader({ id }: { id: string }) {
             >
               <article className={styles.book}>
                 <header className={`${styles.cover} ${styles.pageBreakAfter}`}>
-                  <h1 className={styles.coverTitle}>{content.title}</h1>
-                  {content.subtitle && (
-                    <p className={styles.coverSubtitle}>{content.subtitle}</p>
-                  )}
-                  {content.author && (
-                    <p className={styles.coverAuthor}>{content.author}</p>
-                  )}
-                  <div className={styles.coverStats}>
-                    <span>{content.totalWords.toLocaleString()} words</span>
-                    <span className={styles.dot2} />
-                    <span>~{content.readMinutes} min read</span>
-                    {content.hasChapters && (
-                      <>
-                        <span className={styles.dot2} />
-                        <span>{content.sections.length} chapters</span>
-                      </>
+                  <div className={styles.coverBody}>
+                    <h1 className={styles.coverTitle}>{content.title}</h1>
+                    {content.subtitle && (
+                      <p className={styles.coverSubtitle}>{content.subtitle}</p>
+                    )}
+                    {content.author && (
+                      <p className={styles.coverAuthor}>{content.author}</p>
+                    )}
+                    <div className={styles.coverStats}>
+                      <span>{content.totalWords.toLocaleString()} words</span>
+                      <span className={styles.dot2} />
+                      <span>~{content.readMinutes} min read</span>
+                      {content.hasChapters && (
+                        <>
+                          <span className={styles.dot2} />
+                          <span>{content.sections.length} chapters</span>
+                        </>
+                      )}
+                    </div>
+                    {content.contentTier === "preview" && (
+                      <span className={styles.previewLabel}>Preview</span>
                     )}
                   </div>
-                  {content.contentTier === "preview" && (
-                    <span className={styles.previewLabel}>Preview</span>
+                  {/* Publisher imprint — Feynman logo, AI books only (legacy). */}
+                  {content.type === "ai_book" && (
+                    <div className={styles.imprint}>
+                      <svg className={styles.imprintLogo} width="22" height="22" viewBox="0 0 64 64" fill="none">
+                        <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="32" cy="30" r="3.5" fill="currentColor" />
+                        <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      <span className={styles.imprintName}>Feynman</span>
+                    </div>
                   )}
                 </header>
 
@@ -529,14 +572,14 @@ export default function Reader({ id }: { id: string }) {
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                         </svg>
-                        Chat with this book
+                        Chat
                       </button>
                     </>
                   ) : (
                     <>
                       <p>End of book</p>
                       <p className={styles.endSub}>
-                        Enjoyed this? Share it from the top bar, or{" "}
+                        Enjoyed this book? Use the share control in the top bar, or{" "}
                         <button
                           type="button"
                           className={styles.copyLinkInline}
@@ -544,7 +587,6 @@ export default function Reader({ id }: { id: string }) {
                         >
                           copy link
                         </button>
-                        .
                       </p>
                     </>
                   )}
@@ -579,21 +621,19 @@ export default function Reader({ id }: { id: string }) {
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </button>
-              <div className={styles.pageBar} aria-live="polite">
-                <span className={styles.pageNum}>
-                  {page + 1} / {totalPages}
-                </span>
-                <span className={styles.progressTrack}>
-                  <span
-                    className={styles.progressFill}
-                    style={{ width: `${progress}%` }}
-                  />
-                </span>
+              <div className={styles.pageNum} aria-live="polite">
+                {page + 1} / {totalPages}
               </div>
             </>
           )}
         </main>
       </div>
+
+      {paginated && totalPages > 1 && (
+        <div className={styles.progressBar}>
+          <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+        </div>
+      )}
 
       <div className={`${styles.toast} ${toast ? styles.toastShow : ""}`} aria-live="polite">
         {toast}

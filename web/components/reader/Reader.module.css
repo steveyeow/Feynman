@@ -1,7 +1,9 @@
-/* Reader — net-new layout/typography for the scrollable serif reading column.
-   Global glass classes (.reader-topbar, .reader-back-btn, .reader-topbar-*,
-   .chat-sidebar-right) come from styles/app.css + liquid.css; only the reading
-   surface and the question sidebar list are defined here. */
+/* Reader — faithful port of the legacy app.js / styles.css reader (the values
+   below are copied 1:1 from styles.css §reader so the Next port reproduces the
+   pre-refactor reading experience exactly). The page-flip uses CSS columns +
+   a clip window (one page wide) translated instantly between pages, with the
+   legacy fade-shift animation (flipLeft/flipRight) replayed on the window each
+   page turn — visually identical to the old innerHTML page swap. */
 
 .reader {
   display: flex;
@@ -10,6 +12,7 @@
   min-height: 0;
   background: var(--bg-chat);
   overflow: hidden;
+  position: relative;
 }
 
 .layout {
@@ -19,8 +22,82 @@
   overflow: hidden;
 }
 
-/* The page-flip viewport — clips the multi-column flow; nav arrows + page bar
-   overlay it absolutely. */
+/* ── Sidebar TOC (legacy .reader-sidebar + .reader-toc) ─────────────────── */
+.toc {
+  width: 280px;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 12px 0;
+  background: var(--bg-sidebar);
+  scrollbar-width: thin;
+}
+.tocNav {
+  display: flex;
+  flex-direction: column;
+}
+.tocItem {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 24px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  font: 400 12.5px/1.45 "Libre Baskerville", "Georgia", serif;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tocItem:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.02);
+}
+.tocActive {
+  color: #6b5344;
+  border-left-color: #6b5344;
+  background: rgba(107, 83, 68, 0.05);
+  font-weight: 600;
+}
+:global(html.dark) .tocActive {
+  color: #c4a882;
+  border-left-color: #c4a882;
+  background: rgba(196, 168, 130, 0.07);
+}
+.tocNum {
+  flex-shrink: 0;
+  min-width: 14px;
+  font: 400 11px/1 "Libre Baskerville", "Georgia", serif;
+  color: var(--text-muted);
+}
+.tocActive .tocNum {
+  color: #6b5344;
+}
+:global(html.dark) .tocActive .tocNum {
+  color: #c4a882;
+}
+.tocLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Cover TOC item — a subtle separator above the chapters (legacy). */
+.tocCover {
+  margin-bottom: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.tocCover .tocNum {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Stage (legacy .reader-stage + .reader-content) ────────────────────── */
 .stage {
   flex: 1;
   min-width: 0;
@@ -29,27 +106,49 @@
   overflow: hidden;
 }
 
-/* The single-page CLIP WINDOW — exactly one column wide, centered in the stage.
-   Its overflow:hidden is what makes the reader show ONE page at a time: the
-   flow's other columns spill past this window's edge and are clipped (the stage
-   itself is full-width, so clipping there would leak the next page). Width is
-   set inline = the measured column width. */
+/* The single-page CLIP WINDOW — exactly one column wide, centered; clips the
+   flow's other columns at the page edge so only the current page shows. The
+   legacy fade-shift plays here on each page turn. Width set inline = colW. */
 .window {
   height: 100%;
   margin: 0 auto;
   position: relative;
   overflow: hidden;
 }
+.flipRight {
+  animation: flipRight 0.2s ease;
+}
+.flipLeft {
+  animation: flipLeft 0.2s ease;
+}
+@keyframes flipRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes flipLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
 
-/* The whole book, laid out in viewport-height CSS columns (one page wide); we
-   translateX to flip between pages. width / column-width / column-gap / padding
-   / --page-h / transform are set inline from measured metrics (see Reader.tsx). */
+/* The book laid out in viewport-height columns; positioned (translateX) with NO
+   transition — the fade-shift on .window provides the motion. width/columnWidth/
+   gap/padding/--page-h/transform are set inline from measured metrics. */
 .flow {
   height: 100%;
   box-sizing: border-box;
   column-fill: auto;
-  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
 }
 .pageBreakBefore {
   break-before: column;
@@ -58,8 +157,7 @@
   break-after: column;
 }
 
-/* Loading / error / empty states are simple centered overlays (the stage is no
-   longer a flex column). */
+/* Loading / error / empty overlays. */
 .stage > :global(.reader-loading),
 .stage > :global(.reader-empty) {
   position: absolute;
@@ -72,12 +170,10 @@
   text-align: center;
   padding: 24px;
 }
-
 .dot {
   color: var(--text-muted);
   font-size: 14px;
 }
-
 .emptyAction {
   margin: 0;
   padding: 8px 18px;
@@ -94,16 +190,22 @@
   border-color: var(--accent);
 }
 
-/* ── The book: one comfortable measure, centered ───────────────────────── */
 .book {
   width: 100%;
 }
 
-/* Cover — its own centered first page (break-after sends ch.1 to a new column). */
+/* ── Cover page (legacy .reader-cover) — body centered, imprint sunk bottom ── */
 .cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   text-align: center;
-  min-height: var(--page-h, 70vh);
-  padding: 0 0 16px;
+  min-height: var(--page-h, 65vh);
+  padding: 48px 24px 32px;
+}
+.coverBody {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -113,25 +215,25 @@
   font: 700 30px/1.35 "Libre Baskerville", "Georgia", serif;
   color: var(--text);
   margin: 0;
-  max-width: 520px;
+  max-width: 480px;
 }
 .coverSubtitle {
-  font: 400 14px/1.7 "Libre Baskerville", "Georgia", serif;
+  font: 400 13.5px/1.7 "Libre Baskerville", "Georgia", serif;
   color: var(--text-secondary);
-  margin: 16px 0 0;
-  max-width: 440px;
+  margin: 18px 0 0;
+  max-width: 400px;
 }
 .coverAuthor {
   font: 400 13.5px/1.4 "Libre Baskerville", "Georgia", serif;
   color: var(--text);
-  margin: 24px 0 0;
+  margin: 36px 0 0;
   letter-spacing: 0.04em;
 }
 .coverStats {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 16px;
   font: 400 11px/1 "Inter", sans-serif;
   color: var(--text-muted);
   letter-spacing: 0.02em;
@@ -141,7 +243,7 @@
   height: 3px;
   border-radius: 50%;
   background: var(--text-muted);
-  opacity: 0.4;
+  opacity: 0.35;
 }
 .previewLabel {
   display: inline-block;
@@ -155,8 +257,27 @@
   color: var(--card-badge-indexing-color, var(--text-secondary));
 }
 
-/* ── Chapters / sections ──────────────────────────────────────────────── */
-/* Chapters start on fresh pages (pageBreakBefore), so no inter-section margin. */
+/* Publisher imprint — Feynman logo + name, AI books only (legacy). */
+.imprint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 48px;
+}
+.imprintLogo {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+.imprintName {
+  font: 400 11.5px/1 "Libre Baskerville", "Georgia", serif;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+/* ── Chapters ──────────────────────────────────────────────────────────── */
 .section {
   scroll-margin-top: 20px;
 }
@@ -180,24 +301,24 @@
   margin: 0;
 }
 
-/* ── Reading prose — the text that must stay clean ─────────────────────── */
+/* ── Reading prose (legacy .reader-page-inner) ─────────────────────────── */
 .prose {
-  font: 400 17px/1.85 "Libre Baskerville", "Georgia", serif;
+  font: 400 15.5px/1.9 "Libre Baskerville", "Georgia", serif;
   color: var(--text);
-  letter-spacing: -0.003em;
+  letter-spacing: -0.005em;
 }
 .prose :global(p) {
-  margin: 0 0 1.4em;
+  margin: 0 0 1.35em;
 }
 .prose :global(h2),
 .prose :global(h3),
 .prose :global(h4) {
   font-family: "Inter", sans-serif;
   color: var(--text);
-  margin: 1.6em 0 0.7em;
+  margin: 1.5em 0 0.7em;
 }
 .prose :global(h2) {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 700;
 }
 .prose :global(h3) {
@@ -215,41 +336,39 @@
   font-style: italic;
 }
 
-/* ── End page ─────────────────────────────────────────────────────────── */
-/* End — its own centered final page (pageBreakBefore). */
+/* ── End page (legacy .reader-end-page) ────────────────────────────────── */
 .endPage {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: var(--page-h, 70vh);
+  gap: 8px;
+  min-height: 40vh;
   color: var(--text-muted);
-  font: 400 13px/1.6 "Inter", sans-serif;
+  font: 400 13px/1.5 "Inter", sans-serif;
   text-align: center;
 }
 .endSub {
   font-size: 12px;
-  opacity: 0.85;
-  margin: 0;
+  opacity: 0.7;
+  margin: -2px 0 0;
 }
 .endChatBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 12px;
-  padding: 9px 22px;
+  padding: 8px 20px;
   border: none;
   border-radius: 999px;
   background: var(--accent);
   color: #fff;
   font: 600 13px/1 "Inter", sans-serif;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s;
+  transition: opacity 0.15s;
 }
 .endChatBtn:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  opacity: 0.85;
 }
 .copyLinkInline {
   margin: 0;
@@ -267,161 +386,71 @@
   opacity: 0.85;
 }
 
-/* ── Page-flip controls: edge arrows + bottom page bar ────────────────── */
+/* ── Prev / Next (legacy .reader-nav) — flat edge arrows, opacity 0.5 ───── */
 .navBtn {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 44px;
-  height: 72px;
+  top: 0;
+  bottom: 0;
+  width: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 14px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  opacity: 0.5;
   z-index: 5;
-  transition: background 0.15s, color 0.15s;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
 }
 .navBtn:hover {
-  background: var(--glass-regular, rgba(0, 0, 0, 0.05));
+  opacity: 1;
   color: var(--text);
+  background: rgba(0, 0, 0, 0.02);
 }
 .navPrev {
-  left: 10px;
+  left: 0;
 }
 .navNext {
-  right: 10px;
+  right: 0;
 }
 
-.pageBar {
+/* ── Page number (legacy .reader-page-num) — bottom center, inside text ─── */
+.pageNum {
   position: absolute;
-  bottom: 16px;
+  bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 16px;
-  border-radius: 999px;
-  background: var(--glass-regular, rgba(255, 255, 255, 0.7));
-  border: 1px solid var(--glass-edge, var(--border));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  z-index: 5;
-  pointer-events: none;
-}
-.pageNum {
-  font: 500 11px/1 "Inter", sans-serif;
+  font: 400 11px/1 "Libre Baskerville", "Georgia", serif;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+  letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  z-index: 5;
 }
-.progressTrack {
-  width: 130px;
-  height: 3px;
-  border-radius: 999px;
-  background: var(--border, rgba(0, 0, 0, 0.12));
-  overflow: hidden;
+
+/* ── Progress bar (legacy .reader-progress-bar) — full-width 2px, bottom ── */
+.progressBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border);
+  z-index: 20;
 }
 .progressFill {
-  display: block;
   height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.38s ease;
+  width: 0;
+  background: #6b5344;
+  opacity: 0.6;
+  transition: width 0.25s ease;
+}
+:global(html.dark) .progressFill {
+  background: #c4a882;
 }
 
-/* ── Right sidebar: related questions ─────────────────────────────────── */
-.sidebar {
-  /* .chat-sidebar-right.visible is display:block from app.css; widen a touch. */
-  width: 280px;
-}
-.questionList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.questionBtn {
-  text-align: left;
-  width: 100%;
-  padding: 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-card, 12px);
-  background: var(--bg-chat);
-  color: var(--text-secondary);
-  font: 400 13px/1.45 "Inter", sans-serif;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
-}
-.questionBtn:hover {
-  background: var(--bg-elev);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-.questionBtn:active {
-  transform: scale(0.99);
-}
-
-/* ── Left chapter TOC (scroll-spy) ────────────────────────────────────── */
-.toc {
-  width: 232px;
-  flex-shrink: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 28px 12px 28px 20px;
-  border-right: 1px solid var(--border);
-  scrollbar-width: thin;
-}
-.tocNav {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.tocItem {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-secondary);
-  font: 400 13px/1.4 "Inter", sans-serif;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
-}
-.tocItem:hover {
-  background: var(--bg-elev);
-  color: var(--text);
-}
-.tocActive {
-  background: var(--bg-elev);
-  color: var(--text);
-  font-weight: 600;
-}
-.tocNum {
-  flex-shrink: 0;
-  min-width: 16px;
-  font: 600 11px/1.4 "Inter", sans-serif;
-  color: var(--text-muted);
-}
-.tocActive .tocNum {
-  color: var(--accent);
-}
-.tocLabel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Toast ────────────────────────────────────────────────────────────── */
+/* ── Toast ─────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
   bottom: 32px;
@@ -443,42 +472,40 @@
   transform: translateX(-50%) translateY(0);
 }
 
-/* ── Responsive ───────────────────────────────────────────────────────── */
+/* ── Responsive (legacy breakpoints) ───────────────────────────────────── */
+@media (max-width: 1024px) {
+  .toc {
+    width: 220px;
+  }
+  .tocItem {
+    padding: 9px 18px;
+    font-size: 12px;
+  }
+}
 @media (max-width: 900px) {
-  .sidebar,
   .toc {
     display: none;
   }
+  .navBtn {
+    width: 36px;
+  }
   .prose {
-    font-size: 16px;
+    font-size: 15px;
   }
   .coverTitle {
-    font-size: 25px;
+    font-size: 26px;
   }
   .chapterTitle {
     font-size: 20px;
   }
-  .navBtn {
-    width: 34px;
-    height: 60px;
-  }
-  .navPrev {
-    left: 2px;
-  }
-  .navNext {
-    right: 2px;
-  }
-  .progressTrack {
-    width: 84px;
-  }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .flow,
+  .flipLeft,
+  .flipRight,
   .progressFill,
   .endChatBtn,
-  .questionBtn,
   .toast {
+    animation: none;
     transition: none;
   }
 }
