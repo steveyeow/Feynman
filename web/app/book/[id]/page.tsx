@@ -190,6 +190,20 @@ export default async function BookLandingPage({ params }: PageProps) {
         {data.author ? <p className="seo-author">by {data.author}</p> : null}
         {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
         <EntityActions actions={actions} shareUrl={canonical} shareTitle={data.title} />
+        {questions.length ? (
+          <div className="mind-starters">
+            <span className="mind-starters-label">Ask this book:</span>
+            {questions.slice(0, 3).map((q) => (
+              <Link
+                key={q}
+                href={`/?book=${encodeURIComponent(id)}&q=${encodeURIComponent(q)}`}
+                className="mind-starter-chip"
+              >
+                {q.length > 40 ? q.slice(0, 38).replace(/\s+\S*$/, "") + "…" : q}
+              </Link>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 
@@ -36,6 +37,8 @@ def build_prompt(name: str, domain: str, bio: str, style: str) -> str:
         "person — 2 to 3 sentences, 40-65 words. Say how you see your field and the "
         "one thing you most want a newcomer to grasp. Use 'I'. Make it an invitation "
         "to think together — NOT a resume, NO birth/death dates, never 'I was a …'. "
+        "Do NOT open with a greeting (no 'Ah', 'Hello', 'Greetings', 'Welcome', "
+        "'Hi', 'Hail') — open directly with your name or an idea. "
         f"Ground it in:\n{(bio or '')[:380]}\n{(style or '')[:280]}"
     )
 
@@ -56,7 +59,13 @@ def main() -> int:
 
     with get_conn() as conn:
         rows = _fetchall(conn, "SELECT id, name, domain, bio_summary, thinking_style, meta_json FROM minds")
-    todo = [r for r in rows if not json.loads(r.get("meta_json") or "{}").get("voice")]
+    # (Re)generate if there's no voice OR the voice opens with a canned greeting
+    # ("Ah, greetings!" repeated across minds = a templated tell to kill).
+    greet = re.compile(r"^\s*(ah\b|hello\b|greetings\b|welcome\b|hi\b|hail\b)", re.I)
+    def needs(r) -> bool:
+        v = (json.loads(r.get("meta_json") or "{}").get("voice") or "").strip()
+        return (not v) or bool(greet.match(v))
+    todo = [r for r in rows if needs(r)]
     print(f"{len(todo)} minds need a voice (of {len(rows)})", file=sys.stderr)
 
     done = failed = 0
