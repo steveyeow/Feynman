@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   getBookContent,
@@ -14,17 +22,15 @@ import { track } from "@/lib/analytics";
 import styles from "./Reader.module.css";
 
 /**
- * Book Reader — client island. Port of renderReader() in app.js, adapted to the
- * brief's cleaner reading model: instead of the legacy page-flip paginator we
- * render the whole book as one scrollable serif column (calmer, link-shareable,
- * no resize math). Keeps the glass topbar (back · title · details · share) and
- * adds a right sidebar of "try asking" questions that hand off to the home
- * composer.
+ * Book Reader — client island. Port of renderReader() in app.js, restoring the
+ * legacy horizontal PAGE-FLIP model: the book flows into viewport-height CSS
+ * columns and we translateX between them. Navigate with ←/→ (and space/Home/
+ * End), edge arrows, or swipe; a page counter + progress bar track position.
+ * The cover and each chapter start on a fresh page; the TOC jumps by page.
+ * Keeps the glass topbar (back · title · details · share) and the right
+ * "try asking" sidebar.
  *
  * Cross-surface contract: a question click routes to `/?book={id}&q={encoded}`.
- * The home composer (Chat migration) is expected to read those query params and
- * prefill the book context + question. Until then the link is harmless (lands
- * on home).
  */
 export default function Reader({ id }: { id: string }) {
   const router = useRouter();
@@ -38,9 +44,29 @@ export default function Reader({ id }: { id: string }) {
 
   const shareWrapRef = useRef<HTMLDivElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Chapter TOC (scroll-spy) — the scroll container is the reading stage.
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [activeChapter, setActiveChapter] = useState<number | "cover" | null>(null);
+
+  // ── Page-flip state ───────────────────────────────────────────────────
+  const viewportRef = useRef<HTMLDivElement | null>(null); // overflow-clip box
+  const flowRef = useRef<HTMLDivElement | null>(null); // the multi-column flow
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  // colW = one page's text measure; gap = off-screen spacing; step = flip stride;
+  // pageH = usable column height (drives the centered cover).
+  const [metrics, setMetrics] = useState({
+    colW: 0,
+    gap: 72,
+    padV: 44,
+    step: 0,
+    pageH: 0,
+  });
+  const [activeChapter, setActiveChapter] = useState<number | "cover" | null>(
+    null,
+  );
+  const chapterPagesRef = useRef<Map<number, number>>(new Map());
+  const pageRef = useRef(0);
+  pageRef.current = page;
+  const totalRef = useRef(1);
+  totalRef.current = totalPages;
 
   const detailsHref = `/book/${encodeURIComponent(id)}`;
 
@@ -50,6 +76,7 @@ export default function Reader({ id }: { id: string }) {
     setLoading(true);
     setError(null);
     setContent(null);
+    setPage(0);
 
     (async () => {
       try {
@@ -83,6 +110,117 @@ export default function Reader({ id }: { id: string }) {
       alive = false;
     };
   }, [id]);
+
+  // ── Pagination measurement ──────────────────────────────────────────────
+  // Two passes (both pre-paint, so no flash): (1) derive the column metrics from
+  // the viewport size → state → React applies them; (2) read the laid-out flow's
+  // scrollWidth → page count + per-chapter start pages.
+  const measureMetrics = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const W = vp.clientWidth;
+    const H = vp.clientHeight;
+    if (!W || !H) return;
+    const minMargin = W < 700 ? 22 : 56;
+    const colW = Math.max(240, Math.min(W - 2 * minMargin, 660));
+    const padV = H < 560 ? 28 : 44;
+    const gap = 72;
+    setMetrics((m) =>
+      m.colW === colW && m.padV === padV && m.pageH === H - 2 * padV
+        ? m
+        : { colW, gap, padV, step: colW + gap, pageH: H - 2 * padV },
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!content || content.sections.length === 0) return;
+    measureMetrics();
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const ro = new ResizeObserver(() => measureMetrics());
+    ro.observe(vp);
+    return () => ro.disconnect();
+  }, [content, measureMetrics]);
+
+  useLayoutEffect(() => {
+    const flow = flowRef.current;
+    if (!flow || !content || content.sections.length === 0 || metrics.colW === 0)
+      return;
+    const sw = flow.scrollWidth;
+    const total = Math.max(1, Math.round((sw + metrics.gap) / metrics.step));
+    const map = new Map<number, number>();
+    flow.querySelectorAll<HTMLElement>("[data-chapter]").forEach((el) => {
+      const ch = Number(el.getAttribute("data-chapter"));
+      if (!Number.isNaN(ch)) map.set(ch, Math.round(el.offsetLeft / metrics.step));
+    });
+    chapterPagesRef.current = map;
+    setTotalPages(total);
+    setPage((p) => Math.min(p, total - 1));
+  }, [metrics, content]);
+
+  // Active chapter follows the current page (largest chapter whose start ≤ page).
+  useEffect(() => {
+    if (!content?.hasChapters) return;
+    const entries = Array.from(chapterPagesRef.current.entries()).sort(
+      (a, b) => a[1] - b[1],
+    );
+    let active: number | "cover" = "cover";
+    for (const [ch, start] of entries) {
+      if (page >= start) active = ch;
+      else break;
+    }
+    setActiveChapter(active);
+  }, [page, content, totalPages]);
+
+  // ── Navigation ──────────────────────────────────────────────────────────
+  const goToPage = useCallback((n: number) => {
+    setPage(Math.max(0, Math.min(n, totalRef.current - 1)));
+  }, []);
+  const prev = useCallback(() => goToPage(pageRef.current - 1), [goToPage]);
+  const next = useCallback(() => goToPage(pageRef.current + 1), [goToPage]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as Element | null;
+      if (
+        el &&
+        ((el.closest &&
+          el.closest("input, textarea, select, [contenteditable='true']")) ||
+          (el as HTMLElement).isContentEditable)
+      )
+        return;
+      if (e.key === "ArrowRight" || e.key === " ") {
+        e.preventDefault();
+        next();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prev();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        goToPage(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        goToPage(totalRef.current - 1);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [next, prev, goToPage]);
+
+  // Swipe (touch) on the viewport.
+  const touchX = useRef<number | null>(null);
+  function onTouchStart(e: ReactTouchEvent) {
+    touchX.current = e.changedTouches[0]?.clientX ?? null;
+  }
+  function onTouchEnd(e: ReactTouchEvent) {
+    if (touchX.current == null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchX.current;
+    if (Math.abs(dx) > 45) {
+      if (dx < 0) next();
+      else prev();
+    }
+    touchX.current = null;
+  }
 
   // ── Share popup: close on outside click / Escape ──────────────────────
   useEffect(() => {
@@ -150,54 +288,27 @@ export default function Reader({ id }: { id: string }) {
     }
   }
 
-  // ── Chapter TOC (port of reader-toc + active-chapter highlight, adapted to
-  //    the scroll model with a scroll-spy IntersectionObserver) ─────────────
+  // ── Chapter TOC → jump by page ────────────────────────────────────────
   const toc = (content?.sections || [])
     .filter((s) => s.chapter != null)
-    .map((s) => ({ num: s.chapter as number, title: s.title || `Chapter ${s.chapter}` }));
+    .map((s) => ({
+      num: s.chapter as number,
+      title: s.title || `Chapter ${s.chapter}`,
+    }));
   const showToc = !loading && !error && !!content && toc.length >= 2;
 
-  useEffect(() => {
-    if (!content?.hasChapters) return;
-    const stage = stageRef.current;
-    if (!stage) return;
-    const els = Array.from(stage.querySelectorAll<HTMLElement>("[data-chapter]"));
-    if (els.length < 2) return;
-    setActiveChapter((prev) => (prev == null ? "cover" : prev));
-    const io = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        const n = visible[0]?.target.getAttribute("data-chapter");
-        if (n != null) setActiveChapter(Number(n));
-      },
-      { root: stage, rootMargin: "0px 0px -65% 0px", threshold: 0 },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, [content]);
-
   function jumpToChapter(target: number | "cover") {
-    const stage = stageRef.current;
-    if (!stage) return;
     if (target === "cover") {
-      stage.scrollTo({ top: 0, behavior: "smooth" });
-      setActiveChapter("cover");
+      goToPage(0);
       return;
     }
-    stage
-      .querySelector(`#chapter-${target}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    setActiveChapter(target);
+    const p = chapterPagesRef.current.get(target);
+    if (p != null) goToPage(p);
   }
 
   function askQuestion(q: string) {
-    // Anonymous visitor on the hosted build: stash the book they came for + the
-    // question, then bounce through login. After sign-up the home composer
-    // restores the intent and resumes the chat (port of app.js 4930 +
-    // _savePendingBookIntent). Open-source (auth off) or signed-in users go
-    // straight to the composer.
+    // Anonymous visitor on the hosted build: stash the book + question, then
+    // bounce through login (port of app.js 4930 + _savePendingBookIntent).
     if (authEnabled && !user) {
       savePendingBookIntent(id, { question: q, via: "reader" });
       track("pending_intent_saved", { via: "reader" });
@@ -208,6 +319,9 @@ export default function Reader({ id }: { id: string }) {
   }
 
   const title = content?.title || "";
+  const paginated = !loading && !error && !!content && content.sections.length > 0;
+  const progress =
+    totalPages > 1 ? Math.round((page / (totalPages - 1)) * 100) : 0;
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -304,7 +418,12 @@ export default function Reader({ id }: { id: string }) {
             </nav>
           </aside>
         )}
-        <main className={styles.stage} ref={stageRef}>
+        <main
+          className={styles.stage}
+          ref={viewportRef}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+        >
           {loading && (
             <div className="reader-loading">
               <span className={styles.dot}>Loading book…</span>
@@ -333,94 +452,149 @@ export default function Reader({ id }: { id: string }) {
             </div>
           )}
 
-          {!loading && !error && content && content.sections.length > 0 && (
-            <article className={styles.book}>
-              <header className={styles.cover}>
-                <h1 className={styles.coverTitle}>{content.title}</h1>
-                {content.subtitle && (
-                  <p className={styles.coverSubtitle}>{content.subtitle}</p>
-                )}
-                {content.author && (
-                  <p className={styles.coverAuthor}>{content.author}</p>
-                )}
-                <div className={styles.coverStats}>
-                  <span>{content.totalWords.toLocaleString()} words</span>
-                  <span className={styles.dot2} />
-                  <span>~{content.readMinutes} min read</span>
-                  {content.hasChapters && (
+          {paginated && content && (
+            <div
+              className={styles.flow}
+              ref={flowRef}
+              style={
+                {
+                  width: metrics.colW || undefined,
+                  columnWidth: metrics.colW || undefined,
+                  columnGap: metrics.gap,
+                  paddingTop: metrics.padV,
+                  paddingBottom: metrics.padV,
+                  "--page-h": `${metrics.pageH}px`,
+                  transform: `translateX(${-page * metrics.step}px)`,
+                } as CSSProperties
+              }
+            >
+              <article className={styles.book}>
+                <header className={`${styles.cover} ${styles.pageBreakAfter}`}>
+                  <h1 className={styles.coverTitle}>{content.title}</h1>
+                  {content.subtitle && (
+                    <p className={styles.coverSubtitle}>{content.subtitle}</p>
+                  )}
+                  {content.author && (
+                    <p className={styles.coverAuthor}>{content.author}</p>
+                  )}
+                  <div className={styles.coverStats}>
+                    <span>{content.totalWords.toLocaleString()} words</span>
+                    <span className={styles.dot2} />
+                    <span>~{content.readMinutes} min read</span>
+                    {content.hasChapters && (
+                      <>
+                        <span className={styles.dot2} />
+                        <span>{content.sections.length} chapters</span>
+                      </>
+                    )}
+                  </div>
+                  {content.contentTier === "preview" && (
+                    <span className={styles.previewLabel}>Preview</span>
+                  )}
+                </header>
+
+                {content.sections.map((s, i) => (
+                  <section
+                    key={s.chapter != null ? `ch-${s.chapter}` : `sec-${i}`}
+                    className={`${styles.section}${s.chapter != null ? " " + styles.pageBreakBefore : ""}`}
+                    id={s.chapter != null ? `chapter-${s.chapter}` : undefined}
+                    data-chapter={s.chapter != null ? s.chapter : undefined}
+                  >
+                    {s.title && (
+                      <div className={styles.chapterHeader}>
+                        {s.chapter != null && (
+                          <span className={styles.chapterNum}>
+                            Chapter {s.chapter}
+                          </span>
+                        )}
+                        <h2 className={styles.chapterTitle}>{s.title}</h2>
+                      </div>
+                    )}
+                    <div
+                      className={styles.prose}
+                      // Sanitized at build time: renderReaderMarkdown escapes all
+                      // book text before emitting only its own tags.
+                      dangerouslySetInnerHTML={{ __html: s.html }}
+                    />
+                  </section>
+                ))}
+
+                <footer className={`${styles.endPage} ${styles.pageBreakBefore}`}>
+                  {content.contentTier === "preview" ? (
                     <>
-                      <span className={styles.dot2} />
-                      <span>{content.sections.length} chapters</span>
-                    </>
-                  )}
-                </div>
-                {content.contentTier === "preview" && (
-                  <span className={styles.previewLabel}>Preview</span>
-                )}
-              </header>
-
-              {content.sections.map((s, i) => (
-                <section
-                  key={s.chapter != null ? `ch-${s.chapter}` : `sec-${i}`}
-                  className={styles.section}
-                  id={s.chapter != null ? `chapter-${s.chapter}` : undefined}
-                  data-chapter={s.chapter != null ? s.chapter : undefined}
-                >
-                  {s.title && (
-                    <div className={styles.chapterHeader}>
-                      {s.chapter != null && (
-                        <span className={styles.chapterNum}>
-                          Chapter {s.chapter}
-                        </span>
-                      )}
-                      <h2 className={styles.chapterTitle}>{s.title}</h2>
-                    </div>
-                  )}
-                  <div
-                    className={styles.prose}
-                    // Sanitized at build time: renderReaderMarkdown escapes all
-                    // book text before emitting only its own <p>/<strong>/<em>/<h*> tags.
-                    dangerouslySetInnerHTML={{ __html: s.html }}
-                  />
-                </section>
-              ))}
-
-              <footer className={styles.endPage}>
-                {content.contentTier === "preview" ? (
-                  <>
-                    <p>End of preview</p>
-                    <p className={styles.endSub}>
-                      Chat with this book to explore further
-                    </p>
-                    <button
-                      type="button"
-                      className={styles.endChatBtn}
-                      onClick={() => askQuestion("")}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                      Chat with this book
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p>End of book</p>
-                    <p className={styles.endSub}>
-                      Enjoyed this? Share it from the top bar, or{" "}
+                      <p>End of preview</p>
+                      <p className={styles.endSub}>
+                        Chat with this book to explore further
+                      </p>
                       <button
                         type="button"
-                        className={styles.copyLinkInline}
-                        onClick={copyLink}
+                        className={styles.endChatBtn}
+                        onClick={() => askQuestion("")}
                       >
-                        copy link
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        Chat with this book
                       </button>
-                      .
-                    </p>
-                  </>
-                )}
-              </footer>
-            </article>
+                    </>
+                  ) : (
+                    <>
+                      <p>End of book</p>
+                      <p className={styles.endSub}>
+                        Enjoyed this? Share it from the top bar, or{" "}
+                        <button
+                          type="button"
+                          className={styles.copyLinkInline}
+                          onClick={copyLink}
+                        >
+                          copy link
+                        </button>
+                        .
+                      </p>
+                    </>
+                  )}
+                </footer>
+              </article>
+            </div>
+          )}
+
+          {/* Page-flip controls (only with >1 page) */}
+          {paginated && totalPages > 1 && (
+            <>
+              <button
+                type="button"
+                className={`${styles.navBtn} ${styles.navPrev}`}
+                aria-label="Previous page"
+                onClick={prev}
+                style={{ visibility: page === 0 ? "hidden" : undefined }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navBtn} ${styles.navNext}`}
+                aria-label="Next page"
+                onClick={next}
+                style={{ visibility: page >= totalPages - 1 ? "hidden" : undefined }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
+              <div className={styles.pageBar} aria-live="polite">
+                <span className={styles.pageNum}>
+                  {page + 1} / {totalPages}
+                </span>
+                <span className={styles.progressTrack}>
+                  <span
+                    className={styles.progressFill}
+                    style={{ width: `${progress}%` }}
+                  />
+                </span>
+              </div>
+            </>
           )}
         </main>
 
