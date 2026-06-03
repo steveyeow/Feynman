@@ -174,15 +174,21 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
   if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
 
-  // Skip meta-referential questions (thin stubs produce "Given the title…", "The
-  // book promises…", "The description calls it…") so the chips only surface real,
-  // content-grounded asks. Substantial (de-templated) books are unaffected.
-  const chipQs = questions
-    .filter(
-      (q) =>
-        !/^\s*(given|considering|imagine|if you were|drawing on|reflecting on|the (description|book|text|author)\b)/i.test(q),
-    )
-    .slice(0, 3);
+  // Chips only on books with real readable content (passages or chapters). Thin
+  // catalog stubs have only meta-referential questions ("Given the title…", "With
+  // 15M copies sold…", "The book promises…") that no regex reliably catches —
+  // those same books are exactly the ones with no passages/chapters and weren't
+  // de-templated, so gate on content. The regex is a secondary cleanup for the
+  // odd meta question on an otherwise real book.
+  const hasRealContent = passages.length > 0 || chapterCount > 0;
+  const chipQs = hasRealContent
+    ? questions
+        .filter(
+          (q) =>
+            !/^\s*(given|considering|imagine|if you were|drawing on|reflecting on|the (description|book|text|author)\b)/i.test(q),
+        )
+        .slice(0, 3)
+    : [];
   const isAI = data.agent.type === "ai_book";
   const hero = (
     <div className="seo-hero-with-cover">
