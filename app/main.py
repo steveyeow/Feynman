@@ -38,8 +38,10 @@ from .core.db import (
     find_existing_upload,
     find_mind_by_name,
     get_agent,
+    get_agent_by_slug,
     get_chat_session,
     get_mind,
+    get_mind_by_slug,
     init_db,
     list_agents,
     list_chat_sessions,
@@ -167,6 +169,35 @@ async def _llm_referer_middleware(request: Request, call_next):
             log_llm_referral(request.url.path, source, ua_class)
     except Exception:
         pass  # never break the request
+    return await call_next(request)
+
+
+# ─── Slug → UUID path resolution (UUID→slug URL migration, Stage 2) ───
+# Lets /api/agents/{x}, /api/minds/{x}, /book/{x}/…, /mind/{x}/… accept a
+# descriptive slug in place of the UUID: look the slug up and rewrite the path to
+# the canonical UUID BEFORE routing, so every endpoint works unchanged. UUID
+# segments skip the lookup (fast path); unknown segments fall through untouched.
+_UUID_SEG = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+_SLUG_PATH = re.compile(r"^(/api/agents/|/api/minds/|/book/|/mind/)([^/]+)(/.*)?$")
+
+
+@app.middleware("http")
+async def _resolve_slug_path(request: Request, call_next):
+    try:
+        m = _SLUG_PATH.match(request.url.path)
+        if m:
+            prefix, seg, rest = m.group(1), m.group(2), m.group(3) or ""
+            if seg and not _UUID_SEG.match(seg):
+                from starlette.concurrency import run_in_threadpool
+                is_mind = prefix in ("/api/minds/", "/mind/")
+                row = await run_in_threadpool(
+                    get_mind_by_slug if is_mind else get_agent_by_slug, seg)
+                if row:
+                    new_path = f"{prefix}{row['id']}{rest}"
+                    request.scope["path"] = new_path
+                    request.scope["raw_path"] = new_path.encode("utf-8")
+    except Exception:
+        pass  # never break the request — fall through to normal routing
     return await call_next(request)
 
 
