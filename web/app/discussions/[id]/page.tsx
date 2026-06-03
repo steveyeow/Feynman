@@ -98,19 +98,20 @@ export default async function PublicDiscussionPage({
 
   const title = disc.title || "Discussion on Feynman";
   // Cross-link back to the entity (book or mind) this discussion is about.
+  const entityRef = disc.entity_slug || disc.entity_id; // prefer slug, uuid fallback
   const entityHref =
-    disc.entity_id && disc.session_type === "book"
-      ? `/book/${disc.entity_id}`
-      : disc.entity_id
-        ? `/mind/${disc.entity_id}`
+    entityRef && disc.session_type === "book"
+      ? `/book/${entityRef}`
+      : entityRef
+        ? `/mind/${entityRef}`
         : null;
   // "Start your own conversation" → the chat surface (real paths, not dead
   // /#/ hashes): a book → composer preselected; a mind → its 1:1 chat page.
   const readerHref =
-    disc.entity_id && disc.session_type === "book"
-      ? `/?book=${encodeURIComponent(disc.entity_id)}`
-      : disc.entity_id
-        ? `/mind/${encodeURIComponent(disc.entity_id)}/chat`
+    entityRef && disc.session_type === "book"
+      ? `/?book=${encodeURIComponent(entityRef)}`
+      : entityRef
+        ? `/mind/${encodeURIComponent(entityRef)}/chat`
         : `/`;
 
   const forumLd = {
