@@ -26,6 +26,7 @@ export const SITE_URL =
 export interface MindDetail {
   id: string;
   name: string;
+  slug?: string;
   era?: string;
   domain?: string;
   bio_summary?: string;
@@ -51,6 +52,7 @@ export interface MindDetail {
 export interface AgentRowLite {
   id: string;
   name: string;
+  slug?: string;
   type?: string;
   status?: string;
   source?: string;
@@ -793,6 +795,7 @@ export async function fetchPublicDiscussion(id: string): Promise<PublicDiscussio
 export interface LibraryBook {
   id: string;
   name: string;
+  slug?: string;
   type?: string;
   author?: string;
 }

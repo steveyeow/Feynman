@@ -184,7 +184,7 @@ export default async function MindPage({
       <ul>
         {related.slice(0, 8).map((rm) => (
           <li key={rm.id}>
-            <Link href={`/mind/${rm.id}`}>{rm.name}</Link>
+            <Link href={`/mind/${rm.slug || rm.id}`}>{rm.name}</Link>
           </li>
         ))}
       </ul>
@@ -267,7 +267,7 @@ export default async function MindPage({
           <ul className="related-books">
             {libraryExtra.map((b) => (
               <li key={b.id}>
-                <Link href={`/book/${b.id}`}>{b.name}</Link>
+                <Link href={`/book/${b.slug || b.id}`}>{b.name}</Link>
               </li>
             ))}
           </ul>

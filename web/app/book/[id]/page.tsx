@@ -185,10 +185,18 @@ export default async function BookLandingPage({ params }: PageProps) {
   const hasRealContent = Number(data.meta.chunk_count || 0) >= 5;
   const chipQs = hasRealContent
     ? questions
-        .filter(
-          (q) =>
-            !/^\s*(given|considering|imagine|if you were|drawing on|reflecting on|the (description|book|text|author)\b)/i.test(q),
-        )
+        .filter((q) => {
+          // Drop meta-referential openers…
+          if (
+            /^\s*(given|considering|imagine|if you were|drawing on|reflecting on|the (description|book|text|author)\b)/i.test(q)
+          )
+            return false;
+          // …and questions ABOUT the book's packaging rather than its ideas
+          // ("What does the title's emphasis…", "the description calls it…").
+          if (/\bthe (title|description)\b|\bthe book['’]s (title|premise|promise|status)\b/i.test(q))
+            return false;
+          return true;
+        })
         .slice(0, 3)
     : [];
   const isAI = data.agent.type === "ai_book";
@@ -233,7 +241,7 @@ export default async function BookLandingPage({ params }: PageProps) {
           <ul>
             {related.minds.map((m) => (
               <li key={m.id}>
-                <Link href={`/mind/${m.id}`}>{m.name}</Link>
+                <Link href={`/mind/${m.slug || m.id}`}>{m.name}</Link>
                 {m.activity && m.activity.count > 0 ? (
                   <span className="activity-badge" title="Active in real reader conversations about this book">
                     {" "}● {m.activity.count} {m.activity.count === 1 ? "chat" : "chats"}
@@ -250,7 +258,7 @@ export default async function BookLandingPage({ params }: PageProps) {
           <ul>
             {related.books.map((b) => (
               <li key={b.id}>
-                <Link href={`/book/${b.id}`}>{b.name}</Link>
+                <Link href={`/book/${b.slug || b.id}`}>{b.name}</Link>
               </li>
             ))}
           </ul>
