@@ -174,6 +174,15 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
   if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
 
+  // Skip meta-referential questions (thin stubs produce "Given the title…", "The
+  // book promises…", "The description calls it…") so the chips only surface real,
+  // content-grounded asks. Substantial (de-templated) books are unaffected.
+  const chipQs = questions
+    .filter(
+      (q) =>
+        !/^\s*(given|considering|imagine|if you were|drawing on|reflecting on|the (description|book|text|author)\b)/i.test(q),
+    )
+    .slice(0, 3);
   const isAI = data.agent.type === "ai_book";
   const hero = (
     <div className="seo-hero-with-cover">
@@ -190,10 +199,10 @@ export default async function BookLandingPage({ params }: PageProps) {
         {data.author ? <p className="seo-author">by {data.author}</p> : null}
         {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
         <EntityActions actions={actions} shareUrl={canonical} shareTitle={data.title} />
-        {questions.length ? (
+        {chipQs.length ? (
           <div className="mind-starters">
             <span className="mind-starters-label">Ask this book:</span>
-            {questions.slice(0, 3).map((q) => (
+            {chipQs.map((q) => (
               <Link
                 key={q}
                 href={`/?book=${encodeURIComponent(id)}&q=${encodeURIComponent(q)}`}
