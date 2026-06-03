@@ -4260,13 +4260,29 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         }
         for m in raw_msgs
     ]
+    # Resolve the entity's slug so the discussion's backlink to its book/mind
+    # skips the 301 hop (entity_id is a uuid). One lookup, cached with the page;
+    # book sessions point at an agent, mind sessions at a mind.
+    entity_id = session.get("mind_id") or ""
+    entity_slug = ""
+    if entity_id:
+        try:
+            ent = (
+                get_agent(entity_id)
+                if (session.get("session_type") or "") == "book"
+                else get_mind(entity_id)
+            )
+            entity_slug = (ent or {}).get("slug") or ""
+        except Exception:
+            entity_slug = ""
     return JSONResponse(
         content={
             "id": session_id,
             "title": session.get("public_title") or session.get("title") or "",
             "handle": session.get("public_handle") or "Anonymous",
             "session_type": session.get("session_type") or "",
-            "entity_id": session.get("mind_id") or "",
+            "entity_id": entity_id,
+            "entity_slug": entity_slug,
             "approved_at": session.get("approved_at") or session.get("consent_at") or "",
             "messages": messages,
         },

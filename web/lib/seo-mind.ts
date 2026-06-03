@@ -767,6 +767,8 @@ export interface PublicDiscussion {
   handle: string;
   session_type: string;
   entity_id: string;
+  /** Descriptive slug of the linked book/mind (uuid fallback). Avoids the 301. */
+  entity_slug?: string;
   approved_at: string;
   messages: Array<{ role: string; content: string }>;
 }
