@@ -1919,7 +1919,7 @@ def list_minds_for_agent(agent_id: str, limit: int = 12) -> list[dict[str, Any]]
     PageRank from book pages → mind pages."""
     with get_conn() as conn:
         rows = _fetchall(conn, _q(
-            """SELECT m.id, m.name, m.era, m.domain
+            """SELECT m.id, m.name, m.slug, m.era, m.domain
                FROM mind_works mw
                JOIN minds m ON m.id = mw.mind_id
                WHERE mw.agent_id = ?
@@ -2058,7 +2058,7 @@ def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
     on a public landing page."""
     with get_conn() as conn:
         rows = _fetchall(conn, _q(
-            """SELECT a.id, a.name, a.type, a.meta
+            """SELECT a.id, a.name, a.slug, a.type, a.meta
                FROM mind_works mw
                JOIN agents a ON a.id = mw.agent_id
                WHERE mw.mind_id = ? AND a.status = 'ready'
@@ -2075,6 +2075,7 @@ def list_books_for_mind(mind_id: str, limit: int = 12) -> list[dict[str, Any]]:
             out.append({
                 "id": r["id"],
                 "name": r["name"],
+                "slug": (r.get("slug") if isinstance(r, dict) else r["slug"]) or "",
                 "type": r["type"],
                 "author": meta.get("author", ""),
             })
@@ -2763,6 +2764,7 @@ def list_related_books(
         out.append({
             "id": agent["id"],
             "name": agent.get("name", ""),
+            "slug": agent.get("slug") or "",
             "type": agent.get("type", ""),
             "author": meta.get("author", ""),
         })

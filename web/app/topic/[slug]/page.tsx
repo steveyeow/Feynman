@@ -91,10 +91,10 @@ export default async function TopicPage({
   // CollectionPage → ItemList: books first, then minds.
   const items: Array<{ name: string; url: string }> = [];
   for (const b of books) {
-    if (b.id && b.name) items.push({ name: b.name, url: abs(`/book/${b.id}`) });
+    if (b.id && b.name) items.push({ name: b.name, url: abs(`/book/${b.slug || b.id}`) });
   }
   for (const m of topicMinds) {
-    if (m.id && m.name) items.push({ name: m.name, url: abs(`/mind/${m.id}`) });
+    if (m.id && m.name) items.push({ name: m.name, url: abs(`/mind/${m.slug || m.id}`) });
   }
 
   const desc = `Chat with the best ${topic} books and great minds on Feynman. ${books.length} curated ${books.length === 1 ? "book" : "books"}, ${topicMinds.length} ${topicMinds.length === 1 ? "thinker" : "thinkers"}.`;
@@ -159,7 +159,7 @@ export default async function TopicPage({
               const author = bookAuthor(b);
               return (
                 <li key={b.id}>
-                  <Link href={`/book/${b.id}`}>{b.name}</Link>
+                  <Link href={`/book/${b.slug || b.id}`}>{b.name}</Link>
                   {author ? ` — ${author}` : ""}
                 </li>
               );
@@ -174,11 +174,11 @@ export default async function TopicPage({
           <ul className="related-minds">
             {topicMinds.map((m) => (
               <li key={m.id}>
-                <Link href={`/mind/${m.id}`}>{m.name}</Link>
+                <Link href={`/mind/${m.slug || m.id}`}>{m.name}</Link>
                 {m.era ? ` — ${m.era}` : ""}
                 {" · "}
                 <Link
-                  href={`/mind/${m.id}/on/${params.slug}`}
+                  href={`/mind/${m.slug || m.id}/on/${params.slug}`}
                   className="seo-inline-link"
                 >
                   How {m.name} might approach {topic} →

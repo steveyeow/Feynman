@@ -492,6 +492,20 @@ interface ReadResponse {
 const FRONT_MATTER_RE =
   /transcriber|project\s+gutenberg|gutenberg-tm|produced\s+by|distributed\s+proofread|all\s+rights\s+reserved|electronic\s+edition/i;
 
+// Chunk/line splitting often cuts mid-sentence, so a sampled paragraph can open
+// on a lowercase fragment ("…electrised that is foul. EXPERIMENT VI…"). Drop the
+// leading partial sentence so the passage starts at a real boundary; if there's
+// no clean break (or it would leave too little), keep the original.
+function trimToSentenceStart(text: string): string {
+  if (/^["“'([A-Z0-9]/.test(text)) return text; // already starts a sentence/quote/number
+  const m = text.match(/[.?!]\s+(["“'(]?[A-Z])/);
+  if (m && m.index !== undefined) {
+    const rest = text.slice(m.index + m[0].length - m[1].length).trim();
+    if (rest.length >= 60) return rest;
+  }
+  return text;
+}
+
 export async function getSamplePassages(
   id: string,
   count = 3,
@@ -533,10 +547,10 @@ export async function getSamplePassages(
     );
     const pick = (from: number, minLen: number) => {
       for (let i = from; i < paras.length && out.length < count; i++) {
-        const text = (paras[i] || "").trim();
-        if (text.length < minLen) continue;
-        if (FRONT_MATTER_RE.test(text)) continue;
-        out.push({ index: out.length, text });
+        const raw = (paras[i] || "").trim();
+        if (raw.length < minLen) continue;
+        if (FRONT_MATTER_RE.test(raw)) continue;
+        out.push({ index: out.length, text: trimToSentenceStart(raw) });
       }
     };
     pick(start, 100);
@@ -654,12 +668,14 @@ export async function getBookQa(id: string, question: string): Promise<BookQa | 
 export interface RelatedBook {
   id: string;
   name: string;
+  slug?: string;
   author?: string;
   type?: string;
 }
 export interface RelatedMind {
   id: string;
   name: string;
+  slug?: string;
   era?: string;
   domain?: string;
   activity?: { count: number; last_seen?: string };
