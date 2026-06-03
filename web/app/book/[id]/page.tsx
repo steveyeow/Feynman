@@ -174,13 +174,15 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
   if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
 
-  // Chips only on books with real readable content (passages or chapters). Thin
-  // catalog stubs have only meta-referential questions ("Given the title…", "With
-  // 15M copies sold…", "The book promises…") that no regex reliably catches —
-  // those same books are exactly the ones with no passages/chapters and weren't
-  // de-templated, so gate on content. The regex is a secondary cleanup for the
-  // odd meta question on an otherwise real book.
-  const hasRealContent = passages.length > 0 || chapterCount > 0;
+  // Chips only on indexed books — gate on meta.chunk_count >= 5, the SAME
+  // threshold that defines the de-templated/indexable set (the 57 books that get
+  // /q URLs and book-specific questions). Thin catalog stubs (chunk_count < 5)
+  // have only meta-referential questions ("Given the title…", "With 15M copies
+  // sold…") that no regex reliably catches, so gate on depth, not phrasing. NOT
+  // passages: getSamplePassages reads the legacy `vector` column and returns 0
+  // for pgvector-migrated books (Franklin has 146 chunks but 0 sample passages).
+  // The regex below stays as a secondary cleanup for the odd meta question.
+  const hasRealContent = Number(data.meta.chunk_count || 0) >= 5;
   const chipQs = hasRealContent
     ? questions
         .filter(
