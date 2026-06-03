@@ -15,8 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { get, getAgent, getMind, type Agent, type Mind } from "@/lib/api";
-import { mapAgentsToBooks, type AgentRow } from "@/lib/books";
+import { getAgent, getMind, type Agent, type Mind } from "@/lib/api";
 import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
@@ -198,34 +197,30 @@ export default function HomeComposer() {
   // first (cheap, already cached), falling back to a direct /api/agents/{id}
   // fetch for books the catalog filter excludes (matches the legacy fallback).
   const preselectBook = (bookId: string) => {
-    get<AgentRow[]>("/api/agents")
-      .then((rows) => {
-        const all = mapAgentsToBooks(rows || []);
-        const b = all.find((x) => x.agentId === bookId || x.id === bookId);
-        if (b) {
+    // Resolve the book id → chip via the single-agent endpoint, which the slug
+    // middleware resolves for BOTH a uuid and a descriptive slug. Going direct
+    // (instead of downloading the full ~7MB /api/agents catalog and scanning it)
+    // is the fix for "Chat with this book" landing on an empty composer: a slug
+    // never matched the uuid-keyed catalog, so it fell through to this same
+    // fetch anyway — but only after a multi-second catalog download, leaving the
+    // composer empty ~4s. Now it's one small request.
+    getAgent(bookId)
+      .then((agent: Agent) => {
+        if (agent?.id) {
           setBooks(
-            new Map([[b.id, { id: b.id, agentId: b.agentId, title: b.title, author: b.author }]]),
+            new Map([
+              [
+                agent.id,
+                {
+                  id: agent.id,
+                  agentId: agent.id,
+                  title: agent.name,
+                  author: (agent.author as string) || "",
+                },
+              ],
+            ]),
           );
-          return null;
         }
-        // Fallback: fetch the single agent directly.
-        return getAgent(bookId).then((agent: Agent) => {
-          if (agent?.id) {
-            setBooks(
-              new Map([
-                [
-                  agent.id,
-                  {
-                    id: agent.id,
-                    agentId: agent.id,
-                    title: agent.name,
-                    author: (agent.author as string) || "",
-                  },
-                ],
-              ]),
-            );
-          }
-        });
       })
       .catch(() => {
         /* book preselect is best-effort */
