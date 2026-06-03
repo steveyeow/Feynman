@@ -29,13 +29,23 @@
   overflow: hidden;
 }
 
-/* The whole book, laid out in viewport-height CSS columns (one page wide,
-   centered); we translateX to flip between pages. width / column-width /
-   column-gap / padding / --page-h / transform are set inline from measured
-   metrics (see Reader.tsx). */
-.flow {
+/* The single-page CLIP WINDOW — exactly one column wide, centered in the stage.
+   Its overflow:hidden is what makes the reader show ONE page at a time: the
+   flow's other columns spill past this window's edge and are clipped (the stage
+   itself is full-width, so clipping there would leak the next page). Width is
+   set inline = the measured column width. */
+.window {
   height: 100%;
   margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* The whole book, laid out in viewport-height CSS columns (one page wide); we
+   translateX to flip between pages. width / column-width / column-gap / padding
+   / --page-h / transform are set inline from measured metrics (see Reader.tsx). */
+.flow {
+  height: 100%;
   box-sizing: border-box;
   column-fill: auto;
   transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);

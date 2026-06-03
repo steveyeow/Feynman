@@ -12,7 +12,6 @@ import {
 import { useRouter } from "next/navigation";
 import {
   getBookContent,
-  getQuestions,
   type BookContent,
   ApiError,
 } from "@/lib/reader";
@@ -36,7 +35,6 @@ export default function Reader({ id }: { id: string }) {
   const router = useRouter();
   const { authEnabled, user } = useAuth();
   const [content, setContent] = useState<BookContent | null>(null);
-  const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -98,13 +96,6 @@ export default function Reader({ id }: { id: string }) {
         if (alive) setLoading(false);
       }
     })();
-
-    // Questions are best-effort and never block the read.
-    getQuestions(id)
-      .then((qs) => {
-        if (alive) setQuestions(qs);
-      })
-      .catch(() => {});
 
     return () => {
       alive = false;
@@ -454,6 +445,10 @@ export default function Reader({ id }: { id: string }) {
 
           {paginated && content && (
             <div
+              className={styles.window}
+              style={{ width: metrics.colW || undefined }}
+            >
+            <div
               className={styles.flow}
               ref={flowRef}
               style={
@@ -556,6 +551,7 @@ export default function Reader({ id }: { id: string }) {
                 </footer>
               </article>
             </div>
+            </div>
           )}
 
           {/* Page-flip controls (only with >1 page) */}
@@ -597,24 +593,6 @@ export default function Reader({ id }: { id: string }) {
             </>
           )}
         </main>
-
-        {questions.length > 0 && (
-          <aside className={`chat-sidebar-right visible ${styles.sidebar}`}>
-            <h3 className="sidebar-title">TRY ASKING</h3>
-            <div className={styles.questionList}>
-              {questions.map((q, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={styles.questionBtn}
-                  onClick={() => askQuestion(q)}
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </aside>
-        )}
       </div>
 
       <div className={`${styles.toast} ${toast ? styles.toastShow : ""}`} aria-live="polite">
