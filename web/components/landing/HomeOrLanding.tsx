@@ -31,12 +31,24 @@ export default function HomeOrLanding() {
 
   // Tracks the localStorage flag. `null` = not yet read (SSR / first paint).
   const [landed, setLanded] = useState<boolean | null>(null);
+  // A cross-surface chat intent (/?book= /?q= /?mind=) must BYPASS the marketing
+  // landing gate for signed-out visitors. Otherwise a search visitor who clicks
+  // "Chat with this book" lands on the marketing page and the book is silently
+  // dropped — they then see an empty New Chat. With the override they drop
+  // straight into the composer with the entity preselected (anonymous chat).
+  const [chatIntent, setChatIntent] = useState(false);
 
   useEffect(() => {
     try {
       setLanded(window.localStorage.getItem(LANDED_KEY) === "1");
     } catch {
       setLanded(true); // storage blocked -> behave as "already landed" (show home)
+    }
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setChatIntent(sp.has("book") || sp.has("q") || sp.has("mind"));
+    } catch {
+      /* no/blocked search params -> not a chat intent */
     }
   }, []);
 
@@ -74,7 +86,7 @@ export default function HomeOrLanding() {
   // Legacy getRoute() (app.js 679-684):
   //   authEnabled  -> landing whenever there's no signed-in user
   //   !authEnabled -> landing once, until the visitor dismisses it (feynman-landed)
-  const showLanding = authEnabled ? !user : !landed;
+  const showLanding = (authEnabled ? !user : !landed) && !chatIntent;
   if (showLanding) {
     // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO (authEnabled).
     const ctaLabel = authEnabled ? "Get Started Free" : "Start Exploring";
