@@ -859,9 +859,10 @@ def sitemap_xml():
         chunks_by_agent = count_chunks_batch(ready_ids)
         for agent in ready_agents:
             agent_id = agent["id"]
+            aslug = agent.get("slug") or agent_id  # descriptive URL; UUID fallback
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
             urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent_id}</loc>
+    <loc>{_SITE_URL}/book/{aslug}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>{priority}</priority>
@@ -878,7 +879,7 @@ def sitemap_xml():
                 if not qslug:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent_id}/q/{qslug}</loc>
+    <loc>{_SITE_URL}/book/{aslug}/q/{qslug}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
@@ -887,7 +888,7 @@ def sitemap_xml():
         all_minds = list_minds(limit=5000)
         for mind in all_minds:
             urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["id"]}</loc>
+    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -904,7 +905,7 @@ def sitemap_xml():
                 if not tslug:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["id"]}/on/{tslug}</loc>
+    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/on/{tslug}</loc>
     <lastmod>{today}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
@@ -937,7 +938,7 @@ def sitemap_xml():
                 if agent_insight_counts.get(agent["id"], 0) < insight_count_min:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent["id"]}/insights</loc>
+    <loc>{_SITE_URL}/book/{agent.get("slug") or agent["id"]}/insights</loc>
     <lastmod>{today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
@@ -950,7 +951,7 @@ def sitemap_xml():
                 if mind_insight_counts.get(mind["id"], 0) < insight_count_min:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["id"]}/dialogues</loc>
+    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/dialogues</loc>
     <lastmod>{today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
@@ -974,7 +975,7 @@ def sitemap_xml():
                 if agent_discussion_counts.get(agent["id"], 0) < 1:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent["id"]}/discussions</loc>
+    <loc>{_SITE_URL}/book/{agent.get("slug") or agent["id"]}/discussions</loc>
     <lastmod>{today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
@@ -987,7 +988,7 @@ def sitemap_xml():
                 if mind_discussion_counts.get(mind["id"], 0) < 1:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["id"]}/discussions</loc>
+    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/discussions</loc>
     <lastmod>{today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
