@@ -626,7 +626,8 @@ export function buildWorkLinkIndex(
 ): Map<string, string> {
   const idx = new Map<string, string>();
   for (const a of agents) {
-    if (a.id && a.name) idx.set(a.name.toLowerCase(), a.id);
+    // Store the slug (uuid fallback) so work→book links skip the 301 hop.
+    if (a.id && a.name) idx.set(a.name.toLowerCase(), a.slug || a.id);
   }
   return idx;
 }
