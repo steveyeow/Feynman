@@ -138,21 +138,28 @@ def generate_book_overview(
     if passages:
         context = build_context(passages)
         system = (
-            "You write concise, accurate book overviews for a reading app. "
-            "Use ONLY the provided passages — do not invent claims the "
-            "passages don't support. Neutral, informative tone. Begin "
-            "immediately, no preamble."
+            "You write concise, accurate, SPECIFIC book overviews for a reading "
+            "app. Use ONLY the provided passages — do not invent claims they "
+            "don't support. Lead with the book's actual central argument in "
+            "concrete terms and name its real ideas, models, and terms, so a "
+            "reader learns something only THIS book offers. Avoid generic "
+            "filler — never write phrases like 'explores the fundamental "
+            "principle', 'delves into', 'provides a framework for', 'in today's "
+            "world', or 'Readers engage with this book to…'. Neutral, "
+            "informative tone. Begin immediately, no preamble."
         )
         user = (
             f'Book: "{title}"{by}\n'
             f"Passages from the book:\n{context}\n\n"
             "Write the output in exactly this format:\n"
-            "OVERVIEW:\n<2 short paragraphs (120-200 words) describing what "
-            "this book is about, its central argument, and why a reader would "
-            "engage with it — grounded in the passages>\n\n"
-            "CONCEPTS:\n- <Key idea>: <one-sentence explanation>\n"
-            "- <Key idea>: <one-sentence explanation>\n"
-            "(4-6 concepts, each a real idea from the passages.)"
+            "OVERVIEW:\n<2 short paragraphs (120-200 words). Open with the "
+            "book's central argument stated concretely, then its main themes "
+            "and what a reader takes away — all grounded in the passages>\n\n"
+            "CONCEPTS:\n- <Specific idea/model/term>: <one-sentence "
+            "explanation>\n"
+            "- <Specific idea/model/term>: <one-sentence explanation>\n"
+            "(4-6 concepts, each a real, specifically-named idea from the "
+            "passages — not a generic theme.)"
         )
         grounded = True
     else:
@@ -160,22 +167,26 @@ def generate_book_overview(
         # published book, with a hard guard against fabrication.
         cat = f" It is generally shelved under {category}." if category else ""
         system = (
-            "You write concise, accurate overviews of real published books. "
-            "If you are confident about the specific book, summarize what it "
-            "actually covers. If you are NOT confident about this exact title, "
-            "do NOT invent specifics — instead describe the subject area and "
-            "what a reader could explore, and keep claims general. Neutral "
-            "tone. Begin immediately, no preamble."
+            "You write concise, accurate, SPECIFIC overviews of real published "
+            "books. If you are confident about the exact book, state its actual "
+            "central thesis and name its real key ideas — be concrete, not "
+            "generic. If you are NOT confident about this exact title, do NOT "
+            "invent specifics — instead describe the subject area in general "
+            "terms. Avoid filler — never write phrases like 'explores the "
+            "fundamental principle', 'delves into', 'provides a framework for', "
+            "'in today's world', or 'Readers engage with this book to…'. "
+            "Neutral tone. Begin immediately, no preamble."
         )
         user = (
             f'Book: "{title}"{by}.{cat}\n\n'
             "Write the output in exactly this format:\n"
-            "OVERVIEW:\n<2 short paragraphs (120-200 words) on what this book "
-            "is about and why a reader would engage with it>\n\n"
-            "CONCEPTS:\n- <Key theme>: <one-sentence explanation>\n"
-            "- <Key theme>: <one-sentence explanation>\n"
-            "(4-6 concepts. If unsure about the specific book, make these "
-            "about the subject area, not invented plot/claims.)"
+            "OVERVIEW:\n<2 short paragraphs (120-200 words). Open with the "
+            "book's central thesis stated concretely (if you know it), then its "
+            "main ideas and what a reader takes away>\n\n"
+            "CONCEPTS:\n- <Specific idea/term>: <one-sentence explanation>\n"
+            "- <Specific idea/term>: <one-sentence explanation>\n"
+            "(4-6 concepts, specifically named. If unsure about the exact book, "
+            "make these about the subject area, not invented plot/claims.)"
         )
         grounded = False
 

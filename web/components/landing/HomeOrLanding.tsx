@@ -31,12 +31,25 @@ export default function HomeOrLanding() {
 
   // Tracks the localStorage flag. `null` = not yet read (SSR / first paint).
   const [landed, setLanded] = useState<boolean | null>(null);
+  // A cross-surface chat link — /?book, /?q or /?mind — means the visitor came
+  // to chat about something specific (the SEO, Reader and library "Chat" CTAs
+  // all route through these params). Such a visitor must drop into the composer
+  // with the book preselected, NEVER the marketing landing page — otherwise an
+  // anonymous arrival from Google/an SEO page silently loses the book they came
+  // for. `null` = not yet read (SSR / first paint).
+  const [hasChatIntent, setHasChatIntent] = useState<boolean | null>(null);
 
   useEffect(() => {
     try {
       setLanded(window.localStorage.getItem(LANDED_KEY) === "1");
     } catch {
       setLanded(true); // storage blocked -> behave as "already landed" (show home)
+    }
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setHasChatIntent(sp.has("book") || sp.has("q") || sp.has("mind"));
+    } catch {
+      setHasChatIntent(false);
     }
   }, []);
 
@@ -67,14 +80,17 @@ export default function HomeOrLanding() {
   // hosted build briefly sees the app home, then it swaps to the landing
   // (a backwards flash). Rendering null until `ready` avoids that while still
   // never flashing the landing to returning/auth'd users.
-  if (!ready || landed === null) {
+  if (!ready || landed === null || hasChatIntent === null) {
     return null;
   }
 
   // Legacy getRoute() (app.js 679-684):
   //   authEnabled  -> landing whenever there's no signed-in user
   //   !authEnabled -> landing once, until the visitor dismisses it (feynman-landed)
-  const showLanding = authEnabled ? !user : !landed;
+  // A cross-surface chat link overrides both: honor the book/question intent and
+  // open the composer regardless of auth (HomeComposer gates anonymous SEND to
+  // login from there, so the intent survives sign-up instead of being lost here).
+  const showLanding = !hasChatIntent && (authEnabled ? !user : !landed);
   if (showLanding) {
     // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO (authEnabled).
     const ctaLabel = authEnabled ? "Get Started Free" : "Start Exploring";

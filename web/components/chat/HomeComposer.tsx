@@ -21,7 +21,7 @@ import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
-import { restorePendingBookIntent } from "@/lib/pendingIntent";
+import { restorePendingBookIntent, savePendingBookIntent } from "@/lib/pendingIntent";
 import { track } from "@/lib/analytics";
 import {
   SelectedChips,
@@ -255,6 +255,21 @@ export default function HomeComposer() {
   const submit = async () => {
     const msg = value.trim();
     if (!msg || busy) return;
+    // Anonymous visitor on the hosted build: stash the book + question they came
+    // for, then bounce through login. After sign-up the composer restores the
+    // intent and resumes the chat (mirrors Reader.askQuestion + the
+    // pending-intent system). The cross-surface "Chat" CTAs route anonymous
+    // users into this composer with a book preselected, so this is the single
+    // funnel gate that keeps the book from being lost through login.
+    if (authEnabled && !user) {
+      const book = [...books.values()][0];
+      if (book) {
+        savePendingBookIntent(book.agentId || book.id, { question: msg, via: "home_composer" });
+      }
+      track("pending_intent_saved", { via: "home_composer" });
+      router.push("/login");
+      return;
+    }
     // Inviting minds requires pro on the hosted build (legacy app.js 3149).
     // The minds popover already gates selection; this is the backstop on send.
     if (minds.size && !requirePro()) return;

@@ -283,7 +283,7 @@ body { background-color: var(--bg-home); }
   font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;
   margin: 0 0 0.25em; color: var(--text);
 }
-.seo-hero .seo-author { color: var(--text-secondary); font-size: 18px; margin: 0 0 2px; }
+.seo-hero .seo-author { color: var(--text-secondary); font-size: 16px; margin: 0 0 2px; }
 .seo-hero .seo-meta { color: var(--text-muted); font-size: 14px; margin: 0; }
 .seo-hero .seo-backlink { display: inline-block; color: var(--text-muted); font-size: 14px; margin-bottom: 12px; }
 
@@ -379,7 +379,7 @@ body { background-color: var(--bg-home); }
 /* Two-column: main content + right info rail (desktop); stacks on mobile. */
 .seo-grid { display: block; }
 .seo-grid.has-rail { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 40px; align-items: start; }
-.seo-content { min-width: 0; color: var(--text); font-size: 17px; line-height: 1.7; }
+.seo-content { min-width: 0; color: var(--text); font-size: 16px; line-height: 1.7; }
 /* h1 inside content (single-column SeoColumn pages put the title in-content,
    whereas EntityLayout pages put it in the hero). */
 .seo-content > h1 {
@@ -387,7 +387,7 @@ body { background-color: var(--bg-home); }
   font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15;
   margin: 0.2em 0 0.4em; color: var(--text);
 }
-.seo-content .seo-author { color: var(--text-secondary); font-size: 18px; margin: 0 0 2px; }
+.seo-content .seo-author { color: var(--text-secondary); font-size: 16px; margin: 0 0 2px; }
 .seo-content .seo-meta { color: var(--text-muted); font-size: 14px; }
 .seo-content .seo-backlink { display: inline-block; color: var(--text-muted); font-size: 14px; margin-bottom: 10px; }
 .seo-content h2 {
@@ -415,7 +415,9 @@ body { background-color: var(--bg-home); }
   background: var(--bg-chat); border: 1px solid var(--border); border-radius: 12px;
 }
 .seo-content .empty-state-headline { font-weight: 600; margin: 0 0 8px; color: var(--text); }
-.seo-content .book-about { font-size: 18px; line-height: 1.6; color: var(--text-secondary); }
+/* Lead/overview paragraph — same 16px as the body so it never out-sizes the
+   document; set apart only by the muted secondary color. */
+.seo-content .book-about { color: var(--text-secondary); }
 
 /* Right info rail — meta card + related links. */
 .seo-rail { display: flex; flex-direction: column; gap: 20px; position: sticky; top: 24px; }

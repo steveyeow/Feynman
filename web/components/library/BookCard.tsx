@@ -95,7 +95,7 @@ export default function BookCard({
         className="card-cover-wrap"
         role="link"
         tabIndex={0}
-        aria-label={overlay ? `${overlay} ${book.title}` : `Chat about ${book.title}`}
+        aria-label={overlay ? `${overlay} ${book.title}` : `Chat with ${book.title}`}
         onClick={() => router.push(coverHref)}
         onKeyDown={(e) => {
           if (e.key === "Enter") router.push(coverHref);

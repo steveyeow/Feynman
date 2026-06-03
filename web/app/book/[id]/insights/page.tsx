@@ -90,7 +90,7 @@ export default async function BookInsightsPage({ params }: PageProps) {
   ]);
 
   const actions: EntityAction[] = [
-    { label: `Chat about this book`, href: chatHref, variant: "primary" },
+    { label: `Chat with this book`, href: chatHref, variant: "primary" },
   ];
 
   const hero = (
