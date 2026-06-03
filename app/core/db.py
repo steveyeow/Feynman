@@ -370,6 +370,14 @@ def init_db() -> None:
             except Exception:
                 _execute(conn, "ROLLBACK TO SAVEPOINT sp_agents_del")
 
+            # Migration: add descriptive URL slug to agents table
+            try:
+                _execute(conn, "SAVEPOINT sp_agents_slug")
+                _execute(conn, "ALTER TABLE agents ADD COLUMN slug TEXT")
+                _execute(conn, "RELEASE SAVEPOINT sp_agents_slug")
+            except Exception:
+                _execute(conn, "ROLLBACK TO SAVEPOINT sp_agents_slug")
+
             # Migration: add user_id to messages table
             try:
                 _execute(conn, "SAVEPOINT sp_messages_uid")
@@ -398,7 +406,7 @@ def init_db() -> None:
             # Migration: add embedding columns to minds table; plus Wikidata/
             # Wikipedia identity URLs (for Person JSON-LD sameAs — the
             # Knowledge-Graph / LLM entity signal on every expanded mind).
-            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
+            for col, col_type in [("embedding", "BLOB"), ("embedding_dim", "INTEGER"), ("embedding_norm", "REAL"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT"), ("slug", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -861,6 +869,10 @@ def init_db() -> None:
                 _execute(conn, "ALTER TABLE agents ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
             except Exception:
                 pass
+            try:
+                _execute(conn, "ALTER TABLE agents ADD COLUMN slug TEXT")
+            except Exception:
+                pass
 
             # Migration: add memory_type to mind_memories
             try:
@@ -870,7 +882,7 @@ def init_db() -> None:
 
             # Migration: add embedding columns to minds table; plus Wikidata/
             # Wikipedia identity URLs for Person JSON-LD sameAs.
-            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT")]:
+            for col, col_type in [("embedding", "BYTEA"), ("embedding_dim", "INTEGER"), ("embedding_norm", "DOUBLE PRECISION"), ("wikidata_url", "TEXT"), ("wikipedia_url", "TEXT"), ("meta_json", "TEXT"), ("slug", "TEXT")]:
                 try:
                     _execute(conn, f"SAVEPOINT sp_minds_{col}")
                     _execute(conn, f"ALTER TABLE minds ADD COLUMN {col} {col_type}")
@@ -973,6 +985,21 @@ def get_agent(agent_id: str) -> dict[str, Any] | None:
         return _row_to_agent(row)
 
 
+def get_agent_by_slug(slug: str) -> dict[str, Any] | None:
+    """Resolve a book by its descriptive URL slug (the slug→entity lookup behind
+    /book/{slug})."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT * FROM agents WHERE slug = ? AND is_deleted = ?"
+        ), (slug, False if _USE_PG else 0))
+        return _row_to_agent(row) if row else None
+
+
+def update_agent_slug(agent_id: str, slug: str) -> None:
+    with get_conn() as conn:
+        _execute(conn, _q("UPDATE agents SET slug = ? WHERE id = ?"), (slug, agent_id))
+
+
 def list_agents(limit: int | None = None) -> list[dict[str, Any]]:
     """List all non-deleted agents.
 
@@ -996,6 +1023,7 @@ def _row_to_agent(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row["id"],
         "name": row["name"],
+        "slug": row.get("slug"),  # descriptive URL slug; None for un-backfilled rows
         "type": row["type"],
         "source": row["source"],
         "status": row["status"],
@@ -1705,13 +1733,46 @@ def find_mind_by_name(name: str) -> dict[str, Any] | None:
         return _row_to_mind(row)
 
 
+def get_mind_by_slug(slug: str) -> dict[str, Any] | None:
+    """Resolve a mind by its descriptive URL slug (behind /mind/{slug})."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT * FROM minds WHERE slug = ?"), (slug,))
+        return _row_to_mind(row) if row else None
+
+
+def update_mind_slug(mind_id: str, slug: str) -> None:
+    with get_conn() as conn:
+        _execute(conn, _q("UPDATE minds SET slug = ? WHERE id = ?"), (slug, mind_id))
+
+
+def ensure_slug_columns() -> None:
+    """Idempotently add the slug column to agents + minds. For off-Vercel backfill
+    scripts that run with --no-init against PROD (where init_db is skipped, so the
+    init_db migration never runs)."""
+    with get_conn() as conn:
+        for table in ("agents", "minds"):
+            try:
+                if _USE_PG:
+                    _execute(conn, f"SAVEPOINT sp_{table}_slug_ens")
+                    _execute(conn, f"ALTER TABLE {table} ADD COLUMN slug TEXT")
+                    _execute(conn, f"RELEASE SAVEPOINT sp_{table}_slug_ens")
+                else:
+                    _execute(conn, f"ALTER TABLE {table} ADD COLUMN slug TEXT")
+            except Exception:
+                if _USE_PG:
+                    try:
+                        _execute(conn, f"ROLLBACK TO SAVEPOINT sp_{table}_slug_ens")
+                    except Exception:
+                        pass
+
+
 def list_minds(limit: int | None = None) -> list[dict[str, Any]]:
     """List all minds, ordered by popularity.
 
     `limit` is a defensive cap (see `list_agents` rationale).
     """
     sql = (
-        "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
+        "SELECT id, name, slug, era, domain, bio_summary, persona, thinking_style, "
         "typical_phrases, works, avatar_seed, wikidata_url, wikipedia_url, "
         "version, chat_count, created_at "
         "FROM minds ORDER BY chat_count DESC, created_at ASC"
@@ -1729,6 +1790,7 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row["id"],
         "name": row["name"],
+        "slug": row.get("slug"),  # descriptive URL slug; None for un-backfilled rows
         "era": row["era"] or "",
         "domain": row["domain"] or "",
         "bio_summary": row["bio_summary"] or "",
