@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -329,6 +330,34 @@ def init_db() -> None:
                 )
             """)
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_session_messages_session ON session_messages(session_id)")
+
+            # Shared single answers (per-turn share — share redesign Phase 2).
+            # A snapshot of ONE assistant/mind turn published at /a/{id}. Stored
+            # in its own table (not on session_messages) so a shared answer is an
+            # immutable public artifact: NO foreign key to chat_sessions, so it
+            # survives later edits/deletes of the source session. Same UGC gating
+            # + PII scrub + ENABLE_PUBLIC_DISCUSSIONS flag as session discussions.
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS shared_answers (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    message_index INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    question TEXT NOT NULL DEFAULT '',
+                    answer TEXT NOT NULL DEFAULT '',
+                    answer_role TEXT NOT NULL DEFAULT 'assistant',
+                    mind_id TEXT,
+                    mind_name TEXT,
+                    sources_json TEXT,
+                    public_status TEXT NOT NULL DEFAULT 'private',
+                    public_handle TEXT,
+                    consent_at TEXT,
+                    approved_at TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (session_id, message_index)
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_shared_answers_user ON shared_answers(user_id)")
 
             # AI-generated books
             _execute(conn, """
@@ -798,6 +827,31 @@ def init_db() -> None:
                 )
             """)
             _execute(conn, "CREATE INDEX IF NOT EXISTS idx_session_messages_session ON session_messages(session_id)")
+
+            # Shared single answers (per-turn share — share redesign Phase 2).
+            # Mirrors the PG branch above; see that comment for the artifact /
+            # privacy rationale.
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS shared_answers (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    message_index INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    question TEXT NOT NULL DEFAULT '',
+                    answer TEXT NOT NULL DEFAULT '',
+                    answer_role TEXT NOT NULL DEFAULT 'assistant',
+                    mind_id TEXT,
+                    mind_name TEXT,
+                    sources_json TEXT,
+                    public_status TEXT NOT NULL DEFAULT 'private',
+                    public_handle TEXT,
+                    consent_at TEXT,
+                    approved_at TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (session_id, message_index)
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_shared_answers_user ON shared_answers(user_id)")
 
             # AI-generated books
             _execute(conn, """
@@ -2719,6 +2773,148 @@ def list_messages_for_public_session(
                LIMIT ?"""
         ), (session_id, limit))
         return [dict(r) for r in rows]
+
+
+# ─── Shared single answers (per-turn share — share redesign Phase 2) ───
+#
+# A "shared answer" is ONE assistant/mind turn published as a standalone
+# public page at /a/{id}. Mirrors the session-level discussion share
+# (request_chat_session_share et al.) but the unit is a single turn and the
+# content is SNAPSHOT at publish time, so the row is self-contained and
+# survives later edits/deletes of the source session. Reads gate on
+# public_status='approved'; callers PII-scrub before display.
+
+def _new_short_id(nbytes: int = 8) -> str:
+    """URL-safe short id for /a/{id} (~11 chars). secrets → unguessable."""
+    return secrets.token_urlsafe(nbytes)
+
+
+def _get_shared_answer_by_turn(
+    session_id: str, message_index: int,
+) -> dict[str, Any] | None:
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT * FROM shared_answers WHERE session_id = ? AND message_index = ?"
+        ), (session_id, message_index))
+        return dict(row) if row else None
+
+
+def get_shared_answer(answer_id: str) -> dict[str, Any] | None:
+    """Fetch a shared answer by id regardless of status (owner/admin view)."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT * FROM shared_answers WHERE id = ?"
+        ), (answer_id,))
+        return dict(row) if row else None
+
+
+def get_public_answer(answer_id: str) -> dict[str, Any] | None:
+    """SAFETY-CRITICAL read: returns the row ONLY if public_status='approved'.
+    The /a/{id} render + /api/public-answers/{id} both gate on this. Caller
+    still PII-scrubs question + answer before display."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT * FROM shared_answers WHERE id = ? AND public_status = 'approved'"
+        ), (answer_id,))
+        return dict(row) if row else None
+
+
+def request_answer_share(
+    session_id: str, message_index: int, user_id: str,
+    handle: str | None = None,
+) -> dict[str, Any] | str | None:
+    """Publish the single answer at ``message_index`` for the owning user.
+
+    Auto-publish, mirroring request_chat_session_share but per-turn: there is
+    NO minimum-message gate (a single answer IS the unit) and the snapshot is
+    immutable. Idempotent per (session_id, message_index): re-sharing the same
+    turn returns the existing row (re-publishing it if previously withdrawn).
+
+    Returns:
+      * dict — the shared_answer row on success
+      * str  — "not_found" (session missing / not owned / index out of range),
+               "not_an_answer" (the indexed turn isn't an assistant/mind reply),
+               "rejected" (admin-removed; cannot be re-shared)
+      * None — unknown failure
+    """
+    sess = get_chat_session_with_public_status(session_id)
+    if not sess or sess.get("user_id") != user_id:
+        return "not_found"
+
+    # Idempotency: reuse the existing row for this turn if present.
+    existing = _get_shared_answer_by_turn(session_id, message_index)
+    if existing:
+        if existing.get("public_status") == "rejected":
+            return "rejected"
+        if existing.get("public_status") != "approved":
+            now = _utcnow()
+            with get_conn() as conn:
+                _execute(conn, _q(
+                    """UPDATE shared_answers
+                       SET public_status = 'approved', approved_at = ?
+                       WHERE id = ? AND user_id = ?"""
+                ), (now, existing["id"], user_id))
+            return get_shared_answer(existing["id"])
+        return existing
+
+    # Snapshot the turn. Owner-scoped read (list_session_messages filters by
+    # user_id) so we never snapshot another user's transcript.
+    msgs = list_session_messages(session_id, user_id)
+    if message_index < 0 or message_index >= len(msgs):
+        return "not_found"
+    ans = msgs[message_index]
+    role = ans.get("role") or ""
+    if role not in ("assistant", "mind"):
+        return "not_an_answer"
+    meta = ans.get("meta") or {}
+    # Per-turn attribution: a 'mind' reply carries the mind's name in meta;
+    # an 'assistant' reply is Feynman (no mind) and may carry book sources.
+    mind_name = meta.get("mindName") if role == "mind" else None
+    sources = meta.get("sources")
+    # Nearest preceding user turn = the question.
+    question = ""
+    for j in range(message_index - 1, -1, -1):
+        if (msgs[j].get("role") or "") == "user":
+            question = msgs[j].get("content") or ""
+            break
+    # Resolve the mind id (messages store only the display name).
+    mind_id = None
+    if mind_name:
+        m = find_mind_by_name(mind_name)
+        if m:
+            mind_id = m.get("id")
+
+    now = _utcnow()
+    answer_id = _new_short_id()
+    with get_conn() as conn:
+        _execute(conn, _q(
+            """INSERT INTO shared_answers
+                 (id, session_id, message_index, user_id, question, answer,
+                  answer_role, mind_id, mind_name, sources_json,
+                  public_status, public_handle, consent_at, approved_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)"""
+        ), (
+            answer_id, session_id, message_index, user_id,
+            question, ans.get("content") or "", role, mind_id, mind_name,
+            json.dumps(sources) if sources else None,
+            handle or None, now, now, now,
+        ))
+    return get_shared_answer(answer_id)
+
+
+def withdraw_answer_share(
+    answer_id: str, user_id: str,
+) -> dict[str, Any] | None:
+    """Owner withdraws a shared answer — flips status to 'withdrawn' so it
+    stops rendering. Returns the updated row, or None if not found / not owned."""
+    row = get_shared_answer(answer_id)
+    if not row or row.get("user_id") != user_id:
+        return None
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "UPDATE shared_answers SET public_status = 'withdrawn' WHERE id = ? AND user_id = ?"
+        ), (answer_id, user_id))
+    return get_shared_answer(answer_id)
 
 
 def count_pending_public_sessions() -> int:
