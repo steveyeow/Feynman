@@ -793,6 +793,50 @@ export async function fetchPublicDiscussion(id: string): Promise<PublicDiscussio
   }
 }
 
+export interface PublicAnswer {
+  id: string;
+  /** Preceding user turn (PII-scrubbed). May be empty. */
+  question: string;
+  /** The shared answer (PII-scrubbed). */
+  answer: string;
+  /** "assistant" (Feynman) | "mind". */
+  answer_role: string;
+  /** Sharer's display name; "Anonymous" when none. */
+  handle: string;
+  /** The mind that authored a 'mind' answer; null for a Feynman answer. */
+  mind: {
+    name: string;
+    id?: string;
+    slug?: string;
+    avatar_seed?: string;
+    voice?: string;
+  } | null;
+  /** The cited book, when the answer drew on one; otherwise null. */
+  book: { name: string; agent_id?: string; slug?: string } | null;
+  approved_at: string;
+}
+
+/**
+ * One approved, PII-scrubbed shared single answer for /a/{id}
+ * (GET /api/public-answers/{id}). 404 unless the feature flag is on AND the
+ * answer is approved — returns null so the page can render its stable
+ * "not available" permalink state.
+ */
+export async function fetchPublicAnswer(id: string): Promise<PublicAnswer | null> {
+  try {
+    const res = await get<PublicAnswer>(
+      `/api/public-answers/${encodeURIComponent(id)}`,
+      // ISR (see fetchPublicDiscussion): keep /a/[id] cacheable so shareable
+      // permalinks don't render per-request on every crawl.
+      { next: { revalidate: 600 } },
+    );
+    if (!res || !res.id) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Content-density sections: mind library / themes / discussions list ───
 
 export interface LibraryBook {
