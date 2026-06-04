@@ -1977,13 +1977,14 @@ class TestPhase2AnswerShare:
     the /a/{id} public render depends on.
     """
 
-    def _mk_session(self):
+    def _mk_session(self, mind_name="Ada Lovelace"):
         """Build a session whose transcript is:
             0 user       "What is entropy? mail me at a@b.com"
             1 assistant  "<answer w/ a link>"  meta.sources=[{agent_id, agent_name}]
-            2 user       "And you, Ada?"
-            3 mind        "<mind answer>"      meta.mindName="Ada Lovelace"
-        Returns (user_id, session_id)."""
+            2 user       "And you?"
+            3 mind        "<mind answer>"      meta.mindName=<mind_name>
+        Returns (user_id, session_id). Tests own the DB across the session (one
+        SQLite file), so pass a UNIQUE mind_name when asserting on mind presence."""
         import os, uuid
         os.environ.pop("DATABASE_URL", None)
         from app.core.db import (
@@ -1999,10 +2000,10 @@ class TestPhase2AnswerShare:
                             meta={"sources": [{"agent_id": "agent-1",
                                                "agent_name": "Thermodynamics 101"}]},
                             user_id=uid)
-        add_session_message(sid, role="user", content="And you, Ada?", user_id=uid)
+        add_session_message(sid, role="user", content="And you?", user_id=uid)
         add_session_message(sid, role="mind",
                             content="From a computational view, entropy is information.",
-                            meta={"mindName": "Ada Lovelace"}, user_id=uid)
+                            meta={"mindName": mind_name}, user_id=uid)
         return uid, sid
 
     def test_share_snapshots_question_and_answer(self):
@@ -2018,23 +2019,27 @@ class TestPhase2AnswerShare:
         assert 0 < len(rec["id"]) < 36, "public id must be short (not a uuid)"
 
     def test_share_mind_answer_resolves_attribution(self):
+        import uuid
         from app.core.db import request_answer_share, create_mind
-        uid, sid = self._mk_session()
-        mind_id = create_mind({"name": "Ada Lovelace", "persona": "analytical engine pioneer"})
+        name = f"Ada Lovelace {uuid.uuid4().hex[:8]}"  # unique → no cross-test bleed
+        mind_id = create_mind({"name": name, "persona": "analytical engine pioneer"})
+        uid, sid = self._mk_session(mind_name=name)
         rec = request_answer_share(sid, 3, uid)
         assert isinstance(rec, dict)
         assert rec["answer_role"] == "mind"
-        assert rec["mind_name"] == "Ada Lovelace"
+        assert rec["mind_name"] == name
         assert rec["mind_id"] == mind_id, "mind must be resolved by name to its id"
 
     def test_mind_answer_without_db_mind_still_attributes_name(self):
         # The mind named in the message isn't in the minds table — we still
         # snapshot the name (mind_id stays NULL); the API attributes by name.
+        import uuid
         from app.core.db import request_answer_share
-        uid, sid = self._mk_session()
+        name = f"Nonexistent Mind {uuid.uuid4().hex[:8]}"  # never inserted
+        uid, sid = self._mk_session(mind_name=name)
         rec = request_answer_share(sid, 3, uid)
         assert isinstance(rec, dict)
-        assert rec["mind_name"] == "Ada Lovelace"
+        assert rec["mind_name"] == name
         assert not rec["mind_id"]
 
     def test_user_turn_cannot_be_shared(self):
