@@ -2690,13 +2690,16 @@ def api_public_answer(answer_id: str) -> JSONResponse:
         if m:
             mind = {
                 "name": m.get("name") or row.get("mind_name") or "",
+                # id alongside slug so the render's "Chat with {mind}" link can
+                # fall back to slug||id (uuid 301s to the slug path).
+                "id": m.get("id") or "",
                 "slug": m.get("slug") or "",
                 "avatar_seed": m.get("avatar_seed") or "",
                 "voice": m.get("voice") or "",
             }
     if mind is None and row.get("mind_name"):
         # Named in the snapshot but no longer resolvable — still attribute it.
-        mind = {"name": row["mind_name"], "slug": "", "avatar_seed": "", "voice": ""}
+        mind = {"name": row["mind_name"], "id": "", "slug": "", "avatar_seed": "", "voice": ""}
     # Book attribution from the snapshotted sources (first cited book).
     book = None
     try:
