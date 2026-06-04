@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ChatHistory from "@/components/chat/ChatHistory";
 import UserMenu from "./UserMenu";
 
@@ -74,6 +74,16 @@ const NAV = [
 export default function Sidebar() {
   const pathname = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
+
+  // The collapse styling lives on `.app-layout.sidebar-collapsed` (styles.css),
+  // but this aside can't set a class on its parent in JSX — so sync it
+  // imperatively. The migration toggled `data-collapsed` on the aside instead,
+  // which no CSS rule matched, so the toggle button did nothing.
+  useEffect(() => {
+    document
+      .getElementById("app-layout")
+      ?.classList.toggle("sidebar-collapsed", collapsed);
+  }, [collapsed]);
 
   return (
     <aside className="app-sidebar" id="app-sidebar" data-collapsed={collapsed}>
