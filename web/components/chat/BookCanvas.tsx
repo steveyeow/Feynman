@@ -36,6 +36,7 @@ interface BookCanvasProps {
   confirming: boolean;
   error: string | null;
   content?: CanvasContent | null;
+  width?: number | null;
   onConfirm: () => void;
   onCancel: () => void;
   onRetry: () => void;
@@ -49,12 +50,17 @@ export default function BookCanvas({
   confirming,
   error,
   content,
+  width,
   onConfirm,
   onCancel,
   onRetry,
 }: BookCanvasProps) {
   return (
-    <aside className="book-canvas visible" id="book-canvas">
+    <aside
+      className="book-canvas visible"
+      id="book-canvas"
+      style={width != null ? { width } : undefined}
+    >
       <div className="book-canvas-inner" id="book-canvas-content">
         {phase === "outlining" && outline && (
           <OutlineView outline={outline} confirming={confirming} onConfirm={onConfirm} />

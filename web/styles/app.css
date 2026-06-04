@@ -3284,6 +3284,8 @@ html.dark .lp-chat-card {
 }
 body.canvas-resizing { cursor: col-resize; user-select: none; }
 body.canvas-resizing * { cursor: col-resize !important; }
+/* No width animation while dragging (the 0.35s transition would lag the drag). */
+body.canvas-resizing .book-canvas { transition: none; }
 
 /* Canvas header */
 .canvas-book-header { margin-bottom: 28px; }
@@ -3430,6 +3432,7 @@ html.dark .canvas-secondary-btn:hover { background: rgba(255,255,255,0.06); }
   cursor: pointer; transition: all 0.15s;
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   white-space: nowrap;
+  text-decoration: none;
 }
 .canvas-action-btn:hover { transform: translateY(-1px); filter: brightness(0.95); }
 html.dark .canvas-action-btn:hover { filter: brightness(1.15); }

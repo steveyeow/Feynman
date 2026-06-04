@@ -868,6 +868,33 @@ export default function ChatView({
   // first message the chat is full-width, no canvas).
   const showCanvas = isWriteBook && (!!writeBook.outline || !!writeBook.status);
 
+  // Drag the divider to resize the canvas (port of initCanvasResize). The chat
+  // column flexes to fill the rest, so we only control the canvas width.
+  const [canvasWidth, setCanvasWidth] = useState<number | null>(null);
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const canvas = document.getElementById("book-canvas");
+    if (!canvas) return;
+    const startX = e.clientX;
+    const startW = canvas.getBoundingClientRect().width;
+    const handle = e.currentTarget as HTMLElement;
+    handle.classList.add("dragging");
+    document.body.classList.add("canvas-resizing");
+    const onMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const max = Math.max(420, window.innerWidth - 360);
+      setCanvasWidth(Math.min(max, Math.max(420, startW - dx)));
+    };
+    const onUp = () => {
+      handle.classList.remove("dragging");
+      document.body.classList.remove("canvas-resizing");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, []);
+
   // Use the production .chat-with-sidebar wrapper so the global
   // `:has(.book-canvas.visible) .chat-main` rule shrinks the chat column when
   // the canvas is open.
@@ -940,8 +967,12 @@ export default function ChatView({
         </div>
       </div>
 
+      {showCanvas && (
+        <div className="book-canvas-resize" onMouseDown={onResizeStart} />
+      )}
       {showCanvas ? (
         <BookCanvas
+          width={canvasWidth}
           phase={writeBook.phase}
           outline={writeBook.outline}
           status={writeBook.status}
