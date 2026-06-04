@@ -7,7 +7,9 @@
  * (book picker + "invite great minds" + @-mention autocomplete) and the
  * auto-join orchestration — all delegated to ChatView so this stays a thin
  * wrapper over one tested implementation. The right column is the mind's
- * agent-info card. (Production does NOT greet on open, so we don't either.)
+ * agent-info card. Greets on open via POST /api/minds/{id}/greet (the mind
+ * proactively opens the conversation), seeded as the first message — matches
+ * production's renderMindDetail.
  *
  * Pro gating (hosted builds): mind chat is pro-only. Anonymous users (auth on,
  * not signed in) get a sign-in prompt; signed-in non-pro users get the paywall.
@@ -18,7 +20,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
-import { createSession, bumpSessions } from "@/lib/chat";
+import { createSession, bumpSessions, queueSaveMessage } from "@/lib/chat";
+import { post } from "@/lib/api";
 import type { MindDetail } from "@/lib/seo-mind";
 import ChatView from "@/components/chat/ChatView";
 import type { SelectedMind } from "@/components/chat/ComposerPickers";
@@ -50,7 +53,25 @@ export default function MindChat({
     creatingRef.current = true;
     let alive = true;
     createSession({ title: `Chat with ${mind.name}`, sessionType: "chat", mindId })
-      .then((s) => {
+      .then(async (s) => {
+        // Greet on open — port of renderMindDetail's POST /api/minds/{id}/greet:
+        // the mind proactively opens the conversation. Persist it as the first
+        // `mind` message so ChatView loads it when it mounts. Best-effort — a
+        // failed greet just leaves an empty chat (the legacy try/catch).
+        try {
+          const greet = await post<{ response?: string; usage?: unknown }>(
+            `/api/minds/${encodeURIComponent(mindId)}/greet`,
+            {},
+          );
+          if (greet?.response) {
+            await queueSaveMessage(s.id, "mind", greet.response, {
+              mindName: mind.name,
+              usage: greet.usage,
+            });
+          }
+        } catch (e) {
+          console.warn("Mind greeting failed:", e);
+        }
         if (alive) {
           setSessionId(s.id);
           bumpSessions();
