@@ -74,7 +74,12 @@ export async function generateMetadata({
       url: canonical,
       siteName: "Feynman",
     },
-    twitter: { card: "summary", site: "@steve_yeow", title, description: desc },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title,
+      description: desc,
+    },
   };
 }
 
