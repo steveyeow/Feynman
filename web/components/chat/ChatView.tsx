@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { get } from "@/lib/api";
+import { get, post, ApiError } from "@/lib/api";
 import {
   loadMessages,
   getSession,
@@ -50,7 +50,7 @@ import MindConsent from "./MindConsent";
 import RelatedBooks from "./RelatedBooks";
 import BookCanvas from "./BookCanvas";
 import { useWriteBook } from "./useWriteBook";
-import { ShareModal, PublishToast } from "./ShareModal";
+import { PublishToast } from "./ShareModal";
 import {
   bookToContext,
   type SelectedBook,
@@ -125,6 +125,36 @@ function stubSession(id: string): Session {
   };
 }
 
+/** Subset of POST /share's response the share button + toast actually read. */
+interface ShareRecord {
+  public_status: string;
+  public_title?: string | null;
+  public_handle?: string | null;
+  public_url?: string | null;
+}
+
+/** macOS-style share glyph (box + up arrow) — the icon-only affordance that
+ *  replaced the old "Share publicly" text button in the redesign. */
+function ShareIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+      <polyline points="8 6 12 2 16 6" />
+      <line x1="12" y1="2" x2="12" y2="14" />
+    </svg>
+  );
+}
+
 export default function ChatView({
   sessionId,
   initialMinds,
@@ -180,12 +210,55 @@ export default function ChatView({
 
   // Share state
   const [featuresOn, setFeaturesOn] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   const [publicStatus, setPublicStatus] = useState("private");
   const [publicTitle, setPublicTitle] = useState<string | null>(null);
   const [publicHandle, setPublicHandle] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string>("");
   const [toastUrl, setToastUrl] = useState<string>("");
+  // Transient inline hint beside the share icon (e.g. the <3-message gate). It
+  // auto-clears and never opens a modal — the redesign dropped the form.
+  const [shareHint, setShareHint] = useState("");
+  const shareHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashShareHint = useCallback((msg: string) => {
+    setShareHint(msg);
+    if (shareHintTimer.current) clearTimeout(shareHintTimer.current);
+    shareHintTimer.current = setTimeout(() => setShareHint(""), 4000);
+  }, []);
+
+  // One-click publish (share redesign Phase 1). No title/handle form: POST
+  // /share with the session's own title and NO handle, so the public page reads
+  // "Anonymous" (ChatGPT-style), then surface the clean PublishToast. The
+  // backend's <3-message gate (422, string detail — no code) becomes a small
+  // inline hint instead of a modal.
+  const doShare = useCallback(async () => {
+    try {
+      const rec = await post<ShareRecord>(
+        `/api/chat-sessions/${encodeURIComponent(sessionId)}/share`,
+        { title: sessionRef.current?.title || undefined },
+      );
+      setPublicStatus(rec.public_status);
+      if (rec.public_title !== undefined) setPublicTitle(rec.public_title ?? null);
+      if (rec.public_handle !== undefined) setPublicHandle(rec.public_handle ?? null);
+      const url = rec.public_url || `/discussions/${sessionId}`;
+      setPublicUrl(url);
+      setToastUrl(url);
+      bumpSessions(); // show the public ● dot in the sidebar
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 422) {
+        flashShareHint("Chat needs at least 3 messages to share.");
+      } else {
+        const detail =
+          e instanceof ApiError
+            ? (e.body as { detail?: unknown } | null)?.detail
+            : null;
+        flashShareHint(
+          typeof detail === "string" && detail
+            ? detail
+            : "Couldn’t publish — please try again.",
+        );
+      }
+    }
+  }, [sessionId, flashShareHint]);
 
   // Abort guard: bump to invalidate in-flight minds work after a new send.
   const genRef = useRef(0);
@@ -903,18 +976,27 @@ export default function ChatView({
       <div className="chat-main">
         {shareEligible && (
           <div className={`chat-session-actions ${styles.shareActions}`} id="chat-session-actions">
+            {shareHint && (
+              <span className={styles.shareHint} role="status">
+                {shareHint}
+              </span>
+            )}
             <button
               type="button"
               className={`composer-icon-btn ${styles.shareBtn}`}
               id="share-session-btn"
-              onClick={() => (isPublic && publicUrl ? setToastUrl(publicUrl) : setShareOpen(true))}
+              aria-label={isPublic ? "Shared publicly — manage link" : "Share publicly"}
+              title={isPublic ? "Shared publicly" : "Share publicly"}
+              onClick={() => (isPublic && publicUrl ? setToastUrl(publicUrl) : doShare())}
             >
+              <ShareIcon />
               {isPublic && (
-                <span id="share-status-indicator" className={styles.shareDot} title="Public">
-                  ●
-                </span>
+                <span
+                  id="share-status-indicator"
+                  className={styles.shareDot}
+                  aria-hidden="true"
+                />
               )}
-              <span className="share-btn-label">{isPublic ? "Manage share" : "Share publicly"}</span>
             </button>
           </div>
         )}
@@ -993,23 +1075,6 @@ export default function ChatView({
             excludeAgentIds={[...books.values()].map((b) => b.agentId)}
           />
         )
-      )}
-
-      {shareOpen && (
-        <ShareModal
-          session={{ ...sessionRef.current, publicStatus, publicTitle, publicHandle }}
-          onClose={() => setShareOpen(false)}
-          onShared={(rec) => {
-            setPublicStatus(rec.public_status);
-            if (rec.public_title !== undefined) setPublicTitle(rec.public_title ?? null);
-            if (rec.public_handle !== undefined) setPublicHandle(rec.public_handle ?? null);
-            const url = rec.public_url || `/discussions/${sessionId}`;
-            setPublicUrl(url);
-            setShareOpen(false);
-            setToastUrl(url);
-            bumpSessions(); // show the public ● dot in the sidebar
-          }}
-        />
       )}
 
       {toastUrl && (
