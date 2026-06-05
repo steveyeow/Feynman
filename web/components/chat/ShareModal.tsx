@@ -1,124 +1,19 @@
 "use client";
 
 /**
- * Share-publicly modal + success toast. Port of the Phase 6 user-share UI in
- * app.js (~7798-7919). Auto-publish model: POST /share sets public_status
- * 'approved' immediately; the public URL is /discussions/{id}.
+ * Publish-success toast for the share flow.
  *
- * Reuses .share-modal(.hidden) + .share-modal-card + .publish-toast classes.
- * Eligibility (feature flag + min message count) is decided by ChatView; this
- * component only renders when asked and reports the published record back up.
+ * The old title/handle modal was removed in the share redesign (Phase 1) in
+ * favor of one-click publish wired directly in ChatView (`doShare`). This file
+ * now holds only the clean popup that surfaces the public link with Copy / Open
+ * / Make private — the affordance ChatGPT/Claude show after you share.
+ *
+ * Reuses the .publish-toast classes. Auto-publish model: POST /share sets
+ * public_status 'approved' immediately; the public URL is /discussions/{id}.
  */
 
-import { useEffect, useState } from "react";
-import { post, ApiError } from "@/lib/api";
-import type { Session } from "@/lib/chat";
-
-interface ShareRecord {
-  public_status: string;
-  public_title?: string | null;
-  public_handle?: string | null;
-  public_url?: string | null;
-}
-
-export function ShareModal({
-  session,
-  onClose,
-  onShared,
-}: {
-  session: Session;
-  onClose: () => void;
-  onShared: (rec: ShareRecord) => void;
-}) {
-  const [title, setTitle] = useState(
-    (session.publicTitle || session.title || "").slice(0, 200),
-  );
-  const [handle, setHandle] = useState(session.publicHandle || "");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  // Esc closes (mirrors the legacy global keydown handler).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const submit = async () => {
-    setSubmitting(true);
-    setError("");
-    try {
-      const rec = await post<ShareRecord>(
-        `/api/chat-sessions/${encodeURIComponent(session.id)}/share`,
-        {
-          title: title.trim() || undefined,
-          handle: handle.trim() || undefined,
-        },
-      );
-      onShared(rec);
-    } catch (e) {
-      const detail =
-        e instanceof ApiError &&
-        typeof (e.body as { detail?: string })?.detail === "string"
-          ? (e.body as { detail: string }).detail
-          : "Could not publish.";
-      setError(detail);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="share-modal">
-      <div className="share-modal-backdrop" onClick={onClose} />
-      <div className="share-modal-card" role="dialog" aria-modal="true">
-        <div className="share-modal-header">
-          <h2>Share publicly</h2>
-          <button className="share-modal-close" aria-label="Close" onClick={onClose}>
-            ×
-          </button>
-        </div>
-        <div className="share-modal-body">
-          <p className="share-modal-intro">
-            Publish this conversation to a public page anyone can read. You can make
-            it private again at any time.
-          </p>
-          <label className="share-field">
-            <span className="share-field-label">Title</span>
-            <input
-              className="share-field-input"
-              value={title}
-              maxLength={200}
-              placeholder="Conversation title"
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <label className="share-field">
-            <span className="share-field-label">Your handle (optional)</span>
-            <input
-              className="share-field-input"
-              value={handle}
-              placeholder="e.g. feynman_fan"
-              onChange={(e) => setHandle(e.target.value)}
-            />
-            <span className="share-field-hint">Shown as the author of the public page.</span>
-          </label>
-          {error && <div className="share-modal-error">{error}</div>}
-        </div>
-        <div className="share-modal-footer">
-          <button className="share-modal-cancel" onClick={onClose} disabled={submitting}>
-            Cancel
-          </button>
-          <button className="share-modal-submit" onClick={submit} disabled={submitting}>
-            {submitting ? "Publishing…" : "Publish"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useState } from "react";
+import { post } from "@/lib/api";
 
 export function PublishToast({
   url,
