@@ -2140,3 +2140,48 @@ class TestPhase2AnswerShare:
         assert "a@b.com" in rec["question"]
         assert "[link redacted]" in ugc.scrub_pii_for_public_display(rec["answer"])
         assert "[email redacted]" in ugc.scrub_pii_for_public_display(rec["question"])
+
+
+class TestPublicJsonDatetimeSerialization:
+    """Regression for the prod 500 'Object of type datetime is not JSON
+    serializable': on Postgres chat_sessions.approved_at is a TIMESTAMPTZ (→
+    datetime) and the public render endpoints returned a RAW JSONResponse (bare
+    json.dumps). The SQLite test DB stores timestamps as TEXT so it can't
+    reproduce the type — we monkeypatch the data layer to hand back a real
+    datetime and assert the endpoint serializes it (via jsonable_encoder) instead
+    of raising. Guards every UGC JSONResponse endpoint that embeds DB rows.
+    """
+
+    def test_public_discussion_serializes_datetime_approved_at(self, monkeypatch):
+        import json, datetime
+        from app import main
+        dt = datetime.datetime(2026, 6, 5, 4, 5, 31, tzinfo=datetime.timezone.utc)
+        monkeypatch.setattr(main.ugc_module, "is_enabled", lambda: True)
+        monkeypatch.setattr(main, "get_chat_session_with_public_status", lambda sid: {
+            "id": sid, "user_id": "u1", "public_status": "approved",
+            "title": "T", "public_title": "T", "public_handle": None,
+            "session_type": "chat", "mind_id": None,
+            "approved_at": dt, "consent_at": None,
+        })
+        monkeypatch.setattr(main, "list_messages_for_public_session",
+                            lambda sid, *a, **k: [])
+        resp = main.api_public_discussion("sid")  # must NOT raise
+        body = json.loads(resp.body)
+        assert body["id"] == "sid"
+        assert isinstance(body["approved_at"], str) and body["approved_at"], \
+            "PG datetime approved_at must serialize to a string, not 500"
+
+    def test_public_answer_serializes_datetime_approved_at(self, monkeypatch):
+        import json, datetime
+        from app import main
+        dt = datetime.datetime(2026, 6, 5, 4, 5, 31, tzinfo=datetime.timezone.utc)
+        monkeypatch.setattr(main.ugc_module, "is_enabled", lambda: True)
+        monkeypatch.setattr(main, "get_public_answer", lambda aid: {
+            "id": aid, "question": "q", "answer": "a", "answer_role": "assistant",
+            "public_handle": None, "mind_id": None, "mind_name": None,
+            "sources_json": None, "approved_at": dt, "consent_at": None,
+        })
+        resp = main.api_public_answer("aid")  # must NOT raise
+        body = json.loads(resp.body)
+        assert body["id"] == "aid"
+        assert isinstance(body["approved_at"], str) and body["approved_at"]
