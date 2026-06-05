@@ -12,6 +12,7 @@ from typing import Any
 import os
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -2718,7 +2719,10 @@ def api_public_answer(answer_id: str) -> JSONResponse:
                 slug = ""
         book = {"name": first.get("agent_name") or "", "agent_id": agent_id, "slug": slug}
     return JSONResponse(
-        content={
+        # jsonable_encoder for parity with the discussion endpoints (shared_answers
+        # stores ISO-string timestamps so this is currently safe, but this keeps it
+        # robust if any datetime slips into the payload later).
+        content=jsonable_encoder({
             "id": row["id"],
             "question": ugc_module.scrub_pii_for_public_display(row.get("question") or ""),
             "answer": ugc_module.scrub_pii_for_public_display(row.get("answer") or ""),
@@ -2727,7 +2731,7 @@ def api_public_answer(answer_id: str) -> JSONResponse:
             "mind": mind,
             "book": book,
             "approved_at": row.get("approved_at") or row.get("consent_at") or "",
-        },
+        }),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
 
@@ -4310,7 +4314,7 @@ def api_agent_discussions(agent_id: str) -> JSONResponse:
     except Exception:
         sessions = []
     return JSONResponse(
-        content={"discussions": sessions, "entity_name": agent.get("name", "")},
+        content=jsonable_encoder({"discussions": sessions, "entity_name": agent.get("name", "")}),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
 
@@ -4328,7 +4332,7 @@ def api_mind_discussions(mind_id: str) -> JSONResponse:
     except Exception:
         sessions = []
     return JSONResponse(
-        content={"discussions": sessions, "entity_name": mind.get("name", "")},
+        content=jsonable_encoder({"discussions": sessions, "entity_name": mind.get("name", "")}),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
 
@@ -4402,7 +4406,10 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         except Exception:
             entity_slug = ""
     return JSONResponse(
-        content={
+        # jsonable_encoder so PG TIMESTAMPTZ columns (approved_at/consent_at come
+        # back as datetime objects, not strings) serialize — raw JSONResponse uses
+        # bare json.dumps which 500s on a datetime. (Latent until the flag went on.)
+        content=jsonable_encoder({
             "id": session_id,
             "title": session.get("public_title") or session.get("title") or "",
             "handle": session.get("public_handle") or "Anonymous",
@@ -4411,7 +4418,7 @@ def api_public_discussion(session_id: str) -> JSONResponse:
             "entity_slug": entity_slug,
             "approved_at": session.get("approved_at") or session.get("consent_at") or "",
             "messages": messages,
-        },
+        }),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
 
