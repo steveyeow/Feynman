@@ -125,12 +125,24 @@ function stubSession(id: string): Session {
   };
 }
 
-/** Subset of POST /share's response the share button + toast actually read. */
+/** Subset of the /share responses the share button + toast actually read.
+ *  `id` is the public id (session id for a discussion, short id for an answer). */
 interface ShareRecord {
+  id?: string;
   public_status: string;
   public_title?: string | null;
   public_handle?: string | null;
   public_url?: string | null;
+}
+
+/** Pull a human message out of an ApiError (string detail), else the fallback. */
+function apiErrorText(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    const detail = (e.body as { detail?: unknown } | null)?.detail;
+    if (typeof detail === "string" && detail) return detail;
+    if (e.detailMessage) return e.detailMessage;
+  }
+  return fallback;
 }
 
 /** macOS-style share glyph (box + up arrow) — the icon-only affordance that
@@ -214,7 +226,12 @@ export default function ChatView({
   const [publicTitle, setPublicTitle] = useState<string | null>(null);
   const [publicHandle, setPublicHandle] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string>("");
-  const [toastUrl, setToastUrl] = useState<string>("");
+  // The publish toast. Carries its own make-private action so it can withdraw
+  // either the whole-session discussion (Phase 1) or one shared answer (Phase 2).
+  const [toast, setToast] = useState<{
+    url: string;
+    withdraw: () => Promise<void>;
+  } | null>(null);
   // Transient inline hint beside the share icon (e.g. the <3-message gate). It
   // auto-clears and never opens a modal — the redesign dropped the form.
   const [shareHint, setShareHint] = useState("");
@@ -224,6 +241,19 @@ export default function ChatView({
     if (shareHintTimer.current) clearTimeout(shareHintTimer.current);
     shareHintTimer.current = setTimeout(() => setShareHint(""), 4000);
   }, []);
+
+  // Make the whole-session discussion private again (Phase 1 "Make private").
+  const withdrawSession = useCallback(async () => {
+    try {
+      await post(`/api/chat-sessions/${encodeURIComponent(sessionId)}/withdraw`);
+    } catch {
+      /* fail silently — user can retry */
+    }
+    setPublicStatus("withdrawn");
+    setPublicUrl("");
+    setToast(null);
+    bumpSessions(); // clear the public ● dot in the sidebar
+  }, [sessionId]);
 
   // One-click publish (share redesign Phase 1). No title/handle form: POST
   // /share with the session's own title and NO handle, so the public page reads
@@ -241,24 +271,50 @@ export default function ChatView({
       if (rec.public_handle !== undefined) setPublicHandle(rec.public_handle ?? null);
       const url = rec.public_url || `/discussions/${sessionId}`;
       setPublicUrl(url);
-      setToastUrl(url);
+      setToast({ url, withdraw: withdrawSession });
       bumpSessions(); // show the public ● dot in the sidebar
     } catch (e) {
-      if (e instanceof ApiError && e.status === 422) {
-        flashShareHint("Chat needs at least 3 messages to share.");
-      } else {
-        const detail =
-          e instanceof ApiError
-            ? (e.body as { detail?: unknown } | null)?.detail
-            : null;
+      flashShareHint(
+        e instanceof ApiError && e.status === 422
+          ? "Chat needs at least 3 messages to share."
+          : apiErrorText(e, "Couldn’t publish — please try again."),
+      );
+    }
+  }, [sessionId, flashShareHint, withdrawSession]);
+
+  // Per-turn publish (share redesign Phase 2): share ONE answer at transcript
+  // index `idx` → /a/{id}, then surface the same PublishToast. No min-message
+  // gate; idempotent server-side. "Make private" withdraws THAT answer only.
+  const doShareMessage = useCallback(
+    async (idx: number) => {
+      try {
+        const rec = await post<ShareRecord>(
+          `/api/chat-sessions/${encodeURIComponent(sessionId)}/messages/${idx}/share`,
+        );
+        const answerId = rec.id || "";
+        setToast({
+          url: rec.public_url || (answerId ? `/a/${answerId}` : ""),
+          withdraw: async () => {
+            if (answerId) {
+              try {
+                await post(`/api/public-answers/${encodeURIComponent(answerId)}/withdraw`);
+              } catch {
+                /* fail silently — user can retry */
+              }
+            }
+            setToast(null);
+          },
+        });
+      } catch (e) {
         flashShareHint(
-          typeof detail === "string" && detail
-            ? detail
-            : "Couldn’t publish — please try again.",
+          e instanceof ApiError && e.status === 422
+            ? "Only an answer can be shared."
+            : apiErrorText(e, "Couldn’t share this answer — please try again."),
         );
       }
-    }
-  }, [sessionId, flashShareHint]);
+    },
+    [sessionId, flashShareHint],
+  );
 
   // Abort guard: bump to invalidate in-flight minds work after a new send.
   const genRef = useRef(0);
@@ -987,7 +1043,11 @@ export default function ChatView({
               id="share-session-btn"
               aria-label={isPublic ? "Shared publicly — manage link" : "Share publicly"}
               title={isPublic ? "Shared publicly" : "Share publicly"}
-              onClick={() => (isPublic && publicUrl ? setToastUrl(publicUrl) : doShare())}
+              onClick={() =>
+                isPublic && publicUrl
+                  ? setToast({ url: publicUrl, withdraw: withdrawSession })
+                  : doShare()
+              }
             >
               <ShareIcon />
               {isPublic && (
@@ -1002,7 +1062,13 @@ export default function ChatView({
         )}
 
         <div className="chat-messages" id="chat-messages" ref={scrollRef}>
-          <MessageList messages={messages} knownMindNames={knownMindNames} />
+          <MessageList
+            messages={messages}
+            knownMindNames={knownMindNames}
+            // Per-turn share entry: hover "Share" on each answer. Same gate as
+            // session share (UGC flag on, not a write-book session).
+            onShareMessage={featuresOn && !isWriteBook ? doShareMessage : undefined}
+          />
           {sending && (
             <div className="chat-message assistant">
               <span className="loading-dot">Thinking...</span>
@@ -1077,17 +1143,11 @@ export default function ChatView({
         )
       )}
 
-      {toastUrl && (
+      {toast && (
         <PublishToast
-          url={toastUrl}
-          sessionId={sessionId}
-          onClose={() => setToastUrl("")}
-          onUnshared={() => {
-            setPublicStatus("withdrawn");
-            setPublicUrl("");
-            setToastUrl("");
-            bumpSessions(); // clear the public ● dot in the sidebar
-          }}
+          url={toast.url}
+          onClose={() => setToast(null)}
+          onWithdraw={toast.withdraw}
         />
       )}
     </div>

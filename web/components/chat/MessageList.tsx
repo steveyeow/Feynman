@@ -29,6 +29,45 @@ function FeynmanGlyph() {
   );
 }
 
+/** macOS-style share glyph (box + up arrow), matching the session-share icon. */
+function ShareGlyph() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+      <polyline points="8 6 12 2 16 6" />
+      <line x1="12" y1="2" x2="12" y2="14" />
+    </svg>
+  );
+}
+
+/** Hover "Share" action under an assistant/mind answer (per-turn share entry). */
+function ShareAnswerAction({ onClick }: { onClick: () => void }) {
+  return (
+    <div className={styles.msgActions}>
+      <button
+        type="button"
+        className={styles.shareMsgBtn}
+        onClick={onClick}
+        aria-label="Share this answer"
+        title="Share this answer"
+      >
+        <ShareGlyph />
+        <span>Share</span>
+      </button>
+    </div>
+  );
+}
+
 /**
  * Build assistant body HTML with citation markers replaced by a sentinel we can
  * tokenize into React nodes (so the hover popover is a real component, not an
@@ -129,7 +168,15 @@ const SKILL_LABELS: Record<string, string> = {
   llm_knowledge: "LLM Knowledge",
 };
 
-function AssistantMessage({ msg }: { msg: Message }) {
+function AssistantMessage({
+  msg,
+  index,
+  onShare,
+}: {
+  msg: Message;
+  index: number;
+  onShare?: (index: number) => void;
+}) {
   const refs = msg.opts?.references || [];
   const webSrcs = msg.opts?.webSources || [];
   const usage = msg.opts?.usage;
@@ -226,6 +273,7 @@ function AssistantMessage({ msg }: { msg: Message }) {
             {usage.total_tokens} tokens
           </div>
         )}
+        {onShare && <ShareAnswerAction onClick={() => onShare(index)} />}
       </div>
     </div>
   );
@@ -361,7 +409,15 @@ function renderUserHtml(
   return prefixed ? prefixed + " " + html : html;
 }
 
-function MindMessage({ msg }: { msg: Message }) {
+function MindMessage({
+  msg,
+  index,
+  onShare,
+}: {
+  msg: Message;
+  index: number;
+  onShare?: (index: number) => void;
+}) {
   const name = msg.mindName || "";
   const raw = String(msg.content ?? "");
   const prefixRe = new RegExp(
@@ -393,6 +449,7 @@ function MindMessage({ msg }: { msg: Message }) {
             {usage.total_tokens} tokens
           </div>
         )}
+        {onShare && <ShareAnswerAction onClick={() => onShare(index)} />}
       </div>
     </div>
   );
@@ -430,19 +487,26 @@ function JoinNotice({ names }: { names: string[] }) {
 export default function MessageList({
   messages,
   knownMindNames = [],
+  onShareMessage,
 }: {
   messages: Message[];
   knownMindNames?: string[];
+  /** When provided, each assistant/mind answer shows a hover "Share" action
+   *  that publishes that single turn (index = position in this list, which
+   *  matches the persisted transcript order the backend indexes by). */
+  onShareMessage?: (index: number) => void;
 }) {
   return (
     <>
       {messages.map((msg, i) => {
-        if (msg.role === "mind") return <MindMessage key={i} msg={msg} />;
+        if (msg.role === "mind")
+          return <MindMessage key={i} msg={msg} index={i} onShare={onShareMessage} />;
         if (msg.role === "system-notice")
           return <JoinNotice key={i} names={msg.mindNames || []} />;
         if (msg.role === "error-notice")
           return <ErrorNotice key={i} text={msg.content} />;
-        if (msg.role === "assistant") return <AssistantMessage key={i} msg={msg} />;
+        if (msg.role === "assistant")
+          return <AssistantMessage key={i} msg={msg} index={i} onShare={onShareMessage} />;
         return <UserMessage key={i} msg={msg} knownMindNames={knownMindNames} />;
       })}
     </>

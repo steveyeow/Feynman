@@ -49,3 +49,37 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Per-turn share entry (share redesign Phase 2) — a hover "Share" action under
+   each assistant/mind answer. Hidden until the message row is hovered or the
+   button is focused (keyboard a11y). Space is reserved (opacity, not display)
+   so revealing it never shifts the transcript. */
+.msgActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+:global(.chat-message):hover .msgActions,
+.msgActions:focus-within {
+  opacity: 1;
+}
+.shareMsgBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: 500 12px/1 "Inter", sans-serif;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.shareMsgBtn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
