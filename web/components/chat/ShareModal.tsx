@@ -8,23 +8,24 @@
  * now holds only the clean popup that surfaces the public link with Copy / Open
  * / Make private — the affordance ChatGPT/Claude show after you share.
  *
- * Reuses the .publish-toast classes. Auto-publish model: POST /share sets
- * public_status 'approved' immediately; the public URL is /discussions/{id}.
+ * Reuses the .publish-toast classes. Auto-publish model: the /share endpoint
+ * sets public_status 'approved' immediately. Used for BOTH whole-session shares
+ * (URL /discussions/{id}) and per-turn answer shares (URL /a/{id}); the
+ * make-private action is caller-provided since the withdraw endpoint differs.
  */
 
 import { useState } from "react";
-import { post } from "@/lib/api";
 
 export function PublishToast({
   url,
-  sessionId,
   onClose,
-  onUnshared,
+  onWithdraw,
 }: {
   url: string;
-  sessionId: string;
   onClose: () => void;
-  onUnshared: () => void;
+  /** Make-private action. The caller owns the endpoint (session vs single
+   *  answer) + any local state updates; the toast only confirms and invokes it. */
+  onWithdraw: () => Promise<void>;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -41,22 +42,21 @@ export function PublishToast({
   const unshare = async () => {
     if (
       !window.confirm(
-        "Make this conversation private again? The public link will stop working immediately.",
+        "Make this private again? The public link will stop working immediately.",
       )
     )
       return;
     try {
-      await post(`/api/chat-sessions/${encodeURIComponent(sessionId)}/withdraw`);
-      onUnshared();
+      await onWithdraw();
     } catch {
-      /* fail silently — user can retry */
+      /* fail silently — caller handles errors */
     }
   };
 
   return (
     <div className="publish-toast">
       <p className="publish-toast-title">Published</p>
-      <p className="publish-toast-msg">Anyone with this link can read the conversation.</p>
+      <p className="publish-toast-msg">Anyone with this link can read it.</p>
       <div className="publish-toast-link-row">
         <input className="publish-toast-url" readOnly value={url} onFocus={(e) => e.target.select()} />
         <button className="publish-toast-copy" onClick={copy}>
