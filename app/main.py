@@ -75,6 +75,10 @@ from .core.db import (
     reject_chat_session_public,
     request_chat_session_share,
     withdraw_chat_session_share,
+    request_answer_share,
+    withdraw_answer_share,
+    get_public_answer,
+    get_shared_answer,
     list_session_messages,
     list_user_interest_profile,
     list_votes,
@@ -2604,6 +2608,128 @@ def api_chat_session_public_status(session_id: str, request: Request):
         "consent_at": sess.get("consent_at"),
         "approved_at": sess.get("approved_at"),
     }
+
+
+# ─── Per-turn share (share redesign Phase 2) ───
+# Publish a SINGLE assistant/mind answer as a standalone public page at
+# /a/{id}. Same auth + UGC-flag gating + PII scrub as session discussions;
+# the unit is one turn (no minimum-message gate), snapshot at publish time.
+
+class ShareAnswerRequest(BaseModel):
+    handle: str | None = Field(default=None, max_length=40)
+
+
+@app.post("/api/chat-sessions/{session_id}/messages/{message_index}/share")
+def api_answer_share(
+    session_id: str, message_index: int, request: Request,
+    payload: ShareAnswerRequest | None = None,
+):
+    """Publish the single answer at ``message_index`` as a public /a/{id} page.
+
+    Auto-publish, idempotent per (session, message_index). NO minimum-message
+    gate — one answer is the unit. The request body is optional (a bare
+    one-click share sends none). Error codes:
+      * 422 ``not_an_answer`` — the indexed turn isn't an assistant/mind reply
+      * 404 — session missing / not owned / index out of range / admin-rejected
+    """
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    handle, err = ugc_module.validate_public_handle(
+        (payload.handle if payload else None) or "")
+    if err:
+        raise HTTPException(status_code=422, detail=err)
+    result = request_answer_share(session_id, message_index, uid, handle=handle or None)
+    if result == "not_an_answer":
+        raise HTTPException(status_code=422, detail="Only an assistant answer can be shared.")
+    if not result or isinstance(result, str):
+        # not_found / rejected / unknown — 404 to avoid leaking which.
+        raise HTTPException(status_code=404, detail="Answer not eligible for sharing")
+    return {
+        "id": result["id"],
+        "public_status": result["public_status"],
+        "public_handle": result.get("public_handle"),
+        "public_url": f"{_SITE_URL}/a/{result['id']}",
+        "consent_at": result.get("consent_at"),
+        "approved_at": result.get("approved_at"),
+    }
+
+
+@app.post("/api/public-answers/{answer_id}/withdraw")
+def api_answer_withdraw(answer_id: str, request: Request):
+    """Owner withdraws a shared answer — status → 'withdrawn'. Idempotent."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    result = withdraw_answer_share(answer_id, uid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    return {"id": result["id"], "public_status": result["public_status"]}
+
+
+@app.get("/api/public-answers/{answer_id}")
+def api_public_answer(answer_id: str) -> JSONResponse:
+    """One approved shared answer as JSON (drives the /a/{id} render). 404
+    unless the feature flag is on AND public_status='approved'. Question +
+    answer pass through the same PII scrub as discussions; carries the mind /
+    book attribution that makes a single shared answer self-explanatory."""
+    _require_ugc_enabled()
+    row = get_public_answer(answer_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    # Attribution: a 'mind' answer resolves to that mind; an 'assistant' answer
+    # is Feynman (mind=None) and may carry a cited book.
+    mind = None
+    if row.get("mind_id"):
+        try:
+            m = get_mind(row["mind_id"])
+        except Exception:
+            m = None
+        if m:
+            mind = {
+                "name": m.get("name") or row.get("mind_name") or "",
+                # id alongside slug so the render's "Chat with {mind}" link can
+                # fall back to slug||id (uuid 301s to the slug path).
+                "id": m.get("id") or "",
+                "slug": m.get("slug") or "",
+                "avatar_seed": m.get("avatar_seed") or "",
+                "voice": m.get("voice") or "",
+            }
+    if mind is None and row.get("mind_name"):
+        # Named in the snapshot but no longer resolvable — still attribute it.
+        mind = {"name": row["mind_name"], "id": "", "slug": "", "avatar_seed": "", "voice": ""}
+    # Book attribution from the snapshotted sources (first cited book).
+    book = None
+    try:
+        srcs = json.loads(row.get("sources_json") or "[]")
+    except Exception:
+        srcs = []
+    if srcs:
+        first = srcs[0] or {}
+        agent_id = first.get("agent_id") or ""
+        slug = ""
+        if agent_id:
+            try:
+                ag = get_agent(agent_id)
+                slug = (ag or {}).get("slug") or ""
+            except Exception:
+                slug = ""
+        book = {"name": first.get("agent_name") or "", "agent_id": agent_id, "slug": slug}
+    return JSONResponse(
+        content={
+            "id": row["id"],
+            "question": ugc_module.scrub_pii_for_public_display(row.get("question") or ""),
+            "answer": ugc_module.scrub_pii_for_public_display(row.get("answer") or ""),
+            "answer_role": row.get("answer_role") or "assistant",
+            "handle": row.get("public_handle") or "Anonymous",
+            "mind": mind,
+            "book": book,
+            "approved_at": row.get("approved_at") or row.get("consent_at") or "",
+        },
+        headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
+    )
 
 
 class AdminApproveRequest(BaseModel):

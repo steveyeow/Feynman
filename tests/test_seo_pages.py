@@ -1967,3 +1967,176 @@ class TestPhase6AutoPublishShare:
         assert match[0]["public_status"] == "approved", \
             "_row_to_session must surface public_status (SPA UI depends on this)"
         assert match[0]["public_handle"] == "@me"
+
+
+class TestPhase2AnswerShare:
+    """Per-turn share (share redesign Phase 2): publishing a SINGLE answer.
+
+    Mirrors TestPhase6AutoPublishShare but the unit is one turn. Guards the
+    snapshot, attribution, approved-gating, withdraw, and idempotency contracts
+    the /a/{id} public render depends on.
+    """
+
+    def _mk_session(self, mind_name="Ada Lovelace"):
+        """Build a session whose transcript is:
+            0 user       "What is entropy? mail me at a@b.com"
+            1 assistant  "<answer w/ a link>"  meta.sources=[{agent_id, agent_name}]
+            2 user       "And you?"
+            3 mind        "<mind answer>"      meta.mindName=<mind_name>
+        Returns (user_id, session_id). Tests own the DB across the session (one
+        SQLite file), so pass a UNIQUE mind_name when asserting on mind presence."""
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message,
+        )
+        init_db()
+        uid = f"user-{uuid.uuid4().hex[:8]}"
+        sid = create_chat_session(title="Entropy chat", session_type="chat", user_id=uid)["id"]
+        add_session_message(sid, role="user",
+                            content="What is entropy? mail me at a@b.com", user_id=uid)
+        add_session_message(sid, role="assistant",
+                            content="Entropy measures disorder. See https://example.com/x",
+                            meta={"sources": [{"agent_id": "agent-1",
+                                               "agent_name": "Thermodynamics 101"}]},
+                            user_id=uid)
+        add_session_message(sid, role="user", content="And you?", user_id=uid)
+        add_session_message(sid, role="mind",
+                            content="From a computational view, entropy is information.",
+                            meta={"mindName": mind_name}, user_id=uid)
+        return uid, sid
+
+    def test_share_snapshots_question_and_answer(self):
+        from app.core.db import request_answer_share
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        assert isinstance(rec, dict), f"expected dict, got {rec!r}"
+        assert rec["public_status"] == "approved"
+        assert rec["answer"].startswith("Entropy measures disorder")
+        assert rec["question"] == "What is entropy? mail me at a@b.com"
+        assert rec["answer_role"] == "assistant"
+        assert rec["approved_at"]
+        assert 0 < len(rec["id"]) < 36, "public id must be short (not a uuid)"
+
+    def test_share_mind_answer_resolves_attribution(self):
+        import uuid
+        from app.core.db import request_answer_share, create_mind
+        name = f"Ada Lovelace {uuid.uuid4().hex[:8]}"  # unique → no cross-test bleed
+        mind_id = create_mind({"name": name, "persona": "analytical engine pioneer"})
+        uid, sid = self._mk_session(mind_name=name)
+        rec = request_answer_share(sid, 3, uid)
+        assert isinstance(rec, dict)
+        assert rec["answer_role"] == "mind"
+        assert rec["mind_name"] == name
+        assert rec["mind_id"] == mind_id, "mind must be resolved by name to its id"
+
+    def test_mind_answer_without_db_mind_still_attributes_name(self):
+        # The mind named in the message isn't in the minds table — we still
+        # snapshot the name (mind_id stays NULL); the API attributes by name.
+        import uuid
+        from app.core.db import request_answer_share
+        name = f"Nonexistent Mind {uuid.uuid4().hex[:8]}"  # never inserted
+        uid, sid = self._mk_session(mind_name=name)
+        rec = request_answer_share(sid, 3, uid)
+        assert isinstance(rec, dict)
+        assert rec["mind_name"] == name
+        assert not rec["mind_id"]
+
+    def test_user_turn_cannot_be_shared(self):
+        from app.core.db import request_answer_share
+        uid, sid = self._mk_session()
+        assert request_answer_share(sid, 0, uid) == "not_an_answer"
+
+    def test_out_of_range_index_is_not_found(self):
+        from app.core.db import request_answer_share
+        uid, sid = self._mk_session()
+        assert request_answer_share(sid, 99, uid) == "not_found"
+
+    def test_wrong_owner_is_not_found(self):
+        from app.core.db import request_answer_share
+        _, sid = self._mk_session()
+        assert request_answer_share(sid, 1, "someone-else") == "not_found"
+
+    def test_no_min_message_gate(self):
+        # A 2-message session can share its answer — the per-turn unit has NO
+        # 3-message gate (unlike whole-session share).
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message, request_answer_share,
+        )
+        init_db()
+        uid = f"user-{uuid.uuid4().hex[:8]}"
+        sid = create_chat_session(title="x", session_type="chat", user_id=uid)["id"]
+        add_session_message(sid, role="user", content="hi", user_id=uid)
+        add_session_message(sid, role="assistant", content="hello there", user_id=uid)
+        rec = request_answer_share(sid, 1, uid)
+        assert isinstance(rec, dict), "single answer must be shareable (no min-message gate)"
+        assert rec["answer"] == "hello there"
+
+    def test_idempotent_per_turn(self):
+        from app.core.db import request_answer_share
+        uid, sid = self._mk_session()
+        a = request_answer_share(sid, 1, uid)
+        b = request_answer_share(sid, 1, uid)
+        assert isinstance(a, dict) and isinstance(b, dict)
+        assert a["id"] == b["id"], "re-sharing the same turn must return the same row"
+
+    def test_public_read_gates_on_approved(self):
+        from app.core.db import request_answer_share, get_public_answer, get_shared_answer
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        assert get_public_answer(rec["id"]) is not None
+        assert get_shared_answer(rec["id"]) is not None
+
+    def test_withdraw_stops_public_render(self):
+        from app.core.db import (
+            request_answer_share, withdraw_answer_share, get_public_answer, get_shared_answer,
+        )
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        out = withdraw_answer_share(rec["id"], uid)
+        assert out and out["public_status"] == "withdrawn"
+        assert get_public_answer(rec["id"]) is None, "withdrawn answers must not render publicly"
+        assert get_shared_answer(rec["id"]) is not None, "row still exists for the owner"
+
+    def test_withdraw_wrong_owner_refused(self):
+        from app.core.db import request_answer_share, withdraw_answer_share, get_public_answer
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        assert withdraw_answer_share(rec["id"], "intruder") is None
+        assert get_public_answer(rec["id"]) is not None, "a failed withdraw must not unpublish"
+
+    def test_reshare_withdrawn_republishes_same_id(self):
+        from app.core.db import (
+            request_answer_share, withdraw_answer_share, get_public_answer,
+        )
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        withdraw_answer_share(rec["id"], uid)
+        again = request_answer_share(sid, 1, uid)
+        assert isinstance(again, dict)
+        assert again["id"] == rec["id"]
+        assert again["public_status"] == "approved"
+        assert get_public_answer(rec["id"]) is not None
+
+    def test_sources_snapshotted_for_book_attribution(self):
+        import json as _json
+        from app.core.db import request_answer_share
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        srcs = _json.loads(rec.get("sources_json") or "[]")
+        assert srcs and srcs[0]["agent_name"] == "Thermodynamics 101"
+
+    def test_snapshot_is_raw_so_render_scrub_can_redact(self):
+        # The snapshot stores RAW text; PII is redacted at render time by the
+        # endpoint via ugc.scrub_pii_for_public_display (so scrub rules can
+        # improve without a re-publish). Verify both halves of that contract.
+        from app.core.db import request_answer_share
+        from app.core import ugc
+        uid, sid = self._mk_session()
+        rec = request_answer_share(sid, 1, uid)
+        assert "https://example.com/x" in rec["answer"]
+        assert "a@b.com" in rec["question"]
+        assert "[link redacted]" in ugc.scrub_pii_for_public_display(rec["answer"])
+        assert "[email redacted]" in ugc.scrub_pii_for_public_display(rec["question"])
