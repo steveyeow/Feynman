@@ -268,12 +268,27 @@ export async function updateSession(
   });
 }
 
+// Per-session transcript cache (stale-while-revalidate). Opening a chat from the
+// history used to re-fetch /api/sessions/{id}/messages from the cold origin every
+// time — a 1-3s blank on every switch. We cache the last-known transcript so
+// switching back to an already-opened (or hover-prefetched) chat paints instantly,
+// then revalidates in the background. ChatView keeps it current as new turns arrive.
+const _messagesCache = new Map<string, Message[]>();
+export function getCachedMessages(id: string): Message[] | null {
+  return _messagesCache.get(id) ?? null;
+}
+export function setCachedMessages(id: string, msgs: Message[]): void {
+  _messagesCache.set(id, msgs);
+}
+
 /** GET /api/sessions/{id}/messages → flattened Message[] (port of switchToSession). */
 export async function loadMessages(id: string): Promise<Message[]> {
   const rows = await get<MessageRow[]>(
     `/api/sessions/${encodeURIComponent(id)}/messages`,
   );
-  return (rows || []).map((m) => ({ role: m.role, content: m.content, ...(m.meta || {}) }));
+  const msgs = (rows || []).map((m) => ({ role: m.role, content: m.content, ...(m.meta || {}) }));
+  _messagesCache.set(id, msgs);
+  return msgs;
 }
 
 /**
