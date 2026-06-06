@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { get, post, ApiError } from "@/lib/api";
+import { get, post, ApiError, getAgent } from "@/lib/api";
 import {
   loadMessages,
   getSession,
@@ -353,6 +353,45 @@ export default function ChatView({
         if (s.sessionType === "write_book" || s.meta?.write_book) {
           setIsWriteBook(true);
           setWriteMeta(s.meta || {});
+        } else if (
+          // Resume / "Continue this conversation": re-attach the book or mind
+          // context for a reopened (or forked) entity chat, so the NEXT message
+          // keeps using it. Without this, /chat/[id] loses the book retrieval /
+          // mind routing (the composer comes back empty). Fresh chats seed
+          // themselves — a home-composer handoff (hasPending) and /mind/[id]/chat
+          // (initialMinds) already set context — so skip those. Fail-silent.
+          s.mindId &&
+          !hasPending(sessionId) &&
+          !(initialMinds && initialMinds.length)
+        ) {
+          if (s.sessionType === "book") {
+            getAgent(s.mindId)
+              .then((a) => {
+                if (!alive || !a?.id) return;
+                setBooks((prev) =>
+                  prev.size
+                    ? prev
+                    : new Map([
+                        [a.id, { id: a.id, agentId: a.id, title: a.name || "Book", author: a.author || "" }],
+                      ]),
+                );
+              })
+              .catch(() => {});
+          } else if (s.sessionType === "mind") {
+            get<{ id: string; name: string; domain?: string; era?: string }>(
+              `/api/minds/${encodeURIComponent(s.mindId)}`,
+            )
+              .then((m) => {
+                if (!alive || !m?.id) return;
+                const sm = { id: m.id, name: m.name, domain: m.domain, era: m.era };
+                setMinds((prev) => (prev.size ? prev : new Map([[m.id, sm]])));
+                if (!activeMindsRef.current.has(m.id)) {
+                  activeMindsRef.current.set(m.id, sm);
+                  setActiveMindList([...activeMindsRef.current.values()]);
+                }
+              })
+              .catch(() => {});
+          }
         }
       })
       .catch((e) => {
