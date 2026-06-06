@@ -10,7 +10,7 @@ import {
   metaDescription,
 } from "@/lib/seo-mind";
 import MessageList from "@/components/chat/MessageList";
-import ContinueDiscussionButton from "@/components/chat/ContinueDiscussionButton";
+import ContinueComposer from "@/components/chat/ContinueComposer";
 import type { Message } from "@/lib/chat";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
@@ -162,21 +162,14 @@ export default async function PublicDiscussionPage({
         <MessageList messages={transcript} knownMindNames={knownMindNames} />
       </div>
 
-      <div className="shared-cta">
-        <ContinueDiscussionButton id={params.id} />
-        <p className="shared-cta-hint">
-          Continuing creates a private copy in your account — only your replies
-          are visible to you.
-        </p>
-        <Link
-          className="shared-cta-alt"
-          href={entityHref || "/library"}
-        >
+      <ContinueComposer id={params.id} />
+      <p className="shared-cta-foot">
+        <Link className="shared-cta-alt" href={entityHref || "/library"}>
           {entityHref
             ? `More from this ${disc.session_type === "book" ? "book" : "mind"}`
             : "Browse the library"}
         </Link>
-      </div>
+      </p>
     </SeoColumn>
   );
 }
