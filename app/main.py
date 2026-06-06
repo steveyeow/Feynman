@@ -3557,6 +3557,27 @@ def pro_config() -> dict[str, Any]:
 
 # ─── Agent endpoints ───
 
+# The catalog list only needs a few small meta fields for the library grid, the
+# composer book picker, and a chat's related-books sidebar (see web/lib/books.ts
+# mapAgentsToBooks). The full meta_json blob (insights, overview, per-chunk data,
+# voice, …) averages ~9 KB/row × ~900 rows ≈ 8 MB — 96% of the payload — and is
+# NEVER read from the list (detail pages fetch the single agent for that).
+# Stripping meta to the display fields keeps opening the composer / library / a
+# chat's related-books sidebar from pulling + JSON-parsing 8 MB on the client main
+# thread, which was freezing interactions for seconds.
+_AGENT_LIST_META_FIELDS = (
+    "author", "isbn", "category", "description",
+    "chunk_count", "creator_name", "creator_user_id",
+)
+
+
+def _slim_agent_list_meta(agents: list[dict[str, Any]]) -> None:
+    for agent in agents:
+        meta = agent.get("meta")
+        if isinstance(meta, dict):
+            agent["meta"] = {k: meta[k] for k in _AGENT_LIST_META_FIELDS if k in meta}
+
+
 @app.get("/api/agents")
 def api_list_agents():
     from fastapi.responses import JSONResponse
@@ -3569,6 +3590,7 @@ def api_list_agents():
         _enrich_ai_book_agents(result)
     except Exception as exc:
         log.error("Failed to enrich AI book agents: %s", exc)
+    _slim_agent_list_meta(result)
     return JSONResponse(
         content=result,
         # 5× longer edge cache (was s-maxage=120 = 2 min) — the agents
@@ -4963,6 +4985,13 @@ def api_list_minds(background_tasks: BackgroundTasks):
             background_tasks.add_task(backfill_mind_embeddings)
     for m in minds:
         m.pop("persona", None)
+        # The minds graph/list only render name/era/domain/slug/links (see the web
+        # minds consumers); these heavy detail-only fields add ~580 KB to the
+        # ~940 KB list payload and are never read from it (the mind detail page
+        # fetches the single mind). Drop them so the minds network loads fast.
+        m.pop("thinking_style", None)
+        m.pop("typical_phrases", None)
+        m.pop("works", None)
     return JSONResponse(
         content=minds,
         headers={"Cache-Control": "public, max-age=60, s-maxage=300"},
