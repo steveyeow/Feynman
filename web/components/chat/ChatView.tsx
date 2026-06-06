@@ -276,7 +276,7 @@ export default function ChatView({
     } catch (e) {
       flashShareHint(
         e instanceof ApiError && e.status === 422
-          ? "Chat needs at least 3 messages to share."
+          ? "Send a message and get a reply before sharing."
           : apiErrorText(e, "Couldn’t publish — please try again."),
       );
     }
@@ -1028,7 +1028,10 @@ export default function ChatView({
 
   // ── Share eligibility: feature on + ≥3 messages (matches backend gate) ──
   // Write-book sessions are never share-eligible (they aren't discussions).
-  const shareEligible = !isWriteBook && featuresOn && messages.length >= 3;
+  // Share once there's at least one real exchange (a question + a reply = 2
+  // messages), matching ChatGPT/Claude (share any conversation). NOT gated by
+  // the related-books sidebar — purely message count + the feature flag.
+  const shareEligible = !isWriteBook && featuresOn && messages.length >= 2;
   const isPublic = publicStatus === "approved";
 
   // Show the book-canvas once there's an outline (after /start) or a writing

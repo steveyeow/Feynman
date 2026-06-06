@@ -1886,18 +1886,21 @@ class TestPhase6AutoPublishShare:
         assert result["public_handle"] == "@me"
         assert result["approved_at"]
 
-    def test_quality_gate_rejects_thin_sessions(self):
+    def test_quality_gate_rejects_unanswered_sessions(self):
+        # A lone question (1 message, no reply) can't be shared.
         from app.core.db import request_chat_session_share
         uid, sid = self._mk_session_with_messages(1)
         result = request_chat_session_share(sid, uid)
         assert result == "too_few_messages", \
-            "Sessions with <3 messages must be rejected to avoid thin pages"
+            "A session with no reply yet must be rejected"
 
-    def test_quality_gate_min_message_count_is_three(self):
-        # Boundary: exactly 3 messages passes; 2 does not.
+    def test_quality_gate_min_message_count_is_two(self):
+        # Boundary: exactly 2 messages (one Q + one reply) passes; 1 does not.
+        # Lowered from 3 → 2 so any answered chat is shareable (ChatGPT/Claude
+        # share any conversation).
         from app.core.db import request_chat_session_share
-        uid_pass, sid_pass = self._mk_session_with_messages(3)
-        uid_fail, sid_fail = self._mk_session_with_messages(2)
+        uid_pass, sid_pass = self._mk_session_with_messages(2)
+        uid_fail, sid_fail = self._mk_session_with_messages(1)
         assert isinstance(request_chat_session_share(sid_pass, uid_pass), dict)
         assert request_chat_session_share(sid_fail, uid_fail) == "too_few_messages"
 
