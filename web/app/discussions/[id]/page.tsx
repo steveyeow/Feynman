@@ -164,6 +164,10 @@ export default async function PublicDiscussionPage({
 
       <div className="shared-cta">
         <ContinueDiscussionButton id={params.id} />
+        <p className="shared-cta-hint">
+          Continuing creates a private copy in your account — only your replies
+          are visible to you.
+        </p>
         <Link
           className="shared-cta-alt"
           href={entityHref || "/library"}
