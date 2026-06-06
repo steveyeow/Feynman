@@ -9,6 +9,16 @@ import {
   fetchPublicDiscussion,
   metaDescription,
 } from "@/lib/seo-mind";
+import { renderMarkdown } from "@/components/chat/markdown";
+
+// Render the (already PII-scrubbed) message body as markdown. renderMarkdown
+// HTML-escapes all text, so the only injected markup is markdown's own tags.
+// PII scrub already strips http(s) URLs, so we additionally neutralize any
+// remaining non-http href (javascript:/data:/mailto:) — a crafted markdown link
+// must not XSS this PUBLIC page.
+function renderSafe(md: string): string {
+  return renderMarkdown(md).replace(/href="(?!https?:\/\/)[^"]*"/gi, 'href="#"');
+}
 
 // A single approved, PII-scrubbed public discussion. Data comes from
 // GET /api/public-discussions/{id} (mirrors the legacy public_session_page:
@@ -141,9 +151,12 @@ export default async function PublicDiscussionPage({
         {disc.messages.map((m, i) => (
           <div key={i} className={`discussion-msg discussion-${m.role}`}>
             <span className="discussion-role">
-              {m.role === "user" ? "Question" : "Feynman"}
+              {m.role === "user" ? "Question" : m.speaker || "Feynman"}
             </span>
-            <p>{m.content}</p>
+            <div
+              className="discussion-md"
+              dangerouslySetInnerHTML={{ __html: renderSafe(m.content) }}
+            />
           </div>
         ))}
       </section>

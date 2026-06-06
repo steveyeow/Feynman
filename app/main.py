@@ -4383,13 +4383,26 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         raw_msgs = list_messages_for_public_session(session_id)
     except Exception:
         raw_msgs = []
-    messages = [
-        {
-            "role": m.get("role", ""),
-            "content": ugc_module.scrub_pii_for_public_display(m.get("content", "") or ""),
-        }
-        for m in raw_msgs
-    ]
+    messages = []
+    for m in raw_msgs:
+        role = m.get("role") or ""
+        # Drop the "minds joined" system notices (they're empty → blank bubbles).
+        if role == "system-notice":
+            continue
+        content = ugc_module.scrub_pii_for_public_display(m.get("content", "") or "")
+        if not content.strip():
+            continue
+        # Speaker label: a 'mind' turn carries the mind's name in meta; the
+        # default answerer is Feynman; a 'user' turn is the asker (rendered as
+        # "Question" client-side). Without this every reply showed as "Feynman".
+        meta = m.get("meta") or {}
+        if role == "mind":
+            speaker = meta.get("mindName") or "A great mind"
+        elif role == "assistant":
+            speaker = "Feynman"
+        else:
+            speaker = ""
+        messages.append({"role": role, "content": content, "speaker": speaker})
     # Resolve the entity's slug so the discussion's backlink to its book/mind
     # skips the 301 hop (entity_id is a uuid). One lookup, cached with the page;
     # book sessions point at an agent, mind sessions at a mind.
