@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { get, post, listVotes } from "@/lib/api";
-import { AgentRow, Book, mapAgentsToBooks, mergeVotes } from "@/lib/books";
+import { Book, mergeVotes } from "@/lib/books";
+import { getCatalogBooks, getCachedCatalogBooks, invalidateCatalogBooks } from "@/lib/catalog";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
@@ -23,13 +24,15 @@ export default function Library() {
   const router = useRouter();
   const { authEnabled, user } = useAuth();
   const { requirePro } = useProGate();
-  const [books, setBooks] = useState<Book[]>([]);
+  // Seed from the catalog cache so re-visiting Library paints instantly instead
+  // of flashing loading → fetch → refill on every navigation.
+  const [books, setBooks] = useState<Book[]>(() => getCachedCatalogBooks() ?? []);
   const [topics, setTopics] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [activeTopics, setActiveTopics] = useState<Set<string>>(new Set());
   const [loadingTopics, setLoadingTopics] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<"recent" | "all">("recent");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCachedCatalogBooks() === null);
   const [discovering, setDiscovering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -43,12 +46,12 @@ export default function Library() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [agents, tops, votes] = await Promise.all([
-        get<AgentRow[]>("/api/agents"),
+      const [catBooks, tops, votes] = await Promise.all([
+        getCatalogBooks(),
         get<{ topics?: string[] } | string[]>("/api/topics").catch(() => ({ topics: [] })),
         listVotes().catch(() => []),
       ]);
-      setBooks(mergeVotes(mapAgentsToBooks(agents), votes));
+      setBooks(mergeVotes(catBooks, votes));
       setTopics(Array.isArray(tops) ? tops : tops.topics || []);
     } catch {
       setError("Couldn't load the library. Is the API running?");
@@ -79,6 +82,7 @@ export default function Library() {
 
   const handleDeleted = useCallback((agentId: string) => {
     setBooks((prev) => prev.filter((b) => b.agentId !== agentId));
+    invalidateCatalogBooks(); // drop the shared cache so the deleted book doesn't reappear
   }, []);
 
   const filtered = useMemo(() => {

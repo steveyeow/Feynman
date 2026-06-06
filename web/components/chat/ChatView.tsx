@@ -19,7 +19,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { get, post, ApiError, getAgent } from "@/lib/api";
+import { get, post, ApiError } from "@/lib/api";
+import { getAgentCached } from "@/lib/catalog";
 import {
   loadMessages,
   getSession,
@@ -366,7 +367,7 @@ export default function ChatView({
           !(initialMinds && initialMinds.length)
         ) {
           if (s.sessionType === "book") {
-            getAgent(s.mindId)
+            getAgentCached(s.mindId)
               .then((a) => {
                 if (!alive || !a?.id) return;
                 setBooks((prev) =>

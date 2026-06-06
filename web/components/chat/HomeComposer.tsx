@@ -15,7 +15,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getAgent, getMind, type Agent, type Mind } from "@/lib/api";
+import { getMind, type Agent, type Mind } from "@/lib/api";
+import { getAgentCached } from "@/lib/catalog";
 import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
@@ -204,7 +205,7 @@ export default function HomeComposer() {
     // never matched the uuid-keyed catalog, so it fell through to this same
     // fetch anyway — but only after a multi-second catalog download, leaving the
     // composer empty ~4s. Now it's one small request.
-    getAgent(bookId)
+    getAgentCached(bookId)
       .then((agent: Agent) => {
         if (agent?.id) {
           setBooks(

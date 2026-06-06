@@ -11,12 +11,21 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { listSessions, SESSIONS_CHANGED, type Session } from "@/lib/chat";
+import {
+  listSessions,
+  getCachedSessions,
+  sessionsCacheFresh,
+  SESSIONS_CHANGED,
+  type Session,
+} from "@/lib/chat";
 
 export default function ChatsList() {
   const { ready, authEnabled, user } = useAuth();
   const router = useRouter();
-  const [sessions, setSessions] = useState<Session[] | null>(null);
+  // Seed from the sessions cache so re-visiting /chats paints the last-known list
+  // immediately (the sidebar's ChatHistory already does this) instead of
+  // re-fetching the cold origin on every visit.
+  const [sessions, setSessions] = useState<Session[] | null>(() => getCachedSessions());
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -28,17 +37,26 @@ export default function ChatsList() {
       return;
     }
     let alive = true;
-    const load = () =>
+    const load = (force = false) => {
+      // Fresh cache → paint it and skip the network round-trip (this removes the
+      // multi-second reload on every visit). bumpSessions() invalidates the cache
+      // on any mutation, so this stays correct.
+      if (!force && sessionsCacheFresh()) {
+        const cached = getCachedSessions();
+        if (cached && alive) setSessions(cached);
+        return;
+      }
       listSessions()
         .then((s) => {
           if (alive) setSessions(s);
         })
         .catch(() => {
-          if (alive) setSessions([]);
+          if (alive && !getCachedSessions()) setSessions([]);
         });
+    };
     load();
-    // Live-refresh on session mutations (M16).
-    const onChanged = () => load();
+    // Live-refresh on session mutations (M16) — force past the TTL.
+    const onChanged = () => load(true);
     window.addEventListener(SESSIONS_CHANGED, onChanged);
     return () => {
       alive = false;

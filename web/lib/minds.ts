@@ -114,17 +114,35 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 // ── API ──────────────────────────────────────────────────────────────────
-import { get } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
-/** GET /api/minds — full mind list. Returns [] on any failure (never throws). */
+// Near-static minds list — cache it (TTL) + de-dupe so the Great Minds graph,
+// the composer mind picker, and ChatView don't re-fetch the cold origin on every
+// mount. Fetched auth:false (the endpoint is identity-independent) so the first
+// load can hit the shared edge cache too.
+const MINDS_TTL = 5 * 60 * 1000;
+let _mindsCache: Mind[] | null = null;
+let _mindsAt = 0;
+let _mindsInflight: Promise<Mind[]> | null = null;
+
+/** GET /api/minds — full mind list, cached. Returns [] on failure (never throws). */
 export async function listMinds(): Promise<Mind[]> {
-  try {
-    const minds = await get<Mind[]>("/api/minds");
-    return Array.isArray(minds) ? minds : [];
-  } catch (err) {
-    console.warn("[minds] listMinds failed:", err);
-    return [];
-  }
+  if (_mindsCache && Date.now() - _mindsAt < MINDS_TTL) return _mindsCache;
+  if (_mindsInflight) return _mindsInflight;
+  _mindsInflight = apiFetch<Mind[]>("/api/minds", { method: "GET", auth: false })
+    .then((minds) => {
+      _mindsCache = Array.isArray(minds) ? minds : [];
+      _mindsAt = Date.now();
+      return _mindsCache;
+    })
+    .catch((err) => {
+      console.warn("[minds] listMinds failed:", err);
+      return _mindsCache || []; // stale-or-empty; preserve the never-throws contract
+    })
+    .finally(() => {
+      _mindsInflight = null;
+    });
+  return _mindsInflight;
 }
 
 /**
@@ -132,19 +150,35 @@ export async function listMinds(): Promise<Mind[]> {
  * arrays on failure (the graph falls back to a charge-only layout). Tolerates
  * the legacy/alternate `layout` map shape just in case, normalizing to LayoutPos[].
  */
+let _simCache: GraphData | null = null;
+let _simAt = 0;
+let _simInflight: Promise<GraphData> | null = null;
+
 export async function getSimilarities(): Promise<GraphData> {
-  try {
-    const resp = await get<{ links?: GraphLink[]; layout?: unknown }>(
-      "/api/minds/similarities",
-    );
-    return {
-      links: Array.isArray(resp?.links) ? resp.links : [],
-      layout: normalizeLayout(resp?.layout),
-    };
-  } catch (err) {
-    console.warn("[minds] getSimilarities failed:", err);
-    return { links: [], layout: [] };
-  }
+  if (_simCache && Date.now() - _simAt < MINDS_TTL) return _simCache;
+  if (_simInflight) return _simInflight;
+  // 176 KB graph, fetched on every Great Minds mount — cache it (TTL) like the
+  // minds list. auth:false: it's the global embedding graph (identity-independent).
+  _simInflight = apiFetch<{ links?: GraphLink[]; layout?: unknown }>(
+    "/api/minds/similarities",
+    { method: "GET", auth: false },
+  )
+    .then((resp) => {
+      _simCache = {
+        links: Array.isArray(resp?.links) ? resp.links : [],
+        layout: normalizeLayout(resp?.layout),
+      };
+      _simAt = Date.now();
+      return _simCache;
+    })
+    .catch((err) => {
+      console.warn("[minds] getSimilarities failed:", err);
+      return _simCache || { links: [], layout: [] };
+    })
+    .finally(() => {
+      _simInflight = null;
+    });
+  return _simInflight;
 }
 
 /** Accept either the real array shape or a {[id]:[x,y]|{rx,ry}} map. */
