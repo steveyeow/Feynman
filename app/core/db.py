@@ -2257,7 +2257,7 @@ def get_chat_session_with_public_status(session_id: str) -> dict[str, Any] | Non
 def request_chat_session_share(
     session_id: str, user_id: str, handle: str | None = None,
     public_title: str | None = None,
-    min_message_count: int = 2, daily_share_limit: int = 10,
+    min_message_count: int = 1, daily_share_limit: int = 10,
 ) -> dict[str, Any] | str | None:
     """User opts in to making this session public.
 

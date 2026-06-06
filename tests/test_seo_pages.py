@@ -1886,23 +1886,15 @@ class TestPhase6AutoPublishShare:
         assert result["public_handle"] == "@me"
         assert result["approved_at"]
 
-    def test_quality_gate_rejects_unanswered_sessions(self):
-        # A lone question (1 message, no reply) can't be shared.
+    def test_share_allows_any_nonempty_session(self):
+        # No message-count threshold (ChatGPT/Claude share any conversation):
+        # a 1-message session shares; only a literally-empty (0-message) session
+        # is rejected as a sanity floor.
         from app.core.db import request_chat_session_share
-        uid, sid = self._mk_session_with_messages(1)
-        result = request_chat_session_share(sid, uid)
-        assert result == "too_few_messages", \
-            "A session with no reply yet must be rejected"
-
-    def test_quality_gate_min_message_count_is_two(self):
-        # Boundary: exactly 2 messages (one Q + one reply) passes; 1 does not.
-        # Lowered from 3 → 2 so any answered chat is shareable (ChatGPT/Claude
-        # share any conversation).
-        from app.core.db import request_chat_session_share
-        uid_pass, sid_pass = self._mk_session_with_messages(2)
-        uid_fail, sid_fail = self._mk_session_with_messages(1)
-        assert isinstance(request_chat_session_share(sid_pass, uid_pass), dict)
-        assert request_chat_session_share(sid_fail, uid_fail) == "too_few_messages"
+        uid_ok, sid_ok = self._mk_session_with_messages(1)
+        uid_empty, sid_empty = self._mk_session_with_messages(0)
+        assert isinstance(request_chat_session_share(sid_ok, uid_ok), dict)
+        assert request_chat_session_share(sid_empty, uid_empty) == "too_few_messages"
 
     def test_rejected_session_cannot_reshare(self):
         # If admin rejected a previous share, the user cannot bypass by
