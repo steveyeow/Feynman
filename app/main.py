@@ -2533,7 +2533,7 @@ def api_chat_session_share(
     re-sharing updates handle/title but doesn't double-stamp consent.
 
     Two gates run before status flips, surfaced as distinct error codes:
-      * 422 ``too_few_messages`` — session has < 3 messages
+      * 422 ``too_few_messages`` — session has < 2 messages (no reply yet)
       * 429 ``rate_limited`` — user shared ≥ 10 sessions in last 24h
       * 404 ``not_found`` / ``rejected`` — session missing, not owned, or
         admin-rejected previously
@@ -2553,7 +2553,7 @@ def api_chat_session_share(
     if result == "too_few_messages":
         raise HTTPException(
             status_code=422,
-            detail="Chat needs at least 3 messages before it can be shared publicly.",
+            detail="Chat needs at least one reply before it can be shared publicly.",
         )
     if result == "rate_limited":
         raise HTTPException(

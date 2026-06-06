@@ -42,10 +42,16 @@ export async function generateMetadata({
   const desc = metaDescription(
     `A public discussion shared by ${disc.handle} on Feynman.`,
   );
+  // Thin-content guard: now that any answered chat (≥2 messages) is shareable,
+  // don't index very short discussions — still renders + is shareable, just not
+  // crawled (protects the GSC index from thin pages).
+  const totalChars = disc.messages.reduce((n, m) => n + (m.content || "").length, 0);
+  const thin = totalChars < 400;
   return {
     title: `${title} — Feynman`,
     description: desc,
     alternates: { canonical },
+    robots: thin ? { index: false, follow: true } : undefined,
     openGraph: {
       type: "article",
       title,
