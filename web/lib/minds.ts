@@ -114,7 +114,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 // ── API ──────────────────────────────────────────────────────────────────
-import { apiFetch, get } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 // Near-static minds list — cache it (TTL) + de-dupe so the Great Minds graph,
 // the composer mind picker, and ChatView don't re-fetch the cold origin on every
@@ -150,19 +150,35 @@ export async function listMinds(): Promise<Mind[]> {
  * arrays on failure (the graph falls back to a charge-only layout). Tolerates
  * the legacy/alternate `layout` map shape just in case, normalizing to LayoutPos[].
  */
+let _simCache: GraphData | null = null;
+let _simAt = 0;
+let _simInflight: Promise<GraphData> | null = null;
+
 export async function getSimilarities(): Promise<GraphData> {
-  try {
-    const resp = await get<{ links?: GraphLink[]; layout?: unknown }>(
-      "/api/minds/similarities",
-    );
-    return {
-      links: Array.isArray(resp?.links) ? resp.links : [],
-      layout: normalizeLayout(resp?.layout),
-    };
-  } catch (err) {
-    console.warn("[minds] getSimilarities failed:", err);
-    return { links: [], layout: [] };
-  }
+  if (_simCache && Date.now() - _simAt < MINDS_TTL) return _simCache;
+  if (_simInflight) return _simInflight;
+  // 176 KB graph, fetched on every Great Minds mount — cache it (TTL) like the
+  // minds list. auth:false: it's the global embedding graph (identity-independent).
+  _simInflight = apiFetch<{ links?: GraphLink[]; layout?: unknown }>(
+    "/api/minds/similarities",
+    { method: "GET", auth: false },
+  )
+    .then((resp) => {
+      _simCache = {
+        links: Array.isArray(resp?.links) ? resp.links : [],
+        layout: normalizeLayout(resp?.layout),
+      };
+      _simAt = Date.now();
+      return _simCache;
+    })
+    .catch((err) => {
+      console.warn("[minds] getSimilarities failed:", err);
+      return _simCache || { links: [], layout: [] };
+    })
+    .finally(() => {
+      _simInflight = null;
+    });
+  return _simInflight;
 }
 
 /** Accept either the real array shape or a {[id]:[x,y]|{rx,ry}} map. */
