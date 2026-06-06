@@ -86,6 +86,14 @@ _URL_RE = re.compile(
 # Handles like @username and #hashtags often carry identity. Strip.
 _AT_HANDLE_RE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,30}\b")
 
+# Markdown links whose target is a dangerous URL scheme. The public renderers
+# run scrubbed text through a markdown→HTML pass, so a crafted
+# ``[x](javascript:…)`` would otherwise become a clickable script link on a
+# PUBLIC page. Strip the scheme (keeping the link text) — XSS hardening.
+_DANGEROUS_LINK_RE = re.compile(
+    r"(?i)(\]\(\s*)(?:javascript|data|vbscript|file)\s*:"
+)
+
 
 def scrub_pii_for_public_display(text: str) -> str:
     """Run the four redactors. Returns the sanitized string. The
@@ -98,6 +106,7 @@ def scrub_pii_for_public_display(text: str) -> str:
     out = _URL_RE.sub("[link redacted]", out)
     out = _PHONE_RE.sub("[phone redacted]", out)
     out = _AT_HANDLE_RE.sub("[handle redacted]", out)
+    out = _DANGEROUS_LINK_RE.sub(r"\1", out)
     return out
 
 

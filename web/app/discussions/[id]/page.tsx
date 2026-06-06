@@ -9,16 +9,8 @@ import {
   fetchPublicDiscussion,
   metaDescription,
 } from "@/lib/seo-mind";
-import { renderMarkdown } from "@/components/chat/markdown";
-
-// Render the (already PII-scrubbed) message body as markdown. renderMarkdown
-// HTML-escapes all text, so the only injected markup is markdown's own tags.
-// PII scrub already strips http(s) URLs, so we additionally neutralize any
-// remaining non-http href (javascript:/data:/mailto:) — a crafted markdown link
-// must not XSS this PUBLIC page.
-function renderSafe(md: string): string {
-  return renderMarkdown(md).replace(/href="(?!https?:\/\/)[^"]*"/gi, 'href="#"');
-}
+import MessageList from "@/components/chat/MessageList";
+import type { Message } from "@/lib/chat";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
 // GET /api/public-discussions/{id} (mirrors the legacy public_session_page:
@@ -139,6 +131,22 @@ export default async function PublicDiscussionPage({
     [title, canonical],
   ]);
 
+  // Render the shared transcript with the SAME component the live chat uses, so
+  // a shared conversation looks exactly like it does in-app (Feynman + mind
+  // avatars, names, markdown) — read-only (no composer, no per-message share).
+  const transcript: Message[] = disc.messages.map((m): Message =>
+    m.role === "mind"
+      ? { role: "mind", content: m.content, mindName: m.speaker || "A great mind" }
+      : m.role === "assistant"
+        ? { role: "assistant", content: m.content }
+        : { role: "user", content: m.content },
+  );
+  const knownMindNames = [
+    ...new Set(
+      disc.messages.filter((m) => m.role === "mind").map((m) => m.speaker || ""),
+    ),
+  ].filter(Boolean) as string[];
+
   return (
     <SeoColumn>
       <JsonLd data={forumLd} />
@@ -147,19 +155,9 @@ export default async function PublicDiscussionPage({
       <h1>{title}</h1>
       <p className="seo-meta">Shared by {disc.handle || "Anonymous"}</p>
 
-      <section className="seo-section discussion-thread">
-        {disc.messages.map((m, i) => (
-          <div key={i} className={`discussion-msg discussion-${m.role}`}>
-            <span className="discussion-role">
-              {m.role === "user" ? "Question" : m.speaker || "Feynman"}
-            </span>
-            <div
-              className="discussion-md"
-              dangerouslySetInnerHTML={{ __html: renderSafe(m.content) }}
-            />
-          </div>
-        ))}
-      </section>
+      <div className="shared-transcript">
+        <MessageList messages={transcript} knownMindNames={knownMindNames} />
+      </div>
 
       <p className="seo-cta-row">
         <a className="primary" href={readerHref}>
