@@ -88,15 +88,43 @@ export default function Sidebar() {
   return (
     <aside className="app-sidebar" id="app-sidebar" data-collapsed={collapsed}>
       <div className="sidebar-header">
-        <Link href="/" className="sidebar-logo">
+        <Link
+          href="/"
+          className="sidebar-logo"
+          title={collapsed ? "Open sidebar" : "Feynman"}
+          onClick={(e) => {
+            // When collapsed, the brand glyph IS the expand control —
+            // expand in place instead of navigating home.
+            if (collapsed) {
+              e.preventDefault();
+              setCollapsed(false);
+            }
+          }}
+        >
           <BrandMark />
+          <svg
+            className="sidebar-logo-expand"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
           Feynman
         </Link>
         <button
+          id="sidebar-toggle-btn"
           className="sidebar-icon-btn"
-          title="Toggle sidebar"
+          title="Collapse sidebar"
           onClick={() => setCollapsed((c) => !c)}
-          aria-label="Toggle sidebar"
+          aria-label="Collapse sidebar"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" />

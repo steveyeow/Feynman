@@ -197,6 +197,12 @@ body {
 .app-layout.sidebar-collapsed .sidebar-logo-icon { display: block; }
 .app-layout.sidebar-collapsed .sidebar-label { display: none; }
 .app-layout.sidebar-collapsed #sidebar-toggle-btn { display: none; }
+/* Collapsed: the brand glyph doubles as the expand control. The toggle btn
+   is hidden above (so logo + toggle no longer show at once); on hover the
+   glyph swaps to the panel icon to signal "click to open". */
+.sidebar-logo-expand { display: none; }
+.app-layout.sidebar-collapsed .sidebar-logo:hover .sidebar-logo-icon { display: none; }
+.app-layout.sidebar-collapsed .sidebar-logo:hover .sidebar-logo-expand { display: block; }
 .app-layout.sidebar-collapsed .sidebar-header {
   justify-content: center; padding: 14px 0 10px;
 }
