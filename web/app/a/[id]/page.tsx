@@ -12,6 +12,14 @@ import {
   dropNulls,
   type PublicAnswer,
 } from "@/lib/seo-mind";
+import { renderMarkdown } from "@/components/chat/markdown";
+
+// Render the (already PII-scrubbed) answer as markdown. renderMarkdown
+// HTML-escapes all text; PII scrub strips http(s) URLs, so we also neutralize
+// any remaining non-http href so a crafted markdown link can't XSS this page.
+function renderSafe(md: string): string {
+  return renderMarkdown(md).replace(/href="(?!https?:\/\/)[^"]*"/gi, 'href="#"');
+}
 
 // A single approved, PII-scrubbed shared answer (share redesign Phase 2).
 // Data comes from GET /api/public-answers/{id} (gated on
@@ -219,9 +227,10 @@ export default async function SharedAnswerPage({
             )}
           </span>
         </div>
-        {(ans.answer || "").split(/\n{2,}/).map((para, i) => (
-          <p key={i}>{para}</p>
-        ))}
+        <div
+          className="discussion-md"
+          dangerouslySetInnerHTML={{ __html: renderSafe(ans.answer || "") }}
+        />
       </section>
 
       {isMind && ans.mind?.voice ? (

@@ -2764,7 +2764,7 @@ def list_messages_for_public_session(
         # Single round-trip: gate on approved status by joining the
         # parent session row.
         rows = _fetchall(conn, _q(
-            """SELECT sm.id, sm.role, sm.content, sm.created_at
+            """SELECT sm.id, sm.role, sm.content, sm.meta_json, sm.created_at
                FROM session_messages sm
                JOIN chat_sessions cs ON cs.id = sm.session_id
                WHERE sm.session_id = ?
@@ -2772,7 +2772,18 @@ def list_messages_for_public_session(
                ORDER BY sm.created_at ASC
                LIMIT ?"""
         ), (session_id, limit))
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            # Parse per-message meta so the renderer can attribute a 'mind' turn
+            # to the mind that spoke (meta.mindName); without it every speaker
+            # falls back to "Feynman".
+            try:
+                d["meta"] = json.loads(d.pop("meta_json", None) or "{}")
+            except Exception:
+                d["meta"] = {}
+            out.append(d)
+        return out
 
 
 # ─── Shared single answers (per-turn share — share redesign Phase 2) ───

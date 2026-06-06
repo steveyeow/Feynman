@@ -602,7 +602,22 @@ body { background-color: var(--bg-home); }
   background: var(--accent-light);
   border: 1px solid var(--border);
 }
-.discussion-msg p { margin: 0; }
+/* A great mind's reply — neutral card + accent stripe, distinct from Feynman's
+   accent fill, so a multi-mind discussion reads as a real panel of voices. */
+.discussion-mind {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+}
+/* Markdown body inside a discussion message (renderSafe output). */
+.discussion-md > :first-child { margin-top: 0; }
+.discussion-md > :last-child { margin-bottom: 0; }
+.discussion-md p { margin: 0 0 0.7em; }
+.discussion-md ul, .discussion-md ol { margin: 0 0 0.7em; padding-left: 1.4em; }
+.discussion-md li { margin: 0.2em 0; }
+.discussion-md h2, .discussion-md h3, .discussion-md h4 { margin: 0.8em 0 0.4em; font-weight: 600; }
+.discussion-md strong { font-weight: 600; }
+.discussion-md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
 
 /* ── Shared single answer (/a/[id]) ───────────────────────────────────── */
 .answer-question { margin-bottom: 0.3em; }

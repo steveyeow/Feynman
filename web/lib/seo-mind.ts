@@ -770,7 +770,8 @@ export interface PublicDiscussion {
   /** Descriptive slug of the linked book/mind (uuid fallback). Avoids the 301. */
   entity_slug?: string;
   approved_at: string;
-  messages: Array<{ role: string; content: string }>;
+  /** speaker: a mind answer's name (mind turns), "Feynman" (assistant), or "" (user). */
+  messages: Array<{ role: string; content: string; speaker?: string }>;
 }
 
 /**

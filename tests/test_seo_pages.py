@@ -2185,3 +2185,38 @@ class TestPublicJsonDatetimeSerialization:
         body = json.loads(resp.body)
         assert body["id"] == "aid"
         assert isinstance(body["approved_at"], str) and body["approved_at"]
+
+
+class TestPublicDiscussionRender:
+    """The /discussions/{id} payload must attribute each turn to its real speaker
+    (a mind's name, not always "Feynman") and drop the empty "minds joined"
+    system-notice (which rendered as a blank bubble)."""
+
+    def test_speaker_attribution_and_system_notice_filtered(self, monkeypatch):
+        import os, uuid, json
+        os.environ.pop("DATABASE_URL", None)
+        from app import main
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message, get_conn, _execute, _q,
+        )
+        init_db()
+        uid = f"user-{uuid.uuid4().hex[:8]}"
+        sid = create_chat_session(title="Q", session_type="chat", user_id=uid)["id"]
+        add_session_message(sid, role="user", content="What are the key ideas?", user_id=uid)
+        add_session_message(sid, role="assistant", content="Feynman's take.", user_id=uid)
+        add_session_message(sid, role="system-notice", content="",
+                            meta={"mindNames": ["Karl Marx"]}, user_id=uid)
+        add_session_message(sid, role="mind", content="A dialectical view.",
+                            meta={"mindName": "Karl Marx"}, user_id=uid)
+        with get_conn() as c:
+            _execute(c, _q("UPDATE chat_sessions SET public_status = 'approved' WHERE id = ?"), (sid,))
+        monkeypatch.setattr(main.ugc_module, "is_enabled", lambda: True)
+        resp = main.api_public_discussion(sid)
+        body = json.loads(resp.body)
+        roles = [m["role"] for m in body["messages"]]
+        assert "system-notice" not in roles, "empty system-notice must be dropped (no blank bubble)"
+        mind_msgs = [m for m in body["messages"] if m["role"] == "mind"]
+        assert mind_msgs and mind_msgs[0]["speaker"] == "Karl Marx", \
+            "a mind turn must be attributed to the mind, not 'Feynman'"
+        asst = [m for m in body["messages"] if m["role"] == "assistant"]
+        assert asst and asst[0]["speaker"] == "Feynman"
