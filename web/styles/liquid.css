@@ -622,20 +622,30 @@ body { background-color: var(--bg-home); }
 }
 .shared-banner-by { white-space: nowrap; }
 
-/* Footer CTA: a single clean "Continue this conversation" (ChatGPT-style fork)
-   + a subtle secondary link. */
+/* Footer CTA: a single clean "Continue this conversation" (ChatGPT-style fork),
+   a privacy hint, and a subtle secondary link. All theme tokens → dark-mode safe. */
 .shared-cta {
-  max-width: 780px; margin: 8px auto 0; padding: 16px 0 8px;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  max-width: 780px; margin: 12px auto 0; padding: 20px 0 10px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
 }
 .shared-continue-btn {
+  display: inline-flex; align-items: center; gap: 6px;
   background: var(--accent); color: #fff; border: 0; cursor: pointer;
-  padding: 11px 22px; border-radius: var(--r-pill, 999px);
-  font: 600 15px/1 "Inter", sans-serif; transition: filter 0.15s;
+  padding: 10px 20px; border-radius: var(--r-control);
+  font: 600 14px/1 "Inter", sans-serif;
+  box-shadow: var(--depth-1);
+  transition: filter 0.15s ease, transform 0.1s ease;
 }
-.shared-continue-btn:hover { filter: brightness(1.06); }
+.shared-continue-btn:hover { filter: brightness(1.05); }
+.shared-continue-btn:active { transform: scale(0.985); }
 .shared-continue-btn:disabled { opacity: 0.6; cursor: default; }
-.shared-cta-alt { font-size: 13px; color: var(--text-muted); text-decoration: none; }
+/* "this becomes a private copy" hint (the key clarity from ChatGPT's model). */
+.shared-cta-hint {
+  margin: 0; max-width: 460px; text-align: center;
+  font-size: 12.5px; line-height: 1.45; color: var(--text-muted);
+}
+.shared-cta-alt { font-size: 12.5px; color: var(--text-muted); text-decoration: none; }
 .shared-cta-alt:hover { color: var(--text); text-decoration: underline; }
 
 /* ── Shared single answer (/a/[id]) ───────────────────────────────────── */
