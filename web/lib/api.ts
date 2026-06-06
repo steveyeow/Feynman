@@ -129,21 +129,32 @@ export async function apiFetch<T = unknown>(
     }
     let err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
 
-    // Token expired/invalid mid-flight (hosted): refresh the session once and
-    // retry the original request before surfacing the error (port of app.js
-    // api() 1754-1765). Browser-only; retries AT MOST once (no infinite loop).
-    if (
+    // A 401 here is usually recoverable, so try a one-time session refresh + retry
+    // BEFORE surfacing anything — and crucially before bouncing to /login:
+    //  - token_expired / invalid_token: the short-lived Supabase access token aged
+    //    out mid-session.
+    //  - auth_required: a request raced ahead of the token being applied (e.g. at
+    //    startup, or right after the access token expired) so it went out with no
+    //    Authorization header and the auth middleware returned auth_required.
+    // In ALL of these, if a valid Supabase session still exists the refresh handler
+    // mints a fresh token and we retry once. Only a genuinely signed-out user
+    // (refresh yields no token, or the retry is STILL auth_required) is bounced to
+    // /login — so a logged-in user never gets kicked to the login page over a
+    // transient token gap. Browser-only; at most one retry (port + hardening of
+    // app.js api() 1754-1765).
+    const recoverable401 =
       !isServer &&
       res.status === 401 &&
-      (err.code === "token_expired" || err.code === "invalid_token") &&
       opts.auth !== false &&
-      _onTokenRefresh
-    ) {
+      (err.code === "token_expired" ||
+        err.code === "invalid_token" ||
+        err.code === "auth_required");
+    if (recoverable401 && _onTokenRefresh) {
       let newToken: string | null = null;
       try {
         newToken = await _onTokenRefresh();
       } catch {
-        /* refresh failed — fall through to normal error handling */
+        /* refresh failed — fall through to the signed-out handling below */
       }
       if (newToken) {
         _authToken = newToken;
@@ -161,9 +172,17 @@ export async function apiFetch<T = unknown>(
         }
         err = new ApiError(res.status, `API ${res.status} on ${path}`, body);
       }
+      // Refresh couldn't establish a session (or the retry is still auth_required)
+      // → this really is a signed-out state, so surface the login bounce now.
+      if (err.code === "auth_required") {
+        _onAuthRequired?.();
+      }
     }
 
-    // Browser-only interceptors (ports app.js api() 429/401 handling).
+    // Browser-only interceptor (ports app.js api() 429 handling): a daily-limit
+    // 429 opens the upgrade overlay. The 401 auth_required → /login bounce is
+    // handled above (only AFTER a session refresh fails), so a transient token
+    // gap no longer kicks a logged-in user to the login page.
     if (!isServer) {
       if (res.status === 429 && (err.code === "quota_exceeded" || err.code === "upload_limit_reached")) {
         const detail = (body as {
@@ -175,8 +194,6 @@ export async function apiFetch<T = unknown>(
           used: detail?.used,
           tier: detail?.tier,
         });
-      } else if (res.status === 401 && err.code === "auth_required") {
-        _onAuthRequired?.();
       }
     }
     throw err;

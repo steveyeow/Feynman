@@ -13,6 +13,8 @@ interface AuthContextValue {
   user: User | null;
   /** Subscription tier is pro. */
   isPro: boolean;
+  /** A definitive tier answer has resolved (lets the UI avoid a "Free" flash). */
+  tierKnown: boolean;
   config: ProConfig | null;
   signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -33,22 +35,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authEnabled, setAuthEnabled] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [isPro, setIsPro] = useState(false);
+  // Whether we have a DEFINITIVE tier answer yet (a successful subscription
+  // fetch, or a signed-out user). The UI hides the Free/Pro badge until this is
+  // true, so a Pro user never flashes "Free" before the tier resolves.
+  const [tierKnown, setTierKnown] = useState(false);
   const [config, setConfig] = useState<ProConfig | null>(null);
   const clientRef = useRef<SupabaseClient | null>(null);
+  // The signed-in identity we last fetched the tier for. onAuthStateChange fires
+  // applySession on every TOKEN_REFRESHED; without this guard each fire re-ran an
+  // authed GET that, if it raced the token, hard-reset a Pro user to Free.
+  const lastTierUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
 
     const applySession = (session: Session | null) => {
-      setUser(session?.user ?? null);
+      const u = session?.user ?? null;
+      setUser(u);
       setAuthToken(session?.access_token ?? null);
-      if (session?.user) {
-        // Best-effort tier lookup; ignore failures (endpoint requires auth).
-        get<{ tier?: string }>("/api/pro/subscription")
-          .then((s) => setIsPro((s?.tier || "free") === "pro"))
-          .catch(() => setIsPro(false));
+      if (u) {
+        // Fetch the tier only when the identity actually changes — not on every
+        // token refresh.
+        if (lastTierUserRef.current !== u.id) {
+          lastTierUserRef.current = u.id;
+          setTierKnown(false);
+          get<{ tier?: string }>("/api/pro/subscription")
+            .then((s) => {
+              setIsPro((s?.tier || "free") === "pro");
+              setTierKnown(true);
+            })
+            .catch(() => {
+              // Transient failure (e.g. a token that raced the request): do NOT
+              // downgrade a Pro user to Free. Leave the tier unresolved so the
+              // badge stays hidden rather than showing a wrong "Free" — api.ts's
+              // refresh+retry makes this path rare, and a later auth event re-runs
+              // the fetch.
+              lastTierUserRef.current = null;
+            });
+        }
       } else {
+        lastTierUserRef.current = null;
         setIsPro(false);
+        setTierKnown(true);
       }
     };
 
@@ -134,12 +162,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (client) await client.auth.signOut();
     setUser(null);
     setIsPro(false);
+    setTierKnown(true);
+    lastTierUserRef.current = null;
     setAuthToken(null);
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ ready, authEnabled, user, isPro, config, signInWithPassword, signUp, signInWithOAuth, signOut }}
+      value={{ ready, authEnabled, user, isPro, tierKnown, config, signInWithPassword, signUp, signInWithOAuth, signOut }}
     >
       {children}
     </AuthContext.Provider>

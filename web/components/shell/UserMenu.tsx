@@ -11,7 +11,7 @@ import ThemeToggle from "@/components/theme/ThemeToggle";
  * and just the theme toggle in anonymous mode (auth off, e.g. local dev).
  */
 export default function UserMenu() {
-  const { authEnabled, user, isPro } = useAuth();
+  const { authEnabled, user, isPro, tierKnown } = useAuth();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +72,7 @@ export default function UserMenu() {
         {user ? (
           <div className="sidebar-label profile-info">
             <span className="profile-name">{name}</span>
-            <span className="profile-tier">{tier}</span>
+            {tierKnown && <span className="profile-tier">{tier}</span>}
           </div>
         ) : (
           <span className="sidebar-label profile-name">{guestLabel}</span>
