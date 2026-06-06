@@ -72,7 +72,13 @@ export default function LoginForm() {
       setAgreed(false);
       return;
     }
-    router.push("/");
+    // Honor a same-site ?next= return path (e.g. "Continue this conversation"
+    // bounces here when signed out). Guard against open redirects.
+    const next =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+    router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/");
   }
 
   return (
