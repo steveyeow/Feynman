@@ -32,6 +32,7 @@ import {
   type Message,
   type Session,
 } from "@/lib/chat";
+import { takeContinueFollowup } from "@/lib/continueHandoff";
 import {
   suggestMinds,
   generateMind,
@@ -960,6 +961,27 @@ export default function ChatView({
     handleSend(pending.message, { books: seededBooks, minds: seededMinds });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // ── "Continue this conversation" handoff (forked public discussion) ──
+  // Capture the viewer's first follow-up on mount, then send it once the forked
+  // transcript has loaded (so the continuation keeps the prior context — unlike
+  // the fresh handoff above, which skips loading). Guarded by the ref, so this
+  // is a no-op for every normal chat (nothing stashed).
+  const continueQRef = useRef<string | null>(null);
+  const continueSentRef = useRef(false);
+  useEffect(() => {
+    continueQRef.current = takeContinueFollowup(sessionId);
+    continueSentRef.current = false;
+  }, [sessionId]);
+  useEffect(() => {
+    if (continueSentRef.current || messages.length === 0) return;
+    const q = continueQRef.current; // local so TS narrows it to string below
+    if (!q) return; // nothing stashed — the case for every normal chat
+    continueSentRef.current = true;
+    continueQRef.current = null;
+    void handleSend(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, handleSend]);
 
   // ── Selection toggles ──
   const toggleBook = (b: SelectedBook) =>
