@@ -619,6 +619,10 @@ body { background-color: var(--bg-home); }
 .discussion-md strong { font-weight: 600; }
 .discussion-md code { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
 
+/* Public shared transcript (/discussions/[id]) reuses the in-app MessageList so
+   a shared chat looks like the chat; center it to the chat's column width. */
+.shared-transcript { max-width: 780px; margin: 1.5em auto 0; }
+
 /* ── Shared single answer (/a/[id]) ───────────────────────────────────── */
 .answer-question { margin-bottom: 0.3em; }
 .answer-card {

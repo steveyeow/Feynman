@@ -2220,3 +2220,26 @@ class TestPublicDiscussionRender:
             "a mind turn must be attributed to the mind, not 'Feynman'"
         asst = [m for m in body["messages"] if m["role"] == "assistant"]
         assert asst and asst[0]["speaker"] == "Feynman"
+
+
+class TestScrubNeutralizesDangerousLinks:
+    """The public pages render scrubbed text through a markdown→HTML pass, so a
+    crafted markdown link with a dangerous scheme must be neutralized to prevent
+    stored XSS on these public pages."""
+
+    def test_javascript_link_scheme_stripped(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("click [here](javascript:alert(1)) now")
+        assert "javascript:" not in out.lower()
+        assert "[here]" in out  # link text preserved, only the scheme removed
+
+    def test_data_and_vbscript_schemes_stripped(self):
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("[a](data:text/html,x) [b](vbscript:msgbox)")
+        assert "data:" not in out.lower() and "vbscript:" not in out.lower()
+
+    def test_plain_prose_colon_not_touched(self):
+        # Only markdown-link targets are neutralized — benign prose is untouched.
+        from app.core import ugc
+        out = ugc.scrub_pii_for_public_display("Note: the data: prefix appears here.")
+        assert "Note: the data: prefix appears here." == out
