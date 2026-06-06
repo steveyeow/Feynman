@@ -17,9 +17,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { get } from "@/lib/api";
-import { mapAgentsToBooks, type AgentRow, type Book } from "@/lib/books";
+import { type Book } from "@/lib/books";
 import { listMinds, type Mind } from "@/lib/api";
+import { getCatalogBooks } from "@/lib/catalog";
 import { generateMind } from "@/lib/minds-chat";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { mindColor, mindInitials } from "./markdown";
@@ -128,10 +128,10 @@ export function BookPopover({
     if (!open || loadedRef.current) return;
     let alive = true;
     setState("loading");
-    get<AgentRow[]>("/api/agents")
-      .then((rows) => {
+    getCatalogBooks()
+      .then((catBooks) => {
         if (!alive) return;
-        setBooks(mapAgentsToBooks(rows || []));
+        setBooks(catBooks);
         setState("ready");
         loadedRef.current = true;
       })

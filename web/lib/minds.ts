@@ -114,17 +114,35 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 // ── API ──────────────────────────────────────────────────────────────────
-import { get } from "@/lib/api";
+import { apiFetch, get } from "@/lib/api";
 
-/** GET /api/minds — full mind list. Returns [] on any failure (never throws). */
+// Near-static minds list — cache it (TTL) + de-dupe so the Great Minds graph,
+// the composer mind picker, and ChatView don't re-fetch the cold origin on every
+// mount. Fetched auth:false (the endpoint is identity-independent) so the first
+// load can hit the shared edge cache too.
+const MINDS_TTL = 5 * 60 * 1000;
+let _mindsCache: Mind[] | null = null;
+let _mindsAt = 0;
+let _mindsInflight: Promise<Mind[]> | null = null;
+
+/** GET /api/minds — full mind list, cached. Returns [] on failure (never throws). */
 export async function listMinds(): Promise<Mind[]> {
-  try {
-    const minds = await get<Mind[]>("/api/minds");
-    return Array.isArray(minds) ? minds : [];
-  } catch (err) {
-    console.warn("[minds] listMinds failed:", err);
-    return [];
-  }
+  if (_mindsCache && Date.now() - _mindsAt < MINDS_TTL) return _mindsCache;
+  if (_mindsInflight) return _mindsInflight;
+  _mindsInflight = apiFetch<Mind[]>("/api/minds", { method: "GET", auth: false })
+    .then((minds) => {
+      _mindsCache = Array.isArray(minds) ? minds : [];
+      _mindsAt = Date.now();
+      return _mindsCache;
+    })
+    .catch((err) => {
+      console.warn("[minds] listMinds failed:", err);
+      return _mindsCache || []; // stale-or-empty; preserve the never-throws contract
+    })
+    .finally(() => {
+      _mindsInflight = null;
+    });
+  return _mindsInflight;
 }
 
 /**

@@ -237,7 +237,34 @@ export const listAgents = () => get<Agent[]>("/api/agents");
 export const getAgent = (id: string) => get<Agent>(`/api/agents/${encodeURIComponent(id)}`);
 export const deleteAgent = (id: string) =>
   del<void>(`/api/agents/${encodeURIComponent(id)}`);
-export const listMinds = () => get<Mind[]>("/api/minds");
+// Minds list cache (near-static). ChatView + the composer mind picker import
+// listMinds from here, so cache it (TTL + de-dupe) to avoid re-fetching the cold
+// Python origin on every mount. auth:false → the list is identity-independent, so
+// the first load can hit Vercel's shared edge cache too. (lib/minds.ts has its
+// own cache for the graph's richer Mind type.)
+let _mindsListCache: Mind[] | null = null;
+let _mindsListAt = 0;
+let _mindsListInflight: Promise<Mind[]> | null = null;
+export const listMinds = (): Promise<Mind[]> => {
+  if (_mindsListCache && Date.now() - _mindsListAt < 300_000) {
+    return Promise.resolve(_mindsListCache);
+  }
+  if (_mindsListInflight) return _mindsListInflight;
+  _mindsListInflight = apiFetch<Mind[]>("/api/minds", { method: "GET", auth: false })
+    .then((m) => {
+      _mindsListCache = Array.isArray(m) ? m : [];
+      _mindsListAt = Date.now();
+      return _mindsListCache;
+    })
+    .catch((e) => {
+      if (_mindsListCache) return _mindsListCache; // serve stale on a transient failure
+      throw e;
+    })
+    .finally(() => {
+      _mindsListInflight = null;
+    });
+  return _mindsListInflight;
+};
 export const getMind = (id: string) => get<Mind>(`/api/minds/${encodeURIComponent(id)}`);
 
 /**

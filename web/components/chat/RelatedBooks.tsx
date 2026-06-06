@@ -14,8 +14,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { get } from "@/lib/api";
-import { mapAgentsToBooks, type AgentRow, type Book } from "@/lib/books";
+import { type Book } from "@/lib/books";
+import { getCatalogBooks } from "@/lib/catalog";
 import type { Source } from "@/lib/chat";
 
 export default function RelatedBooks({
@@ -31,9 +31,9 @@ export default function RelatedBooks({
   // Load the catalog once so we can resolve categories for "related" picks.
   useEffect(() => {
     let alive = true;
-    get<AgentRow[]>("/api/agents")
-      .then((rows) => {
-        if (alive) setAllBooks(mapAgentsToBooks(rows || []));
+    getCatalogBooks()
+      .then((books) => {
+        if (alive) setAllBooks(books);
       })
       .catch(() => {
         /* keep allBooks empty; the sidebar just stays hidden */
