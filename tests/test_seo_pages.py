@@ -2243,3 +2243,47 @@ class TestScrubNeutralizesDangerousLinks:
         from app.core import ugc
         out = ugc.scrub_pii_for_public_display("Note: the data: prefix appears here.")
         assert "Note: the data: prefix appears here." == out
+
+
+class TestForkPublicDiscussion:
+    """`Continue this conversation` forks an approved discussion into a NEW
+    session owned by the viewer — copying the transcript (PII-scrubbed, meta
+    preserved) so they can keep chatting with the same context."""
+
+    def test_fork_copies_transcript_scrubbed_owned_by_viewer(self):
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import (
+            init_db, create_chat_session, add_session_message,
+            fork_public_discussion, list_session_messages, get_conn, _execute, _q,
+        )
+        init_db()
+        sharer = f"sharer-{uuid.uuid4().hex[:8]}"
+        viewer = f"viewer-{uuid.uuid4().hex[:8]}"
+        sid = create_chat_session(
+            title="Q", session_type="mind", mind_id="mind-1", user_id=sharer,
+        )["id"]
+        add_session_message(sid, role="user", content="Email me at a@b.com", user_id=sharer)
+        add_session_message(sid, role="mind", content="A dialectical view.",
+                            meta={"mindName": "Karl Marx"}, user_id=sharer)
+        with get_conn() as c:
+            _execute(c, _q("UPDATE chat_sessions SET public_status = 'approved' WHERE id = ?"), (sid,))
+
+        new = fork_public_discussion(sid, viewer)
+        assert new and new["id"] != sid, "fork creates a NEW session"
+        assert new["user_id"] == viewer, "owned by the viewer, not the sharer"
+        assert new["session_type"] == "mind" and new["mind_id"] == "mind-1", "entity re-seeded"
+
+        msgs = list_session_messages(new["id"], viewer)
+        assert len(msgs) == 2, "full transcript copied"
+        assert "a@b.com" not in msgs[0]["content"] and "[email redacted]" in msgs[0]["content"], \
+            "content PII-scrubbed (viewer must not get the sharer's PII)"
+        assert msgs[1]["meta"].get("mindName") == "Karl Marx", "mind attribution preserved"
+
+    def test_fork_refuses_unapproved(self):
+        import os, uuid
+        os.environ.pop("DATABASE_URL", None)
+        from app.core.db import init_db, create_chat_session, fork_public_discussion
+        init_db()
+        sid = create_chat_session(title="x", user_id="u1")["id"]  # private, not approved
+        assert fork_public_discussion(sid, "viewer") is None

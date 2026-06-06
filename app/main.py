@@ -62,6 +62,7 @@ from .core.db import (
     list_books_for_mind,
     list_messages,
     list_messages_for_public_session,
+    fork_public_discussion,
     list_mind_recent_topics,
     list_minds,
     list_minds_active_for_agent,
@@ -4434,6 +4435,22 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         }),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )
+
+
+@app.post("/api/public-discussions/{session_id}/continue")
+def api_continue_discussion(session_id: str, request: Request):
+    """Fork an approved public discussion into a NEW session owned by the
+    signed-in viewer, so they can continue it (ChatGPT-style "Continue this
+    conversation"). 401 if not signed in (the client bounces to /login); 404 if
+    the discussion isn't viewable. Returns the new session id + chat url."""
+    _require_ugc_enabled()
+    uid = _get_user_id(request)
+    if not uid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    new = fork_public_discussion(session_id, uid)
+    if not new:
+        raise HTTPException(status_code=404, detail="Discussion not found")
+    return {"session_id": new["id"], "url": f"/chat/{new['id']}"}
 
 
 # ─── Chat sessions endpoints ───

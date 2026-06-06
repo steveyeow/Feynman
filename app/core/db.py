@@ -2786,6 +2786,43 @@ def list_messages_for_public_session(
         return out
 
 
+def fork_public_discussion(
+    session_id: str, viewer_user_id: str, limit: int = 200,
+) -> dict[str, Any] | None:
+    """Copy an APPROVED public discussion into a NEW session owned by the viewer
+    so they can continue it (ChatGPT-style "Continue this conversation").
+
+    The message CONTENT is PII-scrubbed (the viewer must not receive the
+    sharer's raw PII), but each message's structured meta (mindName,
+    contextBooks/contextMinds, sources) is preserved so the conversation's
+    context carries over. Returns the new session row, or None if the source
+    isn't approved / not found.
+    """
+    from .ugc import scrub_pii_for_public_display
+
+    src = get_chat_session_with_public_status(session_id)
+    if not src or src.get("public_status") != "approved":
+        return None
+    src_msgs = list_messages_for_public_session(session_id, limit=limit)
+    new = create_chat_session(
+        title=src.get("public_title") or src.get("title") or "Shared conversation",
+        session_type=src.get("session_type") or "chat",
+        mind_id=src.get("mind_id"),
+        meta={"forked_from": session_id},
+        user_id=viewer_user_id,
+    )
+    new_id = new["id"]
+    for m in src_msgs:
+        add_session_message(
+            new_id,
+            role=m.get("role") or "assistant",
+            content=scrub_pii_for_public_display(m.get("content") or ""),
+            meta=m.get("meta") or {},
+            user_id=viewer_user_id,
+        )
+    return new
+
+
 # ─── Shared single answers (per-turn share — share redesign Phase 2) ───
 #
 # A "shared answer" is ONE assistant/mind turn published as a standalone

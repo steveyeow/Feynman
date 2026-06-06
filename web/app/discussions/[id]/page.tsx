@@ -10,6 +10,7 @@ import {
   metaDescription,
 } from "@/lib/seo-mind";
 import MessageList from "@/components/chat/MessageList";
+import ContinueDiscussionButton from "@/components/chat/ContinueDiscussionButton";
 import type { Message } from "@/lib/chat";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
@@ -107,15 +108,6 @@ export default async function PublicDiscussionPage({
       : entityRef
         ? `/mind/${entityRef}`
         : null;
-  // "Start your own conversation" → the chat surface (real paths, not dead
-  // /#/ hashes): a book → composer preselected; a mind → its 1:1 chat page.
-  const readerHref =
-    entityRef && disc.session_type === "book"
-      ? `/?book=${encodeURIComponent(entityRef)}`
-      : entityRef
-        ? `/mind/${encodeURIComponent(entityRef)}/chat`
-        : `/`;
-
   const forumLd = {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
@@ -152,27 +144,29 @@ export default async function PublicDiscussionPage({
       <JsonLd data={forumLd} />
       <JsonLd data={breadcrumbLd} />
 
-      <h1>{title}</h1>
-      <p className="seo-meta">Shared by {disc.handle || "Anonymous"}</p>
+      {/* h1 kept for SEO but visually hidden — the chat itself has no big title;
+          the question is the first turn of the transcript below. */}
+      <h1 className="sr-only">{title}</h1>
+      <div className="shared-banner">
+        <span className="shared-banner-label">Shared conversation on Feynman</span>
+        <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
+      </div>
 
       <div className="shared-transcript">
         <MessageList messages={transcript} knownMindNames={knownMindNames} />
       </div>
 
-      <p className="seo-cta-row">
-        <a className="primary" href={readerHref}>
-          Start your own conversation →
-        </a>
-        {entityHref ? (
-          <Link className="secondary" href={entityHref}>
-            More discussions
-          </Link>
-        ) : (
-          <Link className="secondary" href="/library">
-            Browse the library
-          </Link>
-        )}
-      </p>
+      <div className="shared-cta">
+        <ContinueDiscussionButton id={params.id} />
+        <Link
+          className="shared-cta-alt"
+          href={entityHref || "/library"}
+        >
+          {entityHref
+            ? `More from this ${disc.session_type === "book" ? "book" : "mind"}`
+            : "Browse the library"}
+        </Link>
+      </div>
     </SeoColumn>
   );
 }
