@@ -23,6 +23,8 @@ import { get, post, ApiError } from "@/lib/api";
 import { getAgentCached } from "@/lib/catalog";
 import {
   loadMessages,
+  getCachedMessages,
+  setCachedMessages,
   getSession,
   queueSaveMessage,
   renameSession,
@@ -190,7 +192,9 @@ export default function ChatView({
   // fallback so the chat works even when the row can't be fetched.
   const sessionRef = useRef<Session>(stubSession(sessionId));
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(
+    () => getCachedMessages(sessionId) ?? [],
+  );
   // Write-book detection: set once the session row loads (sessionType
   // 'write_book' OR meta.write_book — port of _isWriteBookSession). When true,
   // the composer routes through the ai-books flow + the book-canvas renders
@@ -406,6 +410,9 @@ export default function ChatView({
     // the reply optimistically, and a fast loadMessages() resolving mid-send
     // would otherwise overwrite (clobber) that live transcript.
     if (!hasPending(sessionId)) {
+      // Paint the cached transcript instantly on switch (stale-while-revalidate);
+      // clear if none so the previous chat isn't shown during the load.
+      setMessages(getCachedMessages(sessionId) ?? []);
       loadMessages(sessionId)
         .then((msgs) => {
           if (alive) setMessages(msgs);
@@ -430,6 +437,12 @@ export default function ChatView({
       genRef.current++;
     };
   }, [sessionId]);
+
+  // Keep the transcript cache current as new turns arrive, so switching away and
+  // back shows the latest instantly (stale-while-revalidate).
+  useEffect(() => {
+    if (messages.length) setCachedMessages(sessionId, messages);
+  }, [sessionId, messages]);
 
   // ── Build chat history from current messages (user/assistant turns) ──
   const buildHistory = useCallback(

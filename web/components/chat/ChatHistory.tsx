@@ -16,6 +16,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import {
   listSessions,
+  loadMessages,
+  getCachedMessages,
   deleteSession as apiDeleteSession,
   bumpSessions,
   getCachedSessions,
@@ -113,7 +115,15 @@ export default function ChatHistory() {
           const isPublic = s.publicStatus === "approved";
           return (
             <div className={`history-item-wrap${active ? " active" : ""}`} key={s.id}>
-              <Link href={`/chat/${s.id}`} className="history-item">
+              <Link
+                href={`/chat/${s.id}`}
+                className="history-item"
+                onMouseEnter={() => {
+                  // Prefetch the transcript so the click opens instantly instead
+                  // of waiting 1-3s on the cold origin.
+                  if (!getCachedMessages(s.id)) loadMessages(s.id).catch(() => {});
+                }}
+              >
                 {isWriteBook && <WriteBookIcon />}
                 {s.title}
                 {isPublic && (
