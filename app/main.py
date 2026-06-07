@@ -3439,9 +3439,11 @@ def api_cron_egress_watch(request: Request) -> dict[str, Any]:
         return {"status": "error", "reason": str(exc)[:200]}
 
     prev = _json.loads(ops_state_get("egress_watch") or "{}")
+    has_prev = "total_rows" in prev
     prev_rows = int(prev.get("total_rows", 0))
-    # None when pg_stat_statements was reset (counter went backwards) — skip the delta.
-    rows_delta = (total_rows - prev_rows) if total_rows >= prev_rows else None
+    # rows_delta is None on the FIRST run (no baseline yet — don't false-alarm on
+    # the cumulative total) or when pg_stat_statements was reset (counter went back).
+    rows_delta = (total_rows - prev_rows) if (has_prev and total_rows >= prev_rows) else None
     ops_state_set("egress_watch", _json.dumps(
         {"total_rows": total_rows, "total_calls": total_calls, "db_bytes": db_bytes}))
 
