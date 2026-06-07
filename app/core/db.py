@@ -1054,15 +1054,35 @@ def update_agent_slug(agent_id: str, slug: str) -> None:
         _execute(conn, _q("UPDATE agents SET slug = ? WHERE id = ?"), (slug, agent_id))
 
 
-def list_agents(limit: int | None = None) -> list[dict[str, Any]]:
+def list_agents(limit: int | None = None, lite: bool = False) -> list[dict[str, Any]]:
     """List all non-deleted agents.
 
-    `limit` is a defensive cap to prevent unbounded reads from blowing through
-    egress quotas when the table grows. Default None preserves existing
-    behavior; callers that touch this on every request (sitemap, llms-full,
-    cron loops, public endpoints) should always pass an explicit limit.
+    `limit` caps the row COUNT. `lite=True` (Postgres only) caps the row WIDTH:
+    it projects meta_json down to the few display fields the catalog list needs
+    (web/lib/books.ts mapAgentsToBooks) INSTEAD of `SELECT *`. The full meta_json
+    (insights, overview, per-chunk data, voice) averages ~9 KB/row, so `SELECT *`
+    over ~900 rows reads ~8.3 MB from the DB PER CALL — and /api/agents is hit
+    thousands of times, which made this `SELECT *` the DOMINANT Supabase EGRESS
+    source (confirmed via pg_stat_statements: ~8k calls × 7.25M rows ≈ tens of
+    GB). The lite projection drops each read to ~160 KB (≈50× less). SQLite/local
+    dev keeps SELECT * — egress only matters on the hosted Postgres.
     """
-    sql = "SELECT * FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
+    if lite and _USE_PG:
+        sql = (
+            "SELECT id, name, slug, type, source, status, user_id, is_deleted, created_at, "
+            "jsonb_build_object("
+            "'author',(meta_json::jsonb)->'author',"
+            "'isbn',(meta_json::jsonb)->'isbn',"
+            "'category',(meta_json::jsonb)->'category',"
+            "'description',(meta_json::jsonb)->'description',"
+            "'chunk_count',(meta_json::jsonb)->'chunk_count',"
+            "'creator_name',(meta_json::jsonb)->'creator_name',"
+            "'creator_user_id',(meta_json::jsonb)->'creator_user_id'"
+            ")::text AS meta_json "
+            "FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
+        )
+    else:
+        sql = "SELECT * FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
     params: tuple[Any, ...] = (False if _USE_PG else 0,)
     if limit is not None:
         sql += " LIMIT ?"

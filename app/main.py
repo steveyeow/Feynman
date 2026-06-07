@@ -848,7 +848,7 @@ def sitemap_xml():
     # AND wrap the whole response in a TTL cache.
     try:
         ready_agents = [
-            a for a in list_agents(limit=5000)
+            a for a in list_agents(limit=5000, lite=True)
             if a.get("status") == "ready"
         ]
         ready_ids = [a["id"] for a in ready_agents]
@@ -1206,7 +1206,7 @@ The project draws inspiration from Richard Feynman's approach to learning:
     # and used to pull the entire catalog through Supabase's pooler on every
     # request. Limits are large enough to cover the catalog, but bounded.
     try:
-        for agent in list_agents(limit=5000):
+        for agent in list_agents(limit=5000, lite=True):
             if agent.get("status") != "ready":
                 continue
             name = agent.get("name", "Untitled")
@@ -3422,7 +3422,7 @@ def api_cron_indexnow(request: Request) -> dict[str, Any]:
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=26)).isoformat()
     urls: list[str] = []
     # Recent ready agents → /book/{id}
-    for a in list_agents(limit=2000):
+    for a in list_agents(limit=2000, lite=True):
         if a.get("status") != "ready":
             continue
         if (a.get("created_at") or "") < cutoff:
@@ -3585,7 +3585,7 @@ def api_list_agents():
     # past any realistic user-perceivable size. Without a cap, this endpoint
     # is hit on every page load and pulls the full agents table over the
     # Supabase pooler.
-    result = list_agents(limit=5000)
+    result = list_agents(limit=5000, lite=True)
     try:
         _enrich_ai_book_agents(result)
     except Exception as exc:
