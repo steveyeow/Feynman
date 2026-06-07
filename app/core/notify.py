@@ -35,6 +35,11 @@ def send_alert_email(subject: str, html: str, to: str | None = None) -> bool:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            # Resend sits behind Cloudflare, which 1010-bans urllib's default UA
+            # ("Python-urllib/x") — the request fails before reaching Resend.
+            # A normal browser UA avoids the block (verified: default UA → CF 1010,
+            # this UA → proper Resend response).
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         },
         method="POST",
     )
