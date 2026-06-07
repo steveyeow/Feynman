@@ -42,10 +42,13 @@ export function generateStaticParams() {
 }
 
 function descFor(mind: MindDetail): string {
-  const base =
-    mind.bio_summary ||
-    `${mind.name} — ${mind.domain || ""} thinker on Feynman`.trim();
-  return metaDescription(base);
+  const domain = mind.domain ? ` about ${mind.domain}` : "";
+  // Lead with the interactive hook — what a static encyclopedia can't offer — so
+  // the SERP snippet differentiates from Wikipedia instead of reading like another
+  // third-person bio. The bio is appended for context/keywords; metaDescription
+  // trims, keeping the hook up front (where it survives SERP truncation).
+  const lead = `Chat with ${mind.name} on Feynman — ask${domain}, answered in their own words. An interactive great mind, not a static encyclopedia entry.`;
+  return metaDescription(mind.bio_summary ? `${lead} ${mind.bio_summary}` : lead);
 }
 
 export async function generateMetadata({
@@ -61,7 +64,7 @@ export async function generateMetadata({
   const ogImage = abs(`/mind/${params.id}/og.png`);
   const desc = descFor(mind);
   return {
-    title: `${mind.name} — Feynman Great Minds`,
+    title: `Chat with ${mind.name} — Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {

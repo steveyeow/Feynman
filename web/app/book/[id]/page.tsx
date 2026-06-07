@@ -48,11 +48,12 @@ function bookDescription(
   subtitle: string,
   author: string,
 ): string {
-  let raw: string;
-  if (subtitle) raw = subtitle;
-  else if (author) raw = `by ${author} — Read and chat with this book on Feynman`;
-  else raw = "Read and chat with this book on Feynman";
-  return clampDescription(raw);
+  const by = author ? ` by ${author}` : "";
+  // Lead with the interactive hook so the SERP snippet differentiates from a
+  // static book summary; append the subtitle for context (clampDescription trims,
+  // keeping the hook up front where it survives SERP truncation).
+  const lead = `Read & chat with this book${by} on Feynman — ask it anything and get answers grounded in its actual text.`;
+  return clampDescription(subtitle ? `${lead} ${subtitle}` : lead);
 }
 
 export async function generateMetadata({
@@ -79,7 +80,7 @@ export async function generateMetadata({
   const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
-    title: `${data.title} — Feynman`,
+    title: `Read & chat with ${data.title} — Feynman`,
     description: desc,
     alternates: { canonical },
     ...(isStub ? { robots: { index: false, follow: true } } : {}),
