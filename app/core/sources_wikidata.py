@@ -154,6 +154,24 @@ def _cached_or_fetch(key: str, fetcher) -> Any:
     return out
 
 
+# Famous CURRENT public figures often carry a tangential academic occupation
+# claim on Wikidata (e.g. a politician ALSO tagged "psychologist"). Ranking by
+# fame then surfaces them above real scholars (this polluted a batch with Ilhan
+# Omar, John Bolton, etc. as "psychologists"). Drop any LIVING person carrying one
+# of these occupations — historical thinker-statesmen (Mill, Cicero) have a death
+# date and are kept; living legit thinkers (Chomsky, Deutsch) don't carry these.
+_EXCLUDE_OCCUPATIONS = {
+    "Q82955",    # politician
+    "Q193391",   # diplomat
+    "Q937857",   # association football player
+    "Q2066131",  # athlete / sportsperson
+    "Q33999",    # actor
+    "Q177220",   # singer
+    "Q488205",   # singer-songwriter
+    "Q947873",   # television presenter
+}
+
+
 def query_thinkers(occupation_qid: str, limit: int = 50) -> list[dict[str, Any]]:
     """SPARQL: top-N most notable people with this occupation.
 
@@ -164,6 +182,13 @@ def query_thinkers(occupation_qid: str, limit: int = 50) -> list[dict[str, Any]]
     SELECT ?p ?pLabel ?pDescription ?birth ?death ?image ?article ?sitelinks
     WHERE {{
       ?p wdt:P106 wd:{occupation_qid} .
+      # Drop LIVING politicians/celebrities carrying only a tangential academic
+      # tag (fame-pollution). Historical figures have a death date and are kept.
+      FILTER NOT EXISTS {{
+        ?p wdt:P106 ?blocked .
+        VALUES ?blocked {{ wd:Q82955 wd:Q193391 wd:Q937857 wd:Q2066131 wd:Q33999 wd:Q177220 wd:Q488205 wd:Q947873 }}
+        FILTER NOT EXISTS {{ ?p wdt:P570 ?anyDeath . }}
+      }}
       ?article schema:about ?p ;
                schema:isPartOf <https://en.wikipedia.org/> .
       ?p wikibase:sitelinks ?sitelinks .
@@ -263,6 +288,13 @@ def query_thinkers_via_action(occupation_qid: str, limit: int = 50) -> list[dict
                for c in (claims.get("P31") or [])]
         if "Q5" not in p31:
             continue  # humans only — drops test entities / non-people
+        # Drop LIVING politicians/celebrities carrying only a tangential academic
+        # tag (fame-pollution — see _EXCLUDE_OCCUPATIONS). Historical figures have
+        # a death date and are kept.
+        p106 = {((c.get("mainsnak") or {}).get("datavalue") or {}).get("value", {}).get("id")
+                for c in (claims.get("P106") or [])}
+        if (p106 & _EXCLUDE_OCCUPATIONS) and not _claim_year(claims, "P570"):
+            continue
         name = ((ent.get("labels") or {}).get("en") or {}).get("value", "")
         sitelinks = ent.get("sitelinks") or {}
         enwiki = sitelinks.get("enwiki") or {}
@@ -315,6 +347,33 @@ def _format_era(birth: str, death: str) -> str:
     return ""
 
 
+# Precision gate: the Wikidata short description must actually relate to the
+# field. Wikidata's P106 is noisy and fame-ranking surfaces famous people with a
+# tangential/spurious claim (proven: the action API returned Pliny the Elder,
+# Lloyd George, Ilhan Omar etc. as "psychologists"). Requiring a field keyword in
+# the description drops them. Precision over recall — a few legit minds with an
+# off-keyword description are missed, which is fine at scale.
+_DOMAIN_DESC_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "Psychology": ("psycholog", "psychoanaly"),
+    "Philosophy": ("philosoph",),
+    "Economics": ("econom",),
+    "Physics": ("physic",),
+    "Computer Science": ("comput", "informatic", "artificial intelligence", "programmer"),
+    "Biology": ("biolog", "naturalist", "zoolog", "botan", "genetic", "ecolog", "physiolog"),
+    "History": ("histor",),
+    "Mathematics": ("mathemat",),
+    "Business & Strategy": ("entrepreneur", "businessman", "businesswoman", "businessperson",
+                            "industrialist", "investor", "executive", "founder of", " ceo"),
+    "Neuroscience": ("neuro",),
+    "Literature": ("writer", "author", "novelist", "poet", "playwright", "essayist",
+                   "dramatist", "literary"),
+    "Political Science": ("political scientist", "political theor", "political philosoph"),
+    "Sociology": ("sociolog",),
+    "Art & Design": ("artist", "painter", "sculptor", "designer", "illustrator", "architect",
+                     "printmaker", "engraver", "photographer"),
+}
+
+
 def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> list[dict[str, Any]]:
     """Walk every TOPIC_TAG → top N candidates, deduped by qid.
 
@@ -353,6 +412,11 @@ def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> li
                 continue
             seen.add(c["qid"])
             c["domain"] = domain
+            # Precision gate (see _DOMAIN_DESC_KEYWORDS): the description must
+            # relate to the field, else it's fame-pollution from a noisy P106 claim.
+            _kw = _DOMAIN_DESC_KEYWORDS.get(domain)
+            if _kw and not any(k in (c.get("description") or "").lower() for k in _kw):
+                continue
             out.append(c)
         time.sleep(throttle)
     # Enrich with Wikipedia bio + a human-readable era. Best-effort + disk-cached.
