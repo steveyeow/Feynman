@@ -1049,6 +1049,55 @@ def get_agent_by_slug(slug: str) -> dict[str, Any] | None:
         return _row_to_agent(row) if row else None
 
 
+def resolve_agent_id_by_slug(slug: str) -> str | None:
+    """Slug → id ONLY, for the URL-rewrite middleware. Avoids `SELECT *` reading
+    the full meta_json just to extract the id — that lookup runs on every
+    /book/{slug} + /api/agents/{slug} request (tens of thousands of calls), so
+    SELECT * there was needless Supabase egress."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT id FROM agents WHERE slug = ? AND is_deleted = ?"
+        ), (slug, False if _USE_PG else 0))
+        return row["id"] if row else None
+
+
+def resolve_mind_id_by_slug(slug: str) -> str | None:
+    """Slug → id ONLY, for the URL-rewrite middleware (see resolve_agent_id_by_slug)."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT id FROM minds WHERE slug = ?"), (slug,))
+        return row["id"] if row else None
+
+
+# ── ops_state: tiny key/value for cross-run watchdog state (egress-watch cron) ──
+_ops_state_ready = False
+
+
+def _ensure_ops_state(conn) -> None:
+    global _ops_state_ready
+    if _ops_state_ready:
+        return
+    _execute(conn, _q(
+        "CREATE TABLE IF NOT EXISTS ops_state (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)"
+    ))
+    _ops_state_ready = True
+
+
+def ops_state_get(key: str) -> str | None:
+    with get_conn() as conn:
+        _ensure_ops_state(conn)
+        row = _fetchone(conn, _q("SELECT value FROM ops_state WHERE key = ?"), (key,))
+        return row["value"] if row else None
+
+
+def ops_state_set(key: str, value: str) -> None:
+    with get_conn() as conn:
+        _ensure_ops_state(conn)
+        _execute(conn, _q(
+            "INSERT INTO ops_state (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+        ), (key, value, _utcnow()))
+
+
 def update_agent_slug(agent_id: str, slug: str) -> None:
     with get_conn() as conn:
         _execute(conn, _q("UPDATE agents SET slug = ? WHERE id = ?"), (slug, agent_id))
