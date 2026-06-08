@@ -176,17 +176,9 @@ export default async function MindOnTopicPage({
           Chat with {mind.name} →
         </a>
         <Link className="secondary" href={`/topic/${canonicalSlug}`}>
-          {topic} on Feynman
+          Explore {topic} →
         </Link>
       </p>
-
-      <footer className="seo-explore-footer">
-        <small>
-          Read more: <Link href={`/mind/${params.id}`}>About {mind.name}</Link>
-          {" · "}
-          <Link href={`/topic/${canonicalSlug}`}>{topic} on Feynman</Link>
-        </small>
-      </footer>
     </SeoColumn>
   );
 }

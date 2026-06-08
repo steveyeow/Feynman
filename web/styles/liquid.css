@@ -290,18 +290,23 @@ body { background-color: var(--bg-home); }
 /* Top action bar — Read / Preview / Chat / Share, prominent, above the fold. */
 .seo-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .seo-action {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 10px 20px; border-radius: var(--r-control);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 18px; border-radius: var(--r-control);
   font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  border: 1px solid transparent; transition: opacity 0.15s, background 0.15s;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease, color 0.18s ease, filter 0.18s ease;
   font-family: inherit;
 }
-.seo-action.primary { background: var(--accent); color: #fff; }
-.seo-action.primary:hover { opacity: 0.9; }
-.seo-action.secondary { background: var(--bg-chat); color: var(--text); border-color: var(--border-strong); }
-.seo-action.secondary:hover { background: rgba(128,128,128,0.08); }
+.seo-action.primary {
+  background: var(--accent); color: #fff; border-color: transparent;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 2px 8px rgba(10,110,230,0.22);
+}
+.seo-action.primary:hover { filter: brightness(0.95); transform: translateY(-1px); box-shadow: 0 3px 6px rgba(0,0,0,0.12), 0 6px 18px rgba(10,110,230,0.30); opacity: 1; }
+.seo-action.primary:active { filter: brightness(0.9); transform: translateY(0); box-shadow: 0 1px 2px rgba(0,0,0,0.14); }
+.seo-action.secondary { background: var(--bg-chat); color: var(--text); border-color: var(--border-strong); box-shadow: 0 1px 1px rgba(0,0,0,0.03); }
+.seo-action.secondary:hover { background: rgba(128,128,128,0.08); border-color: var(--text-muted); transform: translateY(-1px); }
 .seo-action.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }
-.seo-action.ghost:hover { color: var(--text); background: rgba(128,128,128,0.08); }
+.seo-action.ghost:hover { color: var(--text); background: rgba(128,128,128,0.06); border-color: var(--text-muted); }
 
 /* Persistent "Chat with {mind}" pill — fades in once the hero CTA scrolls away
    (MindStickyCta). Floating + bottom-centered so it never sits at the top. */
@@ -580,11 +585,23 @@ body { background-color: var(--bg-home); }
 /* Legacy single-column CTA row (kept for q/insights pages that still use it). */
 .seo-cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 1.6em 0; }
 .seo-cta-row a {
-  display: inline-block; padding: 11px 20px; border-radius: var(--r-control);
-  font-weight: 600; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 18px; border-radius: var(--r-control);
+  font-size: 14px; font-weight: 600; text-decoration: none;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease, color 0.18s ease, filter 0.18s ease;
 }
-.seo-cta-row a.primary { background: var(--accent); color: #fff; }
-.seo-cta-row a.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.seo-cta-row a.primary {
+  background: var(--accent); color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 2px 8px rgba(10,110,230,0.22);
+}
+.seo-cta-row a.primary:hover { filter: brightness(0.95); transform: translateY(-1px); box-shadow: 0 3px 6px rgba(0,0,0,0.12), 0 6px 18px rgba(10,110,230,0.30); }
+.seo-cta-row a.primary:active { filter: brightness(0.9); transform: translateY(0); }
+.seo-cta-row a.secondary {
+  background: var(--bg-chat); color: var(--text); border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 1px rgba(0,0,0,0.03);
+}
+.seo-cta-row a.secondary:hover { background: rgba(128,128,128,0.08); border-color: var(--text-muted); transform: translateY(-1px); }
 
 @media (max-width: 860px) {
   .seo-grid.has-rail { grid-template-columns: 1fr; }
