@@ -5087,26 +5087,45 @@ def api_list_minds(background_tasks: BackgroundTasks):
 
 _similarities_cache: dict[str, Any] = {}
 _similarities_cache_ts: float = 0
-_SIMILARITIES_TTL = 3600  # 1 hour
+_SIMILARITIES_TTL = 3600  # 1 hour (warm-instance L1)
+_SIM_OPS_KEY = "mind_similarities_v1"
+_SIM_OPS_TTL = 21600  # 6h — bound how often the ~7.7MB embedding read recomputes
 
 @app.get("/api/minds/similarities")
 def api_mind_similarities():
     from fastapi.responses import JSONResponse
     from .core.minds import compute_mind_similarities, compute_mind_layout
+    from .core.db import ops_state_get, ops_state_set
     global _similarities_cache, _similarities_cache_ts
     now = time.monotonic()
+    hdrs = {"Cache-Control": "public, max-age=3600, s-maxage=3600"}
+    # L1 — warm-instance memory cache.
     if _similarities_cache and (now - _similarities_cache_ts) < _SIMILARITIES_TTL:
-        return JSONResponse(
-            content=_similarities_cache,
-            headers={"Cache-Control": "public, max-age=3600, s-maxage=3600"},
-        )
+        return JSONResponse(content=_similarities_cache, headers=hdrs)
+    # L2 — durable cross-instance cache (ops_state). The recompute below reads
+    # ALL mind embeddings (~7.7MB); on Vercel every cold start / Bearer request
+    # has an empty L1, so without this each one re-read the whole embedding set
+    # (a top Supabase-egress source). Serve the stored result until it ages out.
+    try:
+        raw = ops_state_get(_SIM_OPS_KEY)
+        if raw:
+            stored = json.loads(raw)
+            if (time.time() - stored.get("ts", 0)) < _SIM_OPS_TTL:
+                _similarities_cache = stored["data"]
+                _similarities_cache_ts = now
+                return JSONResponse(content=stored["data"], headers=hdrs)
+    except Exception as exc:
+        log.warning("similarities L2 cache read failed: %s", exc)
+    # Both caches cold → the expensive recompute (reads all embeddings once),
+    # then persist to L2 so other instances skip it for _SIM_OPS_TTL.
     result = {"links": compute_mind_similarities(), "layout": compute_mind_layout()}
     _similarities_cache = result
     _similarities_cache_ts = now
-    return JSONResponse(
-        content=result,
-        headers={"Cache-Control": "public, max-age=3600, s-maxage=3600"},
-    )
+    try:
+        ops_state_set(_SIM_OPS_KEY, json.dumps({"ts": time.time(), "data": result}))
+    except Exception as exc:
+        log.warning("similarities L2 cache write failed: %s", exc)
+    return JSONResponse(content=result, headers=hdrs)
 
 
 @app.get("/api/minds/{mind_id}")
