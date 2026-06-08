@@ -4,7 +4,6 @@ import Link from "next/link";
 import EntityLayout from "@/components/seo/EntityLayout";
 import EntityActions, { type EntityAction } from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
-import MindStickyCta from "@/components/mind/MindStickyCta";
 import {
   DialoguesLink,
   MindBio,
@@ -227,7 +226,6 @@ export default async function MindPage({
 
   return (
     <EntityLayout hero={hero} rail={rail}>
-      <MindStickyCta name={mind.name} href={chatHref} />
       <JsonLd data={personLd} />
       <JsonLd data={breadcrumbLd} />
 
