@@ -22,8 +22,10 @@ from .db import (
     list_mind_memories,
     list_minds,
     list_minds_missing_embeddings,
+    list_minds_missing_voice,
     list_minds_with_embeddings,
     update_mind_embedding,
+    update_mind_voice,
     upsert_compiled_memory,
 )
 from .providers import ProviderError, bulk_chat, chat_with_fallback, pick_provider
@@ -202,6 +204,51 @@ def backfill_mind_embeddings(batch_size: int = 10) -> int:
             log.warning("Backfill embed failed for %s: %s", mind["name"], exc)
     log.info("Backfilled embeddings for %d/%d minds (%d remaining)", count, len(missing), len(missing) - count)
     return count
+
+
+_VOICE_SYSTEM = (
+    "You ARE the named historical thinker, speaking in the FIRST person to a "
+    "curious person who is about to think WITH you. Voice: distinctive, confident, "
+    "grounded in your real work and era. Never break character."
+)
+
+
+def _voice_prompt(name: str, domain: str, bio: str, style: str) -> str:
+    return (
+        f"Introduce yourself as {name} ({domain or 'a great thinker'}) in the FIRST "
+        "person — 2 to 3 sentences, 40-65 words. Say how you see your field and the "
+        "one thing you most want a newcomer to grasp. Use 'I'. Make it an invitation "
+        "to think together — NOT a resume, NO birth/death dates, never 'I was a …'. "
+        "Do NOT open with a greeting (no 'Ah', 'Hello', 'Greetings', 'Welcome', "
+        "'Hi', 'Hail') — open directly with your name or an idea. "
+        f"Ground it in:\n{(bio or '')[:380]}\n{(style or '')[:280]}"
+    )
+
+
+def backfill_mind_voices(batch_size: int = 6) -> tuple[int, int]:
+    """Generate the first-person meta_json.voice for minds that lack it, up to
+    batch_size per call. Uses bulk_chat (the CHAT provider → DeepSeek fallback, so it
+    works even where the Gemini embedding API is geoblocked). Returns
+    (voiced, remaining); call repeatedly until remaining == 0 — mirrors
+    backfill_mind_embeddings, drives /api/cron/voice-minds."""
+    missing = list_minds_missing_voice(limit=200)
+    count = 0
+    for r in missing[:batch_size]:
+        try:
+            res, _ = bulk_chat(
+                system=_VOICE_SYSTEM,
+                user=_voice_prompt(
+                    r["name"], r.get("domain"), r.get("bio_summary"), r.get("thinking_style")
+                ),
+            )
+            voice = (res.content or "").strip().strip('"').strip()
+            if len(voice) < 30:
+                continue
+            update_mind_voice(r["id"], voice)
+            count += 1
+        except Exception as exc:
+            log.warning("Voice backfill failed for %s: %s", r.get("name"), exc)
+    return count, max(0, len(missing) - count)
 
 
 def compute_mind_layout() -> list[dict[str, Any]]:

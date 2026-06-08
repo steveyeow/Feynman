@@ -1967,6 +1967,52 @@ def update_mind_links(mind_id: str, wikidata_url: str | None = None, wikipedia_u
         ), (wikidata_url or None, wikipedia_url or None, mind_id))
 
 
+def list_minds_missing_voice(limit: int = 50) -> list[dict[str, Any]]:
+    """Minds with no first-person meta_json.voice yet (drives /api/cron/voice-minds).
+    On PG, filters in SQL so only the missing rows egress; reads just the columns the
+    voice prompt needs (NOT embedding/persona)."""
+    with get_conn() as conn:
+        if _USE_PG:
+            rows = _fetchall(conn, _q(
+                "SELECT id, name, domain, bio_summary, thinking_style FROM minds "
+                "WHERE meta_json IS NULL OR meta_json = '' "
+                "OR COALESCE(NULLIF(meta_json, '')::jsonb ->> 'voice', '') = '' "
+                "LIMIT ?"
+            ), (limit,))
+            return [dict(r) for r in rows]
+        # SQLite (local dev): no jsonb operator → read + filter in Python.
+        rows = _fetchall(conn, _q(
+            "SELECT id, name, domain, bio_summary, thinking_style, meta_json FROM minds"
+        ))
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        try:
+            v = (json.loads(r.get("meta_json") or "{}").get("voice") or "").strip()
+        except Exception:
+            v = ""
+        if not v:
+            out.append(dict(r))
+            if len(out) >= limit:
+                break
+    return out
+
+
+def update_mind_voice(mind_id: str, voice: str) -> None:
+    """Merge a generated first-person voice into minds.meta_json.voice, preserving
+    any other meta fields."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT meta_json FROM minds WHERE id = ?"), (mind_id,))
+        meta: dict[str, Any] = {}
+        if row and row.get("meta_json"):
+            try:
+                meta = json.loads(row["meta_json"])
+            except Exception:
+                meta = {}
+        meta["voice"] = voice
+        _execute(conn, _q("UPDATE minds SET meta_json = ? WHERE id = ?"),
+                 (json.dumps(meta), mind_id))
+
+
 def get_mind_meta(mind_id: str) -> dict[str, Any]:
     """A mind's PRIVATE meta dict — pre-stored SEO content (Type-2 essays under
     `essays`). Deliberately NOT surfaced by `_row_to_mind` / the public mind API,
