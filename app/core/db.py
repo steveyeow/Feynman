@@ -1838,9 +1838,22 @@ def create_mind(data: dict[str, Any]) -> str:
     return mind_id
 
 
+# Columns _row_to_mind actually reads. Listed explicitly so the per-request mind
+# detail reads (get_mind / get_mind_by_slug / find_mind_by_name) don't pull the
+# fat ~12KB `embedding` BLOB that _row_to_mind discards anyway — a pure egress
+# win (these run on every mind page render; ~31K calls = a top Supabase-egress
+# source). The embedding is read only by the similarity path
+# (list_minds_with_embeddings).
+_MIND_DETAIL_COLS = (
+    "id, name, slug, era, domain, bio_summary, meta_json, persona, "
+    "thinking_style, typical_phrases, works, avatar_seed, wikidata_url, "
+    "wikipedia_url, version, chat_count, created_at"
+)
+
+
 def get_mind(mind_id: str) -> dict[str, Any] | None:
     with get_conn() as conn:
-        row = _fetchone(conn, _q("SELECT * FROM minds WHERE id = ?"), (mind_id,))
+        row = _fetchone(conn, _q(f"SELECT {_MIND_DETAIL_COLS} FROM minds WHERE id = ?"), (mind_id,))
         if not row:
             return None
         return _row_to_mind(row)
@@ -1849,7 +1862,7 @@ def get_mind(mind_id: str) -> dict[str, Any] | None:
 def find_mind_by_name(name: str) -> dict[str, Any] | None:
     with get_conn() as conn:
         row = _fetchone(conn, _q(
-            "SELECT * FROM minds WHERE LOWER(name) = LOWER(?)"
+            f"SELECT {_MIND_DETAIL_COLS} FROM minds WHERE LOWER(name) = LOWER(?)"
         ), (name,))
         if not row:
             return None
@@ -1859,7 +1872,7 @@ def find_mind_by_name(name: str) -> dict[str, Any] | None:
 def get_mind_by_slug(slug: str) -> dict[str, Any] | None:
     """Resolve a mind by its descriptive URL slug (behind /mind/{slug})."""
     with get_conn() as conn:
-        row = _fetchone(conn, _q("SELECT * FROM minds WHERE slug = ?"), (slug,))
+        row = _fetchone(conn, _q(f"SELECT {_MIND_DETAIL_COLS} FROM minds WHERE slug = ?"), (slug,))
         return _row_to_mind(row) if row else None
 
 
