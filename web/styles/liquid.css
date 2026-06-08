@@ -303,6 +303,42 @@ body { background-color: var(--bg-home); }
 .seo-action.ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-strong); }
 .seo-action.ghost:hover { color: var(--text); background: rgba(128,128,128,0.08); }
 
+/* Persistent "Chat with {mind}" pill — fades in once the hero CTA scrolls away
+   (MindStickyCta). Floating + bottom-centered so it never sits at the top. */
+.mind-sticky-cta {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  z-index: 150;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: var(--shadow-lg, 0 8px 28px rgba(0, 0, 0, 0.22));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease, opacity 0.15s ease;
+}
+.mind-sticky-cta.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.mind-sticky-cta:hover { opacity: 0.92; color: #fff; }
+.mind-sticky-cta-arrow { font-size: 15px; line-height: 1; }
+@media (max-width: 640px) {
+  .mind-sticky-cta { bottom: 16px; padding: 12px 20px; }
+}
+
 /* Feynman share popup (custom — NOT the OS share sheet). */
 .seo-share-wrap { position: relative; display: inline-flex; }
 .seo-share-popup {
