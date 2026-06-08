@@ -23,6 +23,7 @@ import {
   fetchTopics,
   fetchMindLibrary,
   fetchMindThemes,
+  fetchMindDialogues,
   isMindTopicRelevant,
   mindSameAs,
   metaDescription,
@@ -96,12 +97,16 @@ export default async function MindPage({
   if (!mind) notFound();
 
   // Enrichment in parallel; each degrades to empty on failure.
-  const [agents, related, topics, library, themes] = await Promise.all([
+  const [agents, related, topics, library, themes, dialogues] = await Promise.all([
     fetchAgents(),
     fetchRelatedMinds(mind),
     fetchTopics(),
     fetchMindLibrary(params.id),
     fetchMindThemes(params.id),
+    // Gate the "Recent dialogues" link: only advertise it once the page has real
+    // content (matches the sitemap's ≥3-message gate), so the thousands of new
+    // minds don't link to an empty dialogues page.
+    fetchMindDialogues(params.id, 3),
   ]);
 
   const matchingTopics = topics.filter((t) => isMindTopicRelevant(mind, t));
@@ -170,6 +175,22 @@ export default async function MindPage({
             href={`/?mind=${encodeURIComponent(params.id)}&q=${encodeURIComponent(s.q)}`}
             className="mind-starter-chip"
           >
+            <svg
+              className="mind-starter-chip-icon"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             {s.label}
           </Link>
         ))}
@@ -182,18 +203,27 @@ export default async function MindPage({
   // the body ("How {mind} approaches key topics"); a rail "Topics" card repeated
   // the same labels on-screen (the bug the /topic review removed), so the
   // body section now carries BOTH the essay link and the topic-hub link instead.
-  const rail = related.length ? (
-    <div className="seo-rail-card">
-      <h3>Related minds</h3>
-      <ul>
-        {related.slice(0, 8).map((rm) => (
-          <li key={rm.id}>
-            <Link href={`/mind/${rm.slug || rm.id}`}>{rm.name}</Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  ) : null;
+  // Rail = the mind's own Notable works (credibility + book links, promoted from
+  // the page bottom to the top-right) followed by complementary Related minds.
+  const hasWorks = (mind.works || []).filter(Boolean).length > 0;
+  const rail =
+    hasWorks || related.length ? (
+      <>
+        <MindWorks works={mind.works} agents={agents} variant="rail" />
+        {related.length ? (
+          <div className="seo-rail-card">
+            <h3>Related minds</h3>
+            <ul>
+              {related.slice(0, 8).map((rm) => (
+                <li key={rm.id}>
+                  <Link href={`/mind/${rm.slug || rm.id}`}>{rm.name}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </>
+    ) : null;
 
   return (
     <EntityLayout hero={hero} rail={rail}>
@@ -254,7 +284,9 @@ export default async function MindPage({
           </ul>
         </section>
       ) : null}
-      <DialoguesLink mindId={params.id} name={mind.name} />
+      {dialogues.length >= 3 ? (
+        <DialoguesLink mindId={params.id} name={mind.name} />
+      ) : null}
 
       {/* ③ In their voice — signature phrases + core approach (first-person feel). */}
       <MindPhrases phrases={mind.typical_phrases} />
@@ -264,7 +296,6 @@ export default async function MindPage({
       {/* ④ Encyclopedic context — demoted below the distinctive content. */}
       <MindBio bio={mind.bio_summary} />
       <MindThinkingStyle style={mind.thinking_style} />
-      <MindWorks works={mind.works} agents={agents} />
 
       {libraryExtra.length ? (
         <section className="seo-section">

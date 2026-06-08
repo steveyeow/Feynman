@@ -101,25 +101,36 @@ export function MindPersonaExcerpt({
 export function MindWorks({
   works,
   agents,
+  variant = "section",
 }: {
   works?: string[];
   agents: AgentRowLite[];
+  variant?: "section" | "rail";
 }) {
-  const list = (works || []).filter(Boolean).slice(0, 20);
+  const list = (works || []).filter(Boolean).slice(0, variant === "rail" ? 8 : 20);
   if (!list.length) return null;
   const idx = buildWorkLinkIndex(agents);
+  const items = list.map((w, i) => {
+    const bookId = matchWorkToBook(w, idx);
+    return (
+      <li key={i}>
+        {bookId ? <Link href={`/book/${bookId}`}>{w}</Link> : w}
+      </li>
+    );
+  });
+  // Rail variant: a compact credibility card up in the right column (works are a
+  // stronger entity signal than a buried bottom list).
+  if (variant === "rail") {
+    return (
+      <div className="seo-rail-card">
+        <h3>Notable works</h3>
+        <ul>{items}</ul>
+      </div>
+    );
+  }
   return (
     <Section heading="Notable works">
-      <ul className="works">
-        {list.map((w, i) => {
-          const bookId = matchWorkToBook(w, idx);
-          return (
-            <li key={i}>
-              {bookId ? <Link href={`/book/${bookId}`}>{w}</Link> : w}
-            </li>
-          );
-        })}
-      </ul>
+      <ul className="works">{items}</ul>
     </Section>
   );
 }
