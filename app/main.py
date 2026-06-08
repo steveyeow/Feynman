@@ -3561,6 +3561,23 @@ def api_cron_embed_minds(request: Request) -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)}
 
 
+@app.get("/api/cron/voice-minds")
+def api_cron_voice_minds(request: Request) -> dict[str, Any]:
+    """Cron-triggered first-person voice backfill for minds missing meta_json.voice
+    (the Feynman-native About hero). Bounded per call (chat-LLM latency) to stay
+    within the Vercel function timeout; runs daily so new minds self-fill. Voice goes
+    through the CHAT provider (DeepSeek fallback), so unlike embeddings it isn't
+    blocked when Gemini is geoblocked."""
+    _verify_cron(request)
+    from .core.minds import backfill_mind_voices
+    try:
+        voiced, remaining = backfill_mind_voices(batch_size=6)
+        return {"status": "ok", "voiced": voiced, "remaining": remaining}
+    except Exception as exc:
+        log.error("Voice-minds cron failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
 @app.get("/api/cron/reset-embeddings")
 def api_cron_reset_embeddings() -> dict[str, Any]:
     """Clear all corrupted embeddings so backfill can regenerate them."""
