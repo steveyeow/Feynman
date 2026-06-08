@@ -380,7 +380,8 @@ export default function MindsGraph() {
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
         const n = nodeAt(cx, cy, transform.invert([cx, cy]));
-        if (n) router.push(`/mind/${encodeURIComponent(n.id)}`);
+        // Slug (not uuid) → skip the middleware's blocking uuid→slug 301 hop.
+        if (n) router.push(`/mind/${encodeURIComponent(n.slug || n.id)}`);
       },
       { signal },
     );
@@ -668,7 +669,9 @@ export default function MindsGraph() {
               <button
                 className="tt-profile-btn"
                 title={`View ${tooltip.node.name}'s profile`}
-                onClick={() => router.push(`/mind/${encodeURIComponent(tooltip.node.id)}`)}
+                // Link the descriptive slug (not the uuid) so navigation skips the
+                // middleware's blocking uuid→slug origin fetch + 301 redirect.
+                onClick={() => router.push(`/mind/${encodeURIComponent(tooltip.node.slug || tooltip.node.id)}`)}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
@@ -684,7 +687,7 @@ export default function MindsGraph() {
                 // 1:1 chat page (legacy #/mind/{id} WAS this chat surface).
                 onClick={() =>
                   requirePro(() =>
-                    router.push(`/mind/${encodeURIComponent(tooltip.node.id)}/chat`),
+                    router.push(`/mind/${encodeURIComponent(tooltip.node.slug || tooltip.node.id)}/chat`),
                   )
                 }
               >

@@ -115,16 +115,25 @@ export default function UserMenu() {
 
 function SignOutItem({ onDone }: { onDone: () => void }) {
   const { signOut } = useAuth();
+  const [busy, setBusy] = useState(false);
   return (
     <button
       type="button"
       className="user-menu-item user-menu-signout"
+      disabled={busy}
+      // Keep the menu open showing "Signing out…" until signOut resolves (it
+      // usually redirects); close it afterward (or on failure) via onDone.
       onClick={async () => {
-        onDone();
-        await signOut();
+        if (busy) return;
+        setBusy(true);
+        try {
+          await signOut();
+        } finally {
+          onDone();
+        }
       }}
     >
-      Sign out
+      {busy ? "Signing out…" : "Sign out"}
     </button>
   );
 }

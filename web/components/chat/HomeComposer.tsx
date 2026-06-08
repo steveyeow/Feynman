@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getMind, type Agent, type Mind } from "@/lib/api";
-import { getAgentCached } from "@/lib/catalog";
+import { getAgentCached, getCachedCatalogBooks } from "@/lib/catalog";
 import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
@@ -198,33 +198,53 @@ export default function HomeComposer() {
   // first (cheap, already cached), falling back to a direct /api/agents/{id}
   // fetch for books the catalog filter excludes (matches the legacy fallback).
   const preselectBook = (bookId: string) => {
-    // Resolve the book id → chip via the single-agent endpoint, which the slug
-    // middleware resolves for BOTH a uuid and a descriptive slug. Going direct
-    // (instead of downloading the full ~7MB /api/agents catalog and scanning it)
-    // is the fix for "Chat with this book" landing on an empty composer: a slug
-    // never matched the uuid-keyed catalog, so it fell through to this same
-    // fetch anyway — but only after a multi-second catalog download, leaving the
-    // composer empty ~4s. Now it's one small request.
+    // Fast path: when the catalog is already warm in this session (the common
+    // case — the user came from Library, which fetches it), resolve the chip
+    // title SYNCHRONOUSLY. No network wait, no flash: the chip is correct on the
+    // first paint. Match a uuid OR a descriptive slug (?book= carries either).
+    const cached = getCachedCatalogBooks()?.find(
+      (b) => b.agentId === bookId || b.slug === bookId,
+    );
+    if (cached) {
+      setBooks(
+        new Map([
+          [cached.agentId, { id: cached.agentId, agentId: cached.agentId, title: cached.title, author: cached.author }],
+        ]),
+      );
+      return;
+    }
+
+    // Cold path (direct ?book= link, catalog not loaded): show an optimistic
+    // LOADING chip immediately so the composer never sits visibly empty, then
+    // swap in the real title when the single-agent fetch lands. Resolving via
+    // the single-agent endpoint (the slug middleware resolves both a uuid and a
+    // slug) is the fix for the old "download the ~7MB catalog and scan it" path
+    // that left the composer empty ~4s.
+    setBooks(new Map([[bookId, { id: bookId, agentId: bookId, title: "", author: "", loading: true }]]));
     getAgentCached(bookId)
       .then((agent: Agent) => {
-        if (agent?.id) {
-          setBooks(
-            new Map([
-              [
-                agent.id,
-                {
-                  id: agent.id,
-                  agentId: agent.id,
-                  title: agent.name,
-                  author: (agent.author as string) || "",
-                },
-              ],
-            ]),
-          );
-        }
+        setBooks((prev) => {
+          const next = new Map(prev);
+          next.delete(bookId); // drop the optimistic placeholder
+          if (agent?.id) {
+            next.set(agent.id, {
+              id: agent.id,
+              agentId: agent.id,
+              title: agent.name,
+              author: (agent.author as string) || "",
+            });
+          }
+          return next;
+        });
       })
       .catch(() => {
-        /* book preselect is best-effort */
+        // Best-effort: drop the placeholder so a failed lookup doesn't leave a
+        // permanent shimmer (the user can still pick the book manually).
+        setBooks((prev) => {
+          const next = new Map(prev);
+          next.delete(bookId);
+          return next;
+        });
       });
   };
 

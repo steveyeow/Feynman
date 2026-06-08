@@ -51,18 +51,37 @@ function ShareGlyph() {
 }
 
 /** Hover "Share" action under an assistant/mind answer (per-turn share entry). */
-function ShareAnswerAction({ onClick }: { onClick: () => void }) {
+function ShareAnswerAction({
+  onShare,
+  index,
+}: {
+  onShare: (index: number) => void | Promise<void>;
+  index: number;
+}) {
+  // Own the pending state locally so a per-turn share shows immediate feedback
+  // (the publish POST can take ~1s) without threading a sharing-index down from
+  // ChatView through MessageList.
+  const [busy, setBusy] = useState(false);
   return (
     <div className={styles.msgActions}>
       <button
         type="button"
         className={styles.shareMsgBtn}
-        onClick={onClick}
+        disabled={busy}
+        onClick={async () => {
+          if (busy) return;
+          setBusy(true);
+          try {
+            await onShare(index);
+          } finally {
+            setBusy(false);
+          }
+        }}
         aria-label="Share this answer"
         title="Share this answer"
       >
         <ShareGlyph />
-        <span>Share</span>
+        <span>{busy ? "Sharing…" : "Share"}</span>
       </button>
     </div>
   );
@@ -175,7 +194,7 @@ function AssistantMessage({
 }: {
   msg: Message;
   index: number;
-  onShare?: (index: number) => void;
+  onShare?: (index: number) => void | Promise<void>;
 }) {
   const refs = msg.opts?.references || [];
   const webSrcs = msg.opts?.webSources || [];
@@ -273,7 +292,7 @@ function AssistantMessage({
             {usage.total_tokens} tokens
           </div>
         )}
-        {onShare && <ShareAnswerAction onClick={() => onShare(index)} />}
+        {onShare && <ShareAnswerAction onShare={onShare} index={index} />}
       </div>
     </div>
   );
@@ -416,7 +435,7 @@ function MindMessage({
 }: {
   msg: Message;
   index: number;
-  onShare?: (index: number) => void;
+  onShare?: (index: number) => void | Promise<void>;
 }) {
   const name = msg.mindName || "";
   const raw = String(msg.content ?? "");
@@ -449,7 +468,7 @@ function MindMessage({
             {usage.total_tokens} tokens
           </div>
         )}
-        {onShare && <ShareAnswerAction onClick={() => onShare(index)} />}
+        {onShare && <ShareAnswerAction onShare={onShare} index={index} />}
       </div>
     </div>
   );
@@ -494,7 +513,7 @@ export default function MessageList({
   /** When provided, each assistant/mind answer shows a hover "Share" action
    *  that publishes that single turn (index = position in this list, which
    *  matches the persisted transcript order the backend indexes by). */
-  onShareMessage?: (index: number) => void;
+  onShareMessage?: (index: number) => void | Promise<void>;
 }) {
   return (
     <>

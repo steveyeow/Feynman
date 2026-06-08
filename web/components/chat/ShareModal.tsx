@@ -28,6 +28,7 @@ export function PublishToast({
   onWithdraw: () => Promise<void>;
 }) {
   const [copied, setCopied] = useState(false);
+  const [unsharing, setUnsharing] = useState(false);
 
   const copy = () => {
     try {
@@ -40,16 +41,20 @@ export function PublishToast({
   };
 
   const unshare = async () => {
+    if (unsharing) return;
     if (
       !window.confirm(
         "Make this private again? The public link will stop working immediately.",
       )
     )
       return;
+    setUnsharing(true);
     try {
       await onWithdraw();
     } catch {
       /* fail silently — caller handles errors */
+    } finally {
+      setUnsharing(false);
     }
   };
 
@@ -67,8 +72,8 @@ export function PublishToast({
         <a className="publish-toast-open" href={url} target="_blank" rel="noopener noreferrer">
           Open
         </a>
-        <button className="publish-toast-unshare" onClick={unshare}>
-          Make private
+        <button className="publish-toast-unshare" onClick={unshare} disabled={unsharing}>
+          {unsharing ? "Making private…" : "Make private"}
         </button>
         <button className="publish-toast-close" aria-label="Dismiss" onClick={onClose}>
           ×

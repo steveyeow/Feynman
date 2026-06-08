@@ -1531,6 +1531,29 @@ body {
   font-size: 15px; line-height: 1; opacity: 0.6; transition: opacity 0.15s;
 }
 .chip-remove:hover { opacity: 1; }
+/* Optimistic loading chip — a shimmer pill while a preselected book's title
+   resolves, so the composer never sits visibly empty after "Chat with book". */
+.book-chip.loading { padding: 3px 10px; }
+.chip-skeleton {
+  display: inline-block; width: 84px; height: 11px; border-radius: 999px;
+  background: var(--accent); animation: pulse 1.4s ease-in-out infinite;
+}
+/* Generic skeleton placeholder for the entity loading.tsx fallbacks. Neutral,
+   theme-agnostic fill + the shared `pulse` so it reads as "loading" either
+   theme. Dimensions/radius are set per-instance (inline) by the skeleton. */
+.skeleton-block {
+  background: rgba(128, 128, 128, 0.16);
+  border-radius: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+/* Generic inline spinner (icon-button pending state, e.g. share). Inherits the
+   button's currentColor; reuses the existing toast-spin keyframe. */
+.inline-spinner {
+  display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  animation: toast-spin 0.7s linear infinite;
+}
 
 /* Book / Mind lists in popover */
 .popover-book-list { max-height: 180px; overflow-y: auto; }

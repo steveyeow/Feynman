@@ -266,7 +266,9 @@ export default function ChatView({
   // "Anonymous" (ChatGPT-style), then surface the clean PublishToast. The
   // backend's <3-message gate (422, string detail — no code) becomes a small
   // inline hint instead of a modal.
+  const [sharing, setSharing] = useState(false);
   const doShare = useCallback(async () => {
+    setSharing(true);
     try {
       const rec = await post<ShareRecord>(
         `/api/chat-sessions/${encodeURIComponent(sessionId)}/share`,
@@ -285,6 +287,8 @@ export default function ChatView({
           ? "Start the chat before sharing it."
           : apiErrorText(e, "Couldn’t publish — please try again."),
       );
+    } finally {
+      setSharing(false);
     }
   }, [sessionId, flashShareHint, withdrawSession]);
 
@@ -1127,8 +1131,9 @@ export default function ChatView({
                   ? setToast({ url: publicUrl, withdraw: withdrawSession })
                   : doShare()
               }
+              disabled={sharing}
             >
-              <ShareIcon />
+              {sharing ? <span className="inline-spinner" aria-hidden="true" /> : <ShareIcon />}
               {isPublic && (
                 <span
                   id="share-status-indicator"

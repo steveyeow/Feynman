@@ -35,6 +35,9 @@ export interface SelectedBook {
   agentId: string;
   title: string;
   author: string;
+  /** True while a preselected book's title is still resolving — renders an
+   *  optimistic shimmer chip so the composer never sits visibly empty. */
+  loading?: boolean;
 }
 
 export interface SelectedMind {
@@ -64,19 +67,25 @@ export function SelectedChips({
   if (!books.size && !minds.size) return null;
   return (
     <div className="selected-chips">
-      {[...books.entries()].map(([id, b]) => (
-        <div className="book-chip" key={id}>
-          <span>{b.title}</span>
-          <button
-            type="button"
-            className="chip-remove"
-            aria-label={`Remove ${b.title}`}
-            onClick={() => onRemoveBook(id)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
+      {[...books.entries()].map(([id, b]) =>
+        b.loading ? (
+          <div className="book-chip loading" key={id} aria-label="Loading book" aria-busy="true">
+            <span className="chip-skeleton" />
+          </div>
+        ) : (
+          <div className="book-chip" key={id}>
+            <span>{b.title}</span>
+            <button
+              type="button"
+              className="chip-remove"
+              aria-label={`Remove ${b.title}`}
+              onClick={() => onRemoveBook(id)}
+            >
+              ×
+            </button>
+          </div>
+        ),
+      )}
       {[...minds.entries()].map(([id, m]) => (
         <div className="mind-chip" key={id}>
           <span className="mind-chip-avatar" style={{ background: mindColor(m.name) }}>
