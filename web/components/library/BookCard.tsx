@@ -30,7 +30,10 @@ export default function BookCard({
   const canRead = book.hasFullText;
   const canPreview = !book.hasFullText && book.status === "ready";
   const overlay = canRead ? "Read" : canPreview ? "Preview" : "";
-  const detailHref = `/book/${encodeURIComponent(book.agentId)}`;
+  // Link the descriptive slug (not the uuid) so the details navigation skips the
+  // middleware's blocking uuid→slug origin fetch + 301 redirect. Falls back to the
+  // uuid for un-backfilled rows (still resolves, just via the legacy hop).
+  const detailHref = `/book/${encodeURIComponent(book.slug || book.agentId)}`;
   const readHref = `/read/${encodeURIComponent(book.agentId)}`;
   const chatHref = `/?book=${encodeURIComponent(book.agentId)}`;
   // The cover block reads/previews when there's content; a catalog stub has

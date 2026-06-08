@@ -7,6 +7,7 @@
 export interface AgentRow {
   id: string;
   name: string;
+  slug?: string | null; // descriptive URL slug; null for un-backfilled rows
   type?: string; // "ai_book" | "upload" | "catalog" | ...
   status?: string;
   source?: string;
@@ -27,6 +28,9 @@ export interface AgentRow {
 export interface Book {
   id: string;
   agentId: string;
+  /** Descriptive URL slug. Link to /book/{slug} to skip the uuid→slug 301 hop;
+   *  null for un-backfilled rows (callers fall back to agentId). */
+  slug: string | null;
   title: string;
   author: string;
   isbn: string | null;
@@ -57,6 +61,7 @@ export function mapAgentsToBooks(agents: AgentRow[]): Book[] {
       return {
         id: a.id,
         agentId: a.id,
+        slug: a.slug ?? null,
         title: a.name,
         author: meta.author || a.source || "",
         isbn: meta.isbn || null,

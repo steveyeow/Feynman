@@ -20,6 +20,9 @@
 export interface Mind {
   id: string;
   name: string;
+  /** Descriptive URL slug. Link to /mind/{slug} to skip the uuid→slug 301 hop
+   *  (the slug-resolution middleware fetches the cold origin on every uuid). */
+  slug?: string | null;
   era?: string;
   domain?: string;
   bio_summary?: string;
@@ -49,6 +52,8 @@ export interface GraphData {
 // ── d3 node/link working shapes (mutated by the simulation) ─────────────
 export interface GraphNode {
   id: string;
+  /** Descriptive slug for navigation (falls back to id when un-backfilled). */
+  slug: string | null;
   name: string;
   era: string;
   domain: string;
@@ -222,6 +227,7 @@ export function buildGraphData(
 
   const nodes: GraphNode[] = minds.map((m) => ({
     id: m.id,
+    slug: m.slug ?? null,
     name: m.name,
     era: m.era || "",
     domain: m.domain || "",

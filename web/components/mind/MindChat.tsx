@@ -184,7 +184,8 @@ function MindMetaSidebar({ mind }: { mind: MindDetail }) {
   // chat_count isn't always in the minds JSON; read it defensively (MindDetail
   // has an index signature). Falls back to 0 like the legacy `|| 0`.
   const chatCount = Number((mind as { chat_count?: number }).chat_count || 0);
-  const profileHref = `/mind/${encodeURIComponent(mind.id)}`;
+  // Slug (not uuid) → skip the middleware's blocking uuid→slug 301 hop.
+  const profileHref = `/mind/${encodeURIComponent(mind.slug || mind.id)}`;
 
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);

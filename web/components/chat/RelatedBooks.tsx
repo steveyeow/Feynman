@@ -78,7 +78,8 @@ export default function RelatedBooks({
         {related.map((b) => (
           <Link
             key={b.id}
-            href={`/book/${encodeURIComponent(b.agentId)}`}
+            // Slug (not uuid) → skip the middleware's blocking uuid→slug 301 hop.
+            href={`/book/${encodeURIComponent(b.slug || b.agentId)}`}
             className="sidebar-book-item"
           >
             <div className="sidebar-book-info">
