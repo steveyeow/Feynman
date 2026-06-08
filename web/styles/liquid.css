@@ -514,6 +514,20 @@ body { background-color: var(--bg-home); }
   text-decoration: none; transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .mind-starter-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(128,128,128,0.06); }
+.mind-starter-chip-icon { width: 13px; height: 13px; margin-right: 5px; opacity: 0.55; flex-shrink: 0; }
+.mind-starter-chip:hover .mind-starter-chip-icon { opacity: 1; }
+
+/* ── Live AI dialogues — answer-only snippets, styled as the agent speaking ── */
+.insights { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.insight-card {
+  padding: 14px 16px; max-width: 680px;
+  background: var(--bg-chat);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+}
+.insight-card-who { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 5px; }
+.insight-card p { margin: 0; line-height: 1.6; color: var(--text); }
 
 /* ── "Think with X" — Type-2 imagined-perspective cards (the distinctive supply) ── */
 .mind-topic-cards {

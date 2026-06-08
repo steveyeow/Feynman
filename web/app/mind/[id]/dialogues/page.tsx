@@ -139,6 +139,7 @@ export default async function MindDialoguesPage({
         <section className="seo-section insights">
           {dialogues.map((d, i) => (
             <article key={i} className="insight-card">
+              <span className="insight-card-who">{mind.name}</span>
               <p>{d.text}</p>
             </article>
           ))}
