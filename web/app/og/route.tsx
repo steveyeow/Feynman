@@ -73,19 +73,21 @@ export async function GET(req: Request) {
   const id = searchParams.get("id") || "";
   const slug = searchParams.get("slug") || "";
   const kind = searchParams.get("kind") || "";
+  // Temporary CTA-color preview override (e.g. &pill=%232b3553) — design review only.
+  const pill = searchParams.get("pill") || "";
 
   const fonts = await loadOgFonts();
   const opts = { ...OG_SIZE, fonts, headers: { "Cache-Control": CACHE } };
 
   try {
-    const el = await build(type, id, slug, kind);
+    const el = await build(type, id, slug, kind, pill);
     return new ImageResponse(el, opts);
   } catch {
     return new ImageResponse(<FallbackCard />, opts);
   }
 }
 
-async function build(type: string, id: string, slug: string, kind: string) {
+async function build(type: string, id: string, slug: string, kind: string, pill: string) {
   switch (type) {
     case "mind": {
       const mind = await fetchMind(id);
@@ -124,6 +126,7 @@ async function build(type: string, id: string, slug: string, kind: string) {
             ...related.minds.slice(0, 3).map((m) => mindAccent(m.name)),
             "#5e4285", "#855e42", "#428585",
           ].slice(0, 3)}
+          pillColor={pill || undefined}
         />
       );
     }

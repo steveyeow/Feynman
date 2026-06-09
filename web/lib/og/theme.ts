@@ -19,6 +19,11 @@ export const INK_SOFT = "#3d3b39";
 export const INK_MUTE = "#6e6e73";
 export const HAIRLINE = "rgba(0,0,0,0.10)";
 export const BRAND = "#0071e3";
+// Chat-with CTA color — a deep, elegant ink-navy (not pure black, not the loud
+// brand blue). Share cards are always light, so the pill uses this directly;
+// the live on-page buttons mirror it via the --chat-cta-* CSS tokens (which go
+// white in dark mode). Keep this hex in sync with --chat-cta-bg in app.css.
+export const CHAT_CTA = "#2b3553";
 
 // ── Book cover colors — verbatim from lib/books.ts (so the share cover matches
 //    the in-app cover for the same title). AI books use the purple gradient. ──

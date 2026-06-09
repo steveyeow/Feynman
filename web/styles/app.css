@@ -3470,7 +3470,7 @@ html.dark .canvas-secondary-btn:hover { background: rgba(255,255,255,0.06); }
    outlined secondaries. No tinted pastels, no blue. Adaptive via --btn-solid-*
    and --text/--border-strong, so no per-mode (html.dark) overrides needed. */
 .canvas-done-actions > .canvas-action-btn:nth-child(1) {
-  background: var(--btn-solid-bg); color: var(--btn-solid-color); border-color: transparent;
+  background: var(--chat-cta-bg); color: var(--chat-cta-fg); border-color: transparent;
 }
 .canvas-done-actions > .canvas-action-btn:nth-child(1):hover { opacity: 0.92; }
 .canvas-done-actions > .canvas-action-btn:nth-child(2),
