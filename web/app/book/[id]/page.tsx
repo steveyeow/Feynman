@@ -14,6 +14,7 @@ import PopularQuestions from "@/components/seo/book/PopularQuestions";
 import {
   SITE_URL,
   getBookData,
+  getBookReadMeta,
   getQuestions,
   getSamplePassages,
   getRelatedForBook,
@@ -107,13 +108,20 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages, related, overview, topics] = await Promise.all([
+  const [questions, passages, related, overview, topics, readMeta] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
     getRelatedForBook(id),
     getBookOverview(id),
     fetchTopics(),
+    getBookReadMeta(id),
   ]);
+  // Author + subtitle for AI books live in the ai_books row (the /read endpoint),
+  // NOT the agent meta_json — so they must come from readMeta to match what the
+  // reader cover shows ("{creator} · AI" + the real subtitle), falling back to
+  // the agent-derived values for catalog books.
+  const displayAuthor = readMeta.author || data.author;
+  const displaySubtitle = readMeta.subtitle || data.subtitle;
 
   // Map the book's free-form category to a canonical topic hub (or null) so the
   // "Topic" rail links to a real /topic/{slug} instead of 404'ing on ad-hoc
@@ -158,16 +166,16 @@ export default async function BookLandingPage({ params }: PageProps) {
   // preselects the book), NOT the reader — so catalog stubs with no readable
   // text still start a chat (fixes the dead-end). Read/Preview appear only when
   // the book actually has content, and go to the reader.
+  // Chat is ALWAYS the primary action and listed FIRST — chatting with the book
+  // is the core product moment; Read/Preview are secondary even when available.
   const chatHref = `/?book=${encodeURIComponent(id)}`;
-  const actions: EntityAction[] = [];
+  const actions: EntityAction[] = [
+    { label: `Chat with this book`, href: chatHref, variant: "primary" },
+  ];
   if (caps.read) {
-    actions.push({ label: `Read`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
-    actions.push({ label: `Chat with this book`, href: chatHref, variant: "secondary" });
+    actions.push({ label: `Read`, href: `/read/${encodeURIComponent(id)}`, variant: "secondary" });
   } else if (caps.preview) {
-    actions.push({ label: `Preview`, href: `/read/${encodeURIComponent(id)}`, variant: "primary" });
-    actions.push({ label: `Chat with this book`, href: chatHref, variant: "secondary" });
-  } else {
-    actions.push({ label: `Chat with this book`, href: chatHref, variant: "primary" });
+    actions.push({ label: `Preview`, href: `/read/${encodeURIComponent(id)}`, variant: "secondary" });
   }
 
   const metaBits: string[] = [];
@@ -212,7 +220,8 @@ export default async function BookLandingPage({ params }: PageProps) {
       <div className="seo-hero-body">
         <p className="seo-meta">Book{cleanCategory ? ` · ${cleanCategory}` : ""}</p>
         <h1>{data.title}</h1>
-        {data.author ? <p className="seo-author">by {data.author}</p> : null}
+        {displaySubtitle ? <p className="seo-subtitle">{displaySubtitle}</p> : null}
+        {displayAuthor ? <p className="seo-author">by {displayAuthor}</p> : null}
         {metaBits.length ? <p className="seo-meta">{metaBits.join(" · ")}</p> : null}
         <EntityActions actions={actions} shareUrl={canonical} shareTitle={data.title} />
         {chipQs.length ? (

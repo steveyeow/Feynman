@@ -240,24 +240,25 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
   );
 }
 
-export function BookCard({ title, author, description, cover, bg, minds }: { title: string; author?: string; description?: string; cover: string | null; bg: string; minds?: string[] }) {
+export function BookCard({ title, author, subtitle, description, cover, bg, minds }: { title: string; author?: string; subtitle?: string; description?: string; cover: string | null; bg: string; minds?: string[] }) {
+  const sub = subtitle || description;
   return (
     <Frame
       body={
         <div style={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
           <BookCover src={cover} title={title} author={author} bg={bg} />
           <div style={{ display: "flex", flexDirection: "column", marginLeft: 50, flexGrow: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", fontSize: 54, fontWeight: 700, color: INK, lineHeight: 1.08, maxWidth: 720 }}>
-              {clip(title, 68)}
+            <div style={{ display: "flex", fontSize: 52, fontWeight: 700, color: INK, lineHeight: 1.08, maxWidth: 720 }}>
+              {clip(title, 64)}
             </div>
-            {author ? (
-              <div style={{ display: "flex", fontSize: 27, color: INK_MUTE, marginTop: 16, fontStyle: "italic", maxWidth: 720 }}>
-                {clip(author, 48)}
+            {sub ? (
+              <div style={{ display: "flex", fontSize: 26, color: INK_SOFT, marginTop: 14, lineHeight: 1.32, maxWidth: 720 }}>
+                {clip(sub, 92)}
               </div>
             ) : null}
-            {description ? (
-              <div style={{ display: "flex", fontSize: 24, color: INK_SOFT, marginTop: 20, lineHeight: 1.45, maxWidth: 720 }}>
-                {clip(description, 104)}
+            {author ? (
+              <div style={{ display: "flex", fontSize: 23, color: INK_MUTE, marginTop: 14, fontStyle: "italic", maxWidth: 720 }}>
+                {clip(author, 48)}
               </div>
             ) : null}
             {minds && minds.length ? <MindsCue accents={minds} /> : null}
