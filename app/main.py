@@ -586,7 +586,7 @@ def _background_discover(topic: str) -> None:
 def _discover_books() -> None:
     """Scheduled discovery: pick underrepresented categories and discover new books via LLM."""
     try:
-        agents = list_agents(limit=5000)
+        agents = list_agents(limit=5000, lite=True)
         # Count books per category
         cat_counts: dict[str, int] = {}
         for a in agents:
@@ -3485,13 +3485,13 @@ def api_cron_discover(request: Request, background_tasks: BackgroundTasks) -> di
     _verify_cron(request)
     if not _DISCOVER_CRON_ENABLED:
         return {"status": "disabled"}
-    agents = list_agents(limit=5000)
+    agents = list_agents(limit=5000, lite=True)
     if not agents:
         return {"status": "skip", "reason": "no agents yet"}
     _discover_books()
     # Bounded learning for new catalog agents (cap per run → bounded CPU).
     queued = 0
-    for a in list_agents(limit=5000):
+    for a in list_agents(limit=5000, lite=True):
         if a["status"] == "catalog":
             background_tasks.add_task(_learn_agent, a["id"])
             queued += 1
