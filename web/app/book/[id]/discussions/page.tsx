@@ -21,10 +21,27 @@ export async function generateMetadata({
   const book = await getBookData(params.id);
   const canonical = abs(`/book/${params.id}/discussions`);
   const name = book?.title || "this book";
+  const desc = `Public conversations readers have shared about ${name} on Feynman.`;
+  const ogImage = abs(`/og?type=book-agg&id=${encodeURIComponent(params.id)}&kind=discussions`);
   return {
     title: `Discussions about ${name} — Feynman`,
-    description: `Public conversations readers have shared about ${name} on Feynman.`,
+    description: desc,
     alternates: { canonical },
+    openGraph: {
+      type: "website",
+      title: `Discussions about ${name}`,
+      description: desc,
+      url: canonical,
+      siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: `Discussions about ${name}` }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title: `Discussions about ${name}`,
+      description: desc,
+      images: [ogImage],
+    },
   };
 }
 

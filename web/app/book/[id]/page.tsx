@@ -77,7 +77,7 @@ export async function generateMetadata({
     stubPassages.length === 0 && data.chapters.length === 0 && stubQuestions.length === 0;
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}`;
-  const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
+  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
     title: `Read & chat with ${data.title} — Feynman`,
@@ -132,7 +132,7 @@ export default async function BookLandingPage({ params }: PageProps) {
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const desc = bookDescription(data.subtitle, data.author);
-  const ogImage = `${SITE_URL}/book/${encodeURIComponent(id)}/og.png`;
+  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(id)}`;
   const createdAt = data.agent.created_at || "";
 
   // ── JSON-LD ──────────────────────────────────────────────────────────

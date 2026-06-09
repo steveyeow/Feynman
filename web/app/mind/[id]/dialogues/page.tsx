@@ -48,14 +48,14 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
-      images: [abs(`/mind/${params.id}/og.png`)],
+      images: [abs(`/og?type=mind-agg&id=${encodeURIComponent(params.id)}&kind=dialogues`)],
     },
     twitter: {
       card: "summary_large_image",
       site: "@steve_yeow",
       title,
       description: desc,
-      images: [abs(`/mind/${params.id}/og.png`)],
+      images: [abs(`/og?type=mind-agg&id=${encodeURIComponent(params.id)}&kind=dialogues`)],
     },
   };
 }

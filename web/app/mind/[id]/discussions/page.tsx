@@ -25,10 +25,27 @@ export async function generateMetadata({
   const mind = await fetchMind(params.id);
   const canonical = abs(`/mind/${params.id}/discussions`);
   const name = mind?.name || "this mind";
+  const desc = `Public conversations readers have shared with ${name} on Feynman.`;
+  const ogImage = abs(`/og?type=mind-agg&id=${encodeURIComponent(params.id)}&kind=discussions`);
   return {
     title: `Discussions with ${name} — Feynman`,
-    description: `Public conversations readers have shared with ${name} on Feynman.`,
+    description: desc,
     alternates: { canonical },
+    openGraph: {
+      type: "website",
+      title: `Discussions with ${name}`,
+      description: desc,
+      url: canonical,
+      siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: `Discussions with ${name}` }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title: `Discussions with ${name}`,
+      description: desc,
+      images: [ogImage],
+    },
   };
 }
 

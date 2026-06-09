@@ -67,14 +67,14 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
-      images: [abs(`/mind/${params.id}/og.png`)],
+      images: [abs(`/og?type=essay&id=${encodeURIComponent(params.id)}&slug=${encodeURIComponent(params.slug)}`)],
     },
     twitter: {
       card: "summary_large_image",
       site: "@steve_yeow",
       title,
       description: desc,
-      images: [abs(`/mind/${params.id}/og.png`)],
+      images: [abs(`/og?type=essay&id=${encodeURIComponent(params.id)}&slug=${encodeURIComponent(params.slug)}`)],
     },
   };
 }
@@ -117,7 +117,7 @@ export default async function MindOnTopicPage({
     description: metaDescription(desc),
     url: canonical,
     mindUrl,
-    image: abs(`/mind/${params.id}/og.png`),
+    image: abs(`/og?type=essay&id=${encodeURIComponent(params.id)}&slug=${encodeURIComponent(params.slug)}`),
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],

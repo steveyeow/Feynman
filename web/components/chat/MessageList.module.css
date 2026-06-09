@@ -58,7 +58,10 @@
   display: flex;
   gap: 6px;
   margin-top: 8px;
-  opacity: 0;
+  /* Always discoverable. Hover-only hid the share entry entirely on touch and
+     was easy to miss on desktop — the top reason a shareable mind/book reply
+     never gets shared. Quiet by default, full-strength on hover/focus. */
+  opacity: 0.7;
   transition: opacity 0.12s ease;
 }
 :global(.chat-message):hover .msgActions,

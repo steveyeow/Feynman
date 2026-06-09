@@ -62,7 +62,7 @@ export async function generateMetadata({
     return { title: "Mind not found — Feynman" };
   }
   const canonical = abs(`/mind/${params.id}`);
-  const ogImage = abs(`/mind/${params.id}/og.png`);
+  const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
   return {
     title: `Chat with ${mind.name} — Feynman`,
@@ -116,7 +116,7 @@ export default async function MindPage({
   const libraryExtra = library.filter((b) => !workTitles.has((b.name || "").toLowerCase().trim()));
 
   const canonical = abs(`/mind/${params.id}`);
-  const ogImage = abs(`/mind/${params.id}/og.png`);
+  const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   // Chat with a single mind → the DEDICATED 1:1 chat page (not the multi-mind
   // home composer, which would treat the mind as an invited participant). The
   // Chat action lives at the TOP.

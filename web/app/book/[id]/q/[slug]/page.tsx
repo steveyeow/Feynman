@@ -67,7 +67,7 @@ export async function generateMetadata({
   const hasGrounded = Boolean(answer || qa?.passages?.length);
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}/q/${params.slug}`;
-  const ogImage = `${SITE_URL}/book/${encodeURIComponent(params.id)}/og.png`;
+  const ogImage = `${SITE_URL}/og?type=qa&id=${encodeURIComponent(params.id)}&slug=${encodeURIComponent(params.slug)}`;
   let pageTitle = `${resolved.question} — ${data.title}`;
   if (pageTitle.length > 120) {
     pageTitle = pageTitle.slice(0, 117).replace(/\s+\S*$/, "") + "...";
