@@ -101,6 +101,9 @@ export default function HomeComposer() {
   const [booksOpen, setBooksOpen] = useState(false);
   const [mindsOpen, setMindsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "Write a book" (pencil) creates a session before navigating — its own busy
+  // flag drives the spinner so the click isn't a dead multi-second wait.
+  const [writingBook, setWritingBook] = useState(false);
   // Time-based greeting (legacy app.js 665-667: "Good morning/afternoon/evening
   // [, FirstName]"). Computed client-side after mount to avoid SSR/hydration
   // drift (the hour + the localStorage userName are client-only).
@@ -450,9 +453,17 @@ export default function HomeComposer() {
             className="composer-icon-btn"
             title="Write the book you need, on-demand"
             aria-label="Write the book you need"
-            onClick={() => startWriteBook(router, { authEnabled, user, requirePro })}
+            disabled={writingBook}
+            onClick={async () => {
+              if (writingBook) return;
+              setWritingBook(true);
+              // Navigates on success (and anon → /login); only reset when we
+              // stayed (non-pro overlay / failure) so the icon re-enables.
+              const id = await startWriteBook(router, { authEnabled, user, requirePro });
+              if (!id) setWritingBook(false);
+            }}
           >
-            <WriteBookIcon />
+            {writingBook ? <span className="inline-spinner" aria-hidden="true" /> : <WriteBookIcon />}
           </button>
         </div>
         <button

@@ -70,13 +70,14 @@ export async function startWriteBook(
       meta: { write_book: true },
     });
 
-    // Belt-and-suspenders PATCH (mirrors production, which PATCHes after
-    // createSession). Harmless if the create already persisted the meta.
-    try {
-      await updateSession(session.id, { meta: { write_book: true } });
-    } catch (e) {
-      console.warn("Failed to set write_book meta:", e);
-    }
+    // Belt-and-suspenders meta PATCH — createSession already persisted the same
+    // meta in its POST body (see lib/chat.ts createSession), so this is pure
+    // insurance. Fire-and-forget so it stays OFF the click→navigate critical
+    // path: on a cold origin three sequential awaits (create + this PATCH + the
+    // greeting) were the 7-8s "Write the Book You Need" stall.
+    updateSession(session.id, { meta: { write_book: true } }).catch((e) =>
+      console.warn("Failed to set write_book meta:", e),
+    );
 
     // Seed the greeting assistant message, persisted so it survives a reload /
     // reopen (port of app.js `_queueSessionMessage(sessionId,'assistant',greeting)`).
