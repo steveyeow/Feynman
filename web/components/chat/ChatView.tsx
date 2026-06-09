@@ -236,6 +236,7 @@ export default function ChatView({
   // either the whole-session discussion (Phase 1) or one shared answer (Phase 2).
   const [toast, setToast] = useState<{
     url: string;
+    text?: string;
     withdraw: () => Promise<void>;
   } | null>(null);
   // Transient inline hint beside the share icon (e.g. the <3-message gate). It
@@ -279,7 +280,7 @@ export default function ChatView({
       if (rec.public_handle !== undefined) setPublicHandle(rec.public_handle ?? null);
       const url = rec.public_url || `/discussions/${sessionId}`;
       setPublicUrl(url);
-      setToast({ url, withdraw: withdrawSession });
+      setToast({ url, text: sessionRef.current?.title || "", withdraw: withdrawSession });
       bumpSessions(); // show the public ● dot in the sidebar
     } catch (e) {
       flashShareHint(
@@ -304,6 +305,7 @@ export default function ChatView({
         const answerId = rec.id || "";
         setToast({
           url: rec.public_url || (answerId ? `/a/${answerId}` : ""),
+          text: sessionRef.current?.title || "",
           withdraw: async () => {
             if (answerId) {
               try {
@@ -1128,7 +1130,7 @@ export default function ChatView({
               title={isPublic ? "Shared publicly" : "Share publicly"}
               onClick={() =>
                 isPublic && publicUrl
-                  ? setToast({ url: publicUrl, withdraw: withdrawSession })
+                  ? setToast({ url: publicUrl, text: sessionRef.current?.title || "", withdraw: withdrawSession })
                   : doShare()
               }
               disabled={sharing}
@@ -1230,6 +1232,7 @@ export default function ChatView({
       {toast && (
         <PublishToast
           url={toast.url}
+          shareText={toast.text}
           onClose={() => setToast(null)}
           onWithdraw={toast.withdraw}
         />
