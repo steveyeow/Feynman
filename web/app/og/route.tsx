@@ -61,7 +61,7 @@ export const runtime = "nodejs";
 
 const CACHE = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
 
-function isbnOf(meta: { isbn?: unknown }): string {
+function isbnOf(meta: Record<string, unknown>): string {
   return typeof meta.isbn === "string" ? meta.isbn : "";
 }
 
