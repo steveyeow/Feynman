@@ -52,6 +52,7 @@ import {
 } from "@/lib/seo-mind";
 import {
   getBookData,
+  getBookReadMeta,
   getQuestions,
   findQuestionBySlug,
   getBookQa,
@@ -107,15 +108,16 @@ async function build(type: string, id: string, slug: string, kind: string) {
       const data = await getBookData(id);
       if (!data) return <HomeCard />;
       const isAi = (data.agent.type || "").toLowerCase() === "ai_book";
-      const [cover, related] = await Promise.all([
+      const [cover, related, readMeta] = await Promise.all([
         isAi ? Promise.resolve(null) : bookCoverDataUri(isbnOf(data.meta)),
         getRelatedForBook(id),
+        getBookReadMeta(id),
       ]);
       return (
         <BookCard
           title={data.title}
-          author={data.author}
-          description={data.description || data.subtitle}
+          author={readMeta.author || data.author}
+          subtitle={readMeta.subtitle || data.subtitle}
           cover={cover}
           bg={bookAccent(data.title, isAi)}
           minds={[

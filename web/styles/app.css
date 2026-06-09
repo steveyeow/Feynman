@@ -3463,30 +3463,22 @@ html.dark .canvas-secondary-btn:hover { background: rgba(255,255,255,0.06); }
   white-space: nowrap;
   text-decoration: none;
 }
-.canvas-action-btn:hover { transform: translateY(-1px); filter: brightness(0.95); }
-html.dark .canvas-action-btn:hover { filter: brightness(1.15); }
+.canvas-action-btn:hover { transform: translateY(-1px); }
 
-/* Chat — warm amber */
+/* Unified, minimal action set (matches the share-card "Chat with" pill + the
+   SEO entity actions): Chat = solid ink primary; Read + Share = restrained
+   outlined secondaries. No tinted pastels, no blue. Adaptive via --btn-solid-*
+   and --text/--border-strong, so no per-mode (html.dark) overrides needed. */
 .canvas-done-actions > .canvas-action-btn:nth-child(1) {
-  background: #faf3e8; color: #8a6b35; border-color: #ecdcbe;
+  background: var(--btn-solid-bg); color: var(--btn-solid-color); border-color: transparent;
 }
-html.dark .canvas-done-actions > .canvas-action-btn:nth-child(1) {
-  background: rgba(200,160,100,0.13); color: #d4ad60; border-color: rgba(200,160,100,0.25);
-}
-/* Read — cool slate */
-.canvas-done-actions > .canvas-action-btn:nth-child(2) {
-  background: #eef3fa; color: #4a6a8f; border-color: #d0dced;
-}
-html.dark .canvas-done-actions > .canvas-action-btn:nth-child(2) {
-  background: rgba(120,160,220,0.12); color: #8ab4dc; border-color: rgba(120,160,220,0.22);
-}
-/* Share — soft sage */
+.canvas-done-actions > .canvas-action-btn:nth-child(1):hover { opacity: 0.92; }
+.canvas-done-actions > .canvas-action-btn:nth-child(2),
 .canvas-share-wrap .canvas-action-btn {
-  background: #eef6f1; color: #437a56; border-color: #c8e0d0;
+  background: transparent; color: var(--text); border-color: var(--border-strong);
 }
-html.dark .canvas-share-wrap .canvas-action-btn {
-  background: rgba(100,200,140,0.11); color: #6cc490; border-color: rgba(100,200,140,0.22);
-}
+.canvas-done-actions > .canvas-action-btn:nth-child(2):hover,
+.canvas-share-wrap .canvas-action-btn:hover { background: rgba(128,128,128,0.07); border-color: var(--text-muted); }
 
 /* Share popup wrapper */
 .canvas-share-wrap {

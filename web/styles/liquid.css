@@ -284,6 +284,8 @@ body { background-color: var(--bg-home); }
   margin: 0 0 0.25em; color: var(--text);
 }
 .seo-hero .seo-author { color: var(--text-secondary); font-size: 16px; margin: 0 0 2px; }
+/* Book subtitle — sits between the title and the author (book convention). */
+.seo-hero .seo-subtitle { color: var(--text); font-size: 19px; line-height: 1.4; font-weight: 400; margin: 4px 0 8px; max-width: 42rem; }
 .seo-hero .seo-meta { color: var(--text-muted); font-size: 14px; margin: 0; }
 .seo-hero .seo-backlink { display: inline-block; color: var(--text-muted); font-size: 14px; margin-bottom: 12px; }
 
@@ -399,7 +401,7 @@ body { background-color: var(--bg-home); }
 }
 .fy-share-cancel:hover { background: rgba(128,128,128,0.08); }
 .fy-share-go {
-  border: none; background: var(--accent); color: #fff;
+  border: none; background: var(--btn-solid-bg); color: var(--btn-solid-color);
   font-family: inherit; font-size: 13.5px; font-weight: 600;
   padding: 9px 18px; border-radius: var(--r-control, 10px); cursor: pointer;
 }

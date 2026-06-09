@@ -473,8 +473,42 @@ interface ReadResponse {
   chunks?: { index?: number; text?: string }[];
   paragraphs?: string[];
   chapters?: { number?: number; title?: string; content?: string }[];
+  title?: string;
   subtitle?: string;
+  author?: string;
   total_words?: number;
+}
+
+export interface BookReadMeta {
+  title?: string;
+  subtitle?: string;
+  author?: string;
+}
+
+/**
+ * Author + subtitle from the public /read endpoint.
+ *
+ * For AI-written books these live in the ai_books row, NOT the agent's
+ * meta_json — so /api/agents (getBookData) returns source="ai_writer" with NO
+ * subtitle, while /read returns the real "{creator} · AI" author + the book's
+ * subtitle (exactly what the reader cover shows). The detail page already
+ * fetches /read (getSamplePassages), so Next dedupes this within the request.
+ * Empty object on failure → callers fall back to getBookData. Public,
+ * edge-cached, no auth — crawler-safe (used by the OG route too).
+ */
+export async function getBookReadMeta(id: string): Promise<BookReadMeta> {
+  try {
+    const res = await get<ReadResponse>(
+      `/api/public/book/${encodeURIComponent(id)}/read`,
+    );
+    return {
+      title: (res?.title || "").trim() || undefined,
+      subtitle: (res?.subtitle || "").trim() || undefined,
+      author: (res?.author || "").trim() || undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 /**
