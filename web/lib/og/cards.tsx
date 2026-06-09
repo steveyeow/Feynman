@@ -160,12 +160,12 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
         <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
           <div style={{ display: "flex", alignItems: "center", marginBottom: voice ? 42 : 0 }}>
             <Avatar src={portrait} initials={initials} accent={accent} size={150} />
-            <div style={{ display: "flex", flexDirection: "column", marginLeft: 36, flexGrow: 1 }}>
-              <div style={{ display: "flex", fontSize: 60, fontWeight: 700, color: INK, lineHeight: 1.04 }}>
+            <div style={{ display: "flex", flexDirection: "column", marginLeft: 36, flexGrow: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", fontSize: 60, fontWeight: 700, color: INK, lineHeight: 1.04, maxWidth: 760 }}>
                 {clip(data.name, 36)}
               </div>
               {meta ? (
-                <div style={{ display: "flex", fontSize: 25, color: INK_MUTE, marginTop: 14 }}>
+                <div style={{ display: "flex", fontSize: 25, color: INK_MUTE, marginTop: 14, maxWidth: 760 }}>
                   {clip(meta, 58)}
                 </div>
               ) : null}
@@ -189,17 +189,17 @@ export function BookCard({ title, author, description, cover, bg }: { title: str
       body={
         <div style={{ display: "flex", alignItems: "center", flexGrow: 1 }}>
           <BookCover src={cover} title={title} author={author} bg={bg} />
-          <div style={{ display: "flex", flexDirection: "column", marginLeft: 50, flexGrow: 1 }}>
-            <div style={{ display: "flex", fontSize: 54, fontWeight: 700, color: INK, lineHeight: 1.08 }}>
+          <div style={{ display: "flex", flexDirection: "column", marginLeft: 50, flexGrow: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", fontSize: 54, fontWeight: 700, color: INK, lineHeight: 1.08, maxWidth: 720 }}>
               {clip(title, 68)}
             </div>
             {author ? (
-              <div style={{ display: "flex", fontSize: 27, color: INK_MUTE, marginTop: 16, fontStyle: "italic" }}>
+              <div style={{ display: "flex", fontSize: 27, color: INK_MUTE, marginTop: 16, fontStyle: "italic", maxWidth: 720 }}>
                 {clip(author, 48)}
               </div>
             ) : null}
             {description ? (
-              <div style={{ display: "flex", fontSize: 25, color: INK_SOFT, marginTop: 26, lineHeight: 1.46 }}>
+              <div style={{ display: "flex", fontSize: 25, color: INK_SOFT, marginTop: 26, lineHeight: 1.46, maxWidth: 720 }}>
                 {clip(description, 156)}
               </div>
             ) : null}
