@@ -142,6 +142,47 @@ function Frame({ body, footer }: { body: ReactNode; footer: ReactNode }) {
   );
 }
 
+// A chat bubble — the core "this is a conversation, not an article" device.
+// White fill on the warm paper, accent left-edge ties it to the speaker.
+function Bubble({ text, accent, fontSize = 31 }: { text: string; accent: string; fontSize?: number }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", background: "#ffffff", border: `1px solid ${HAIRLINE}`, borderLeft: `5px solid ${accent}`, borderRadius: 20, padding: "24px 30px", boxShadow: "0 8px 26px rgba(0,0,0,0.07)", maxWidth: 900 }}>
+      <div style={{ display: "flex", fontSize, color: INK, lineHeight: 1.42, fontFamily: FONT }}>{text}</div>
+    </div>
+  );
+}
+
+// "IN A CHAT ABOUT {book}" context strip — establishes the conversation is
+// grounded in a specific book (the cross of book × mind is the unique thing).
+function BookContext({ title, bg, initials, cover }: { title: string; bg: string; initials: string; cover?: string | null }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 28 }}>
+      <MiniCover src={cover} bg={bg} initials={initials} w={42} h={58} />
+      <div style={{ display: "flex", flexDirection: "column", marginLeft: 16 }}>
+        <div style={{ display: "flex", fontSize: 16, letterSpacing: 2, color: INK_MUTE, fontFamily: FONT }}>IN A CHAT ABOUT</div>
+        <div style={{ display: "flex", fontSize: 24, fontWeight: 700, color: INK, fontFamily: FONT, maxWidth: 820 }}>{clip(title, 44)}</div>
+      </div>
+    </div>
+  );
+}
+
+// A small "minds join in" motif — overlapping colored discs implying great
+// minds, no false attribution (decorative, not named).
+function MindsCue({ accents }: { accents: string[] }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", marginTop: 28 }}>
+      <div style={{ display: "flex" }}>
+        {accents.map((a, i) => (
+          <div key={i} style={{ display: "flex", width: 34, height: 34, borderRadius: 34, background: a, border: "2px solid #faf8f4", marginLeft: i === 0 ? 0 : -10 }} />
+        ))}
+      </div>
+      <div style={{ display: "flex", fontSize: 20, color: INK_MUTE, marginLeft: 16, fontFamily: FONT, fontStyle: "italic" }}>
+        …and great minds join the conversation
+      </div>
+    </div>
+  );
+}
+
 // ── Cards ───────────────────────────────────────────────────────────────────
 
 export interface MindCardData {
@@ -171,19 +212,15 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
               ) : null}
             </div>
           </div>
-          {voice ? (
-            <div style={{ display: "flex", fontSize: 34, color: INK_SOFT, lineHeight: 1.42 }}>
-              {`“${voice}”`}
-            </div>
-          ) : null}
+          {voice ? <Bubble text={`“${voice}”`} accent={accent} fontSize={32} /> : null}
         </div>
       }
-      footer={<FooterSimple left="Great Minds — chat with them in their own voice" />}
+      footer={<FooterSimple left="Great Minds on Feynman — start a conversation, hear it in their voice" />}
     />
   );
 }
 
-export function BookCard({ title, author, description, cover, bg }: { title: string; author?: string; description?: string; cover: string | null; bg: string }) {
+export function BookCard({ title, author, description, cover, bg, minds }: { title: string; author?: string; description?: string; cover: string | null; bg: string; minds?: string[] }) {
   return (
     <Frame
       body={
@@ -199,40 +236,54 @@ export function BookCard({ title, author, description, cover, bg }: { title: str
               </div>
             ) : null}
             {description ? (
-              <div style={{ display: "flex", fontSize: 25, color: INK_SOFT, marginTop: 26, lineHeight: 1.46, maxWidth: 720 }}>
-                {clip(description, 156)}
+              <div style={{ display: "flex", fontSize: 25, color: INK_SOFT, marginTop: 24, lineHeight: 1.46, maxWidth: 720 }}>
+                {clip(description, 138)}
               </div>
             ) : null}
+            {minds && minds.length ? <MindsCue accents={minds} /> : null}
           </div>
         </div>
       }
-      footer={<FooterSimple left="Chat with this book — grounded in its actual text" />}
+      footer={<FooterSimple left="Chat with this book on Feynman — ask it anything, in its own words" />}
     />
   );
 }
 
-export function AnswerCard({ question, answer, who, attrSrc, attrInitials, attrAccent, attrLabel }: { question?: string; answer: string; who: string; attrSrc: string | null; attrInitials: string; attrAccent: string; attrLabel: string }) {
-  const q = clip(question || "", 118);
-  const a = clip(answer || "", q ? 232 : 300);
+// The flagship: a great mind's reply inside a book chat — the product's most
+// shareable moment ("Zhuangzi joined a chat about The Art of War and said…").
+// Reads unmistakably as a CONVERSATION: book context strip + speaker face +
+// "joined the chat" + the reply as a chat bubble. book × mind × reply.
+export interface ChatReplyData {
+  reply: string;
+  speakerName: string;
+  speakerPortrait: string | null;
+  speakerAccent: string;
+  speakerInitials: string;
+  speakerKind: "mind" | "feynman";
+  book?: { title: string; bg: string; initials: string; cover?: string | null } | null;
+}
+export function AnswerCard({ reply, speakerName, speakerPortrait, speakerAccent, speakerInitials, speakerKind, book }: ChatReplyData) {
+  const verb = speakerKind === "mind" ? "joined the chat" : "answered";
   return (
     <Frame
       body={
         <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
-          {q ? (
-            <div style={{ display: "flex", fontSize: 41, fontWeight: 700, color: INK, lineHeight: 1.2, marginBottom: 28 }}>
-              {q}
+          {book ? <BookContext title={book.title} bg={book.bg} initials={book.initials} cover={book.cover} /> : null}
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            <Avatar src={speakerPortrait} initials={speakerInitials} accent={speakerAccent} size={94} />
+            <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, flexGrow: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", marginBottom: 14 }}>
+                <div style={{ display: "flex", fontSize: 29, fontWeight: 700, color: INK, fontFamily: FONT }}>{clip(speakerName, 26)}</div>
+                <div style={{ display: "flex", fontSize: 20, color: INK_MUTE, marginLeft: 14, fontFamily: FONT, fontStyle: "italic" }}>{verb}</div>
+              </div>
+              <Bubble text={`“${clip(reply, 268)}”`} accent={speakerAccent} />
             </div>
-          ) : null}
-          <div style={{ display: "flex", fontSize: q ? 29 : 37, color: INK_SOFT, lineHeight: 1.5, borderLeft: `3px solid ${attrAccent}`, paddingLeft: 28 }}>
-            {`“${a}”`}
           </div>
         </div>
       }
       footer={
-        <FooterIdentity
-          glyph={<Avatar src={attrSrc} initials={attrInitials} accent={attrAccent} size={58} />}
-          name={who}
-          label={attrLabel}
+        <FooterSimple
+          left={book ? "Chat with this book on Feynman — great minds join in" : `Chat with ${clip(speakerName, 22)} on Feynman`}
         />
       }
     />
@@ -340,30 +391,26 @@ export function DiscussionCard({ withWho, userMsg, answerMsg, turns, accent, ini
       body={
         <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
           {userMsg ? (
-            <div style={{ display: "flex", flexDirection: "column", marginBottom: 30 }}>
-              <div style={{ display: "flex", fontSize: 16, letterSpacing: 2, color: INK_MUTE }}>YOU ASKED</div>
-              <div style={{ display: "flex", fontSize: 33, fontWeight: 700, color: INK, lineHeight: 1.22, marginTop: 8 }}>
-                {clip(userMsg, 96)}
+            <div style={{ display: "flex", flexDirection: "column", marginBottom: 26 }}>
+              <div style={{ display: "flex", fontSize: 16, letterSpacing: 2, color: INK_MUTE, fontFamily: FONT }}>YOU ASKED</div>
+              <div style={{ display: "flex", fontSize: 32, fontWeight: 700, color: INK, lineHeight: 1.22, marginTop: 8, maxWidth: 980 }}>
+                {clip(userMsg, 92)}
               </div>
             </div>
           ) : null}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", fontSize: 16, letterSpacing: 2, color: INK_MUTE }}>
-              {clip(withWho.toUpperCase(), 40)}
-            </div>
-            <div style={{ display: "flex", fontSize: 28, color: INK_SOFT, lineHeight: 1.46, marginTop: 8, borderLeft: `3px solid ${accent}`, paddingLeft: 24 }}>
-              {`“${clip(answerMsg, 168)}”`}
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            <Avatar src={portrait} initials={initials} accent={accent} size={76} />
+            <div style={{ display: "flex", flexDirection: "column", marginLeft: 22, flexGrow: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", marginBottom: 12 }}>
+                <div style={{ display: "flex", fontSize: 24, fontWeight: 700, color: INK, fontFamily: FONT }}>{clip(withWho, 26)}</div>
+                <div style={{ display: "flex", fontSize: 18, color: INK_MUTE, marginLeft: 12, fontFamily: FONT, fontStyle: "italic" }}>replied</div>
+              </div>
+              <Bubble text={`“${clip(answerMsg, 188)}”`} accent={accent} fontSize={27} />
             </div>
           </div>
         </div>
       }
-      footer={
-        <FooterIdentity
-          glyph={<Avatar src={portrait} initials={initials} accent={accent} size={56} />}
-          name={`A conversation with ${withWho}`}
-          label={turns ? `${turns} turns · read the thread` : "Read the thread"}
-        />
-      }
+      footer={<FooterSimple left={turns ? `${turns} turns · read the full conversation on Feynman` : "Read the full conversation on Feynman"} />}
     />
   );
 }

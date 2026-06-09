@@ -55,6 +55,7 @@ import {
   getQuestions,
   findQuestionBySlug,
   getBookQa,
+  getRelatedForBook,
 } from "@/lib/seo-book";
 
 export const runtime = "nodejs";
@@ -106,7 +107,10 @@ async function build(type: string, id: string, slug: string, kind: string) {
       const data = await getBookData(id);
       if (!data) return <HomeCard />;
       const isAi = (data.agent.type || "").toLowerCase() === "ai_book";
-      const cover = isAi ? null : await bookCoverDataUri(isbnOf(data.meta));
+      const [cover, related] = await Promise.all([
+        isAi ? Promise.resolve(null) : bookCoverDataUri(isbnOf(data.meta)),
+        getRelatedForBook(id),
+      ]);
       return (
         <BookCard
           title={data.title}
@@ -114,6 +118,7 @@ async function build(type: string, id: string, slug: string, kind: string) {
           description={data.description || data.subtitle}
           cover={cover}
           bg={bookAccent(data.title, isAi)}
+          minds={related.minds.slice(0, 3).map((m) => mindAccent(m.name))}
         />
       );
     }
@@ -122,34 +127,54 @@ async function build(type: string, id: string, slug: string, kind: string) {
       const ans = await fetchPublicAnswer(id);
       if (!ans) return <HomeCard />;
       const isMind = ans.answer_role === "mind" && !!ans.mind;
+      let portrait: string | null = null;
+      let accent = BRAND;
+      let initials = "F";
+      let name = "Feynman";
+      let kind: "mind" | "feynman" = "feynman";
       if (isMind && ans.mind) {
         const full = ans.mind.id ? await fetchMind(ans.mind.id) : null;
-        const portrait = await mindPortraitDataUri({
-          name: ans.mind.name,
-          wikidata_url: full?.wikidata_url,
-        });
-        return (
-          <AnswerCard
-            question={ans.question}
-            answer={ans.answer}
-            who={ans.mind.name}
-            attrSrc={portrait}
-            attrInitials={mindInitials(ans.mind.name)}
-            attrAccent={mindAccent(ans.mind.name)}
-            attrLabel="answered in their own voice"
-          />
-        );
+        portrait = await mindPortraitDataUri({ name: ans.mind.name, wikidata_url: full?.wikidata_url });
+        accent = mindAccent(ans.mind.name);
+        initials = mindInitials(ans.mind.name);
+        name = ans.mind.name;
+        kind = "mind";
       }
-      const book = ans.book;
+      const book = ans.book
+        ? { title: ans.book.name, bg: bookAccent(ans.book.name), initials: bookInitials(ans.book.name) }
+        : null;
       return (
         <AnswerCard
-          question={ans.question}
-          answer={ans.answer}
-          who={book?.name || "Feynman"}
-          attrSrc={null}
-          attrInitials={book ? bookInitials(book.name) : "F"}
-          attrAccent={book ? bookAccent(book.name) : BRAND}
-          attrLabel={book ? "grounded in this book" : "answered on Feynman"}
+          reply={ans.answer}
+          speakerName={name}
+          speakerPortrait={portrait}
+          speakerAccent={accent}
+          speakerInitials={initials}
+          speakerKind={kind}
+          book={book}
+        />
+      );
+    }
+
+    case "demo": {
+      // Design-preview only — the flagship "a great mind joined a book chat"
+      // card with live mind data (portrait + name), so the design is reviewable
+      // before any real shared answer exists. Not referenced by page metadata.
+      const m =
+        (await fetchMind("zhuangzi")) ||
+        (await fetchMind("laozi")) ||
+        (await fetchMind("confucius"));
+      const name = m?.name || "Zhuangzi";
+      const portrait = m ? await mindPortraitDataUri({ name: m.name, wikidata_url: m.wikidata_url }) : null;
+      return (
+        <AnswerCard
+          reply="Sun Tzu teaches you to win the battle — but the truly skilled never step onto the field of contention at all. Water defeats the hardest stone not by force but by yielding; master the war you never have to fight."
+          speakerName={name}
+          speakerPortrait={portrait}
+          speakerAccent={mindAccent(name)}
+          speakerInitials={mindInitials(name)}
+          speakerKind="mind"
+          book={{ title: "The Art of War", bg: bookAccent("The Art of War"), initials: bookInitials("The Art of War") }}
         />
       );
     }
