@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SeoColumn from "@/components/seo/SeoColumn";
 import JsonLd from "@/components/seo/JsonLd";
+import ShareButton from "@/components/share/ShareButton";
 import {
   SITE_URL,
   abs,
@@ -70,6 +71,7 @@ export async function generateMetadata({
   const title = ans.question ? truncate(ans.question, 70) : `An answer from ${who}`;
   const desc = metaDescription(ans.answer || `A shared answer from ${who} on Feynman.`);
   const indexable = (ans.answer || "").trim().length >= MIN_INDEXABLE_ANSWER;
+  const ogImage = abs(`/og?type=answer&id=${encodeURIComponent(params.id)}`);
   return {
     title: `${title} — Feynman`,
     description: desc,
@@ -81,12 +83,14 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       site: "@steve_yeow",
       title,
       description: desc,
+      images: [ogImage],
     },
   };
 }
@@ -251,6 +255,14 @@ export default async function SharedAnswerPage({
           </Link>
         )}
       </p>
+      <div className="seo-actions" style={{ marginTop: 18 }}>
+        <ShareButton
+          url={canonical}
+          subject={isMind ? `Answer from ${who}` : "Shared answer"}
+          title={headline}
+          variant="secondary"
+        />
+      </div>
     </SeoColumn>
   );
 }

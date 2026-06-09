@@ -49,6 +49,7 @@ export async function generateMetadata({
   const topic = await resolveTopicSlug(params.slug);
   if (!topic) return { title: "Topic not found — Feynman" };
   const canonical = abs(`/topic/${params.slug}`);
+  const ogImage = abs(`/og?type=topic&slug=${encodeURIComponent(params.slug)}`);
   const title = `${topic} on Feynman`;
   const desc = metaDescription(
     `Chat with the best ${topic} books and great minds on Feynman. Read the canon and discuss ideas with the thinkers who shaped the field.`,
@@ -63,8 +64,15 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
-    twitter: { card: "summary", site: "@steve_yeow", title, description: desc },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title,
+      description: desc,
+      images: [ogImage],
+    },
   };
 }
 

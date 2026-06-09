@@ -11,6 +11,7 @@ import {
 } from "@/lib/seo-mind";
 import MessageList from "@/components/chat/MessageList";
 import ContinueComposer from "@/components/chat/ContinueComposer";
+import ShareButton from "@/components/share/ShareButton";
 import type { Message } from "@/lib/chat";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
@@ -47,6 +48,7 @@ export async function generateMetadata({
   // crawled (protects the GSC index from thin pages).
   const totalChars = disc.messages.reduce((n, m) => n + (m.content || "").length, 0);
   const thin = totalChars < 400;
+  const ogImage = abs(`/og?type=discussion&id=${encodeURIComponent(params.id)}`);
   return {
     title: `${title} — Feynman`,
     description: desc,
@@ -58,8 +60,15 @@ export async function generateMetadata({
       description: desc,
       url: canonical,
       siteName: "Feynman",
+      images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
     },
-    twitter: { card: "summary", site: "@steve_yeow", title, description: desc },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title,
+      description: desc,
+      images: [ogImage],
+    },
   };
 }
 
@@ -156,6 +165,7 @@ export default async function PublicDiscussionPage({
       <div className="shared-banner">
         <span className="shared-banner-label">Shared conversation on Feynman</span>
         <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
+        <ShareButton url={canonical} subject="Shared conversation" title={title} variant="ghost" />
       </div>
 
       <div className="shared-transcript">
