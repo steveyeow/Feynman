@@ -53,12 +53,11 @@ function Wordmark() {
   );
 }
 
-function FooterSimple({ left }: { left: string }) {
+// Footer is brand-only now — the small slogan was unreadable and the chat
+// value prop lives in a prominent ChatPill in the body instead.
+function FooterSimple() {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${HAIRLINE}`, paddingTop: 24, marginTop: 28 }}>
-      <div style={{ display: "flex", fontSize: 20, color: INK_MUTE, fontFamily: FONT, fontStyle: "italic" }}>
-        {clip(left, 64)}
-      </div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", borderTop: `1px solid ${HAIRLINE}`, paddingTop: 24, marginTop: 26 }}>
       <Wordmark />
     </div>
   );
@@ -183,6 +182,26 @@ function MindsCue({ accents }: { accents: string[] }) {
   );
 }
 
+function ChatIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  );
+}
+
+// The chat value prop, made prominent in the MAIN visual (not a tiny footer
+// line): a dark, button-like CTA pill that signals the card is interactive —
+// the whole point of the product, and the click-through driver.
+function ChatPill({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", background: INK, color: "#ffffff", borderRadius: 999, padding: "15px 30px", marginTop: 30, boxShadow: "0 8px 22px rgba(0,0,0,0.14)" }}>
+      <ChatIcon />
+      <div style={{ display: "flex", marginLeft: 13, fontSize: 26, fontWeight: 700, fontFamily: FONT }}>{clip(label, 30)}</div>
+    </div>
+  );
+}
+
 // ── Cards ───────────────────────────────────────────────────────────────────
 
 export interface MindCardData {
@@ -213,9 +232,10 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
             </div>
           </div>
           {voice ? <Bubble text={`“${voice}”`} accent={accent} fontSize={32} /> : null}
+          <ChatPill label={`Chat with ${data.name}`} />
         </div>
       }
-      footer={<FooterSimple left="Great Minds — chat in their own voice on Feynman" />}
+      footer={<FooterSimple />}
     />
   );
 }
@@ -236,15 +256,16 @@ export function BookCard({ title, author, description, cover, bg, minds }: { tit
               </div>
             ) : null}
             {description ? (
-              <div style={{ display: "flex", fontSize: 25, color: INK_SOFT, marginTop: 24, lineHeight: 1.46, maxWidth: 720 }}>
-                {clip(description, 138)}
+              <div style={{ display: "flex", fontSize: 24, color: INK_SOFT, marginTop: 20, lineHeight: 1.45, maxWidth: 720 }}>
+                {clip(description, 104)}
               </div>
             ) : null}
             {minds && minds.length ? <MindsCue accents={minds} /> : null}
+            <ChatPill label="Chat with this book" />
           </div>
         </div>
       }
-      footer={<FooterSimple left="Chat with this book — ask it anything, in its words" />}
+      footer={<FooterSimple />}
     />
   );
 }
@@ -276,16 +297,13 @@ export function AnswerCard({ reply, speakerName, speakerPortrait, speakerAccent,
                 <div style={{ display: "flex", fontSize: 29, fontWeight: 700, color: INK, fontFamily: FONT }}>{clip(speakerName, 26)}</div>
                 <div style={{ display: "flex", fontSize: 20, color: INK_MUTE, marginLeft: 14, fontFamily: FONT, fontStyle: "italic" }}>{verb}</div>
               </div>
-              <Bubble text={`“${clip(reply, 268)}”`} accent={speakerAccent} />
+              <Bubble text={`“${clip(reply, 220)}”`} accent={speakerAccent} />
             </div>
           </div>
+          <ChatPill label={book ? "Chat with this book" : `Chat with ${speakerName}`} />
         </div>
       }
-      footer={
-        <FooterSimple
-          left={book ? "Chat with this book on Feynman — great minds join in" : `Chat with ${clip(speakerName, 22)} on Feynman`}
-        />
-      }
+      footer={<FooterSimple />}
     />
   );
 }
@@ -302,8 +320,9 @@ export function QaCard({ question, snippet, bookTitle, author, cover, bg, initia
             {clip(question, 116)}
           </div>
           <div style={{ display: "flex", fontSize: 26, color: INK_SOFT, lineHeight: 1.48, borderLeft: `3px solid ${typeof bg === "string" && bg.startsWith("#") ? bg : "#888"}`, paddingLeft: 26 }}>
-            {`“${clip(snippet, 188)}”`}
+            {`“${clip(snippet, 178)}”`}
           </div>
+          <ChatPill label="Chat with this book" />
         </div>
       }
       footer={
@@ -330,9 +349,10 @@ export function EssayCard({ mindName, topic, snippet, portrait, accent, initials
           </div>
           {snippet ? (
             <div style={{ display: "flex", fontSize: 28, color: INK_SOFT, lineHeight: 1.46 }}>
-              {`“${clip(snippet, 184)}”`}
+              {`“${clip(snippet, 166)}”`}
             </div>
           ) : null}
+          <ChatPill label={`Chat with ${mindName}`} />
         </div>
       }
       footer={
@@ -378,9 +398,10 @@ export function TopicCard({ topic, bookCount, mindCount, books, minds }: { topic
               </div>
             ))}
           </div>
+          <ChatPill label="Start a conversation" />
         </div>
       }
-      footer={<FooterSimple left="A curated shelf — read the canon, chat with the thinkers" />}
+      footer={<FooterSimple />}
     />
   );
 }
@@ -405,12 +426,13 @@ export function DiscussionCard({ withWho, userMsg, answerMsg, turns, accent, ini
                 <div style={{ display: "flex", fontSize: 24, fontWeight: 700, color: INK, fontFamily: FONT }}>{clip(withWho, 26)}</div>
                 <div style={{ display: "flex", fontSize: 18, color: INK_MUTE, marginLeft: 12, fontFamily: FONT, fontStyle: "italic" }}>replied</div>
               </div>
-              <Bubble text={`“${clip(answerMsg, 188)}”`} accent={accent} fontSize={27} />
+              <Bubble text={`“${clip(answerMsg, 178)}”`} accent={accent} fontSize={27} />
             </div>
           </div>
+          <ChatPill label={turns ? `Read all ${turns} turns` : "Read the conversation"} />
         </div>
       }
-      footer={<FooterSimple left={turns ? `${turns} turns · read the full conversation on Feynman` : "Read the full conversation on Feynman"} />}
+      footer={<FooterSimple />}
     />
   );
 }
@@ -428,6 +450,7 @@ export function AggCard({ title, sub, glyph, name, label }: { title: string; sub
               {clip(sub, 150)}
             </div>
           ) : null}
+          <ChatPill label="Start a conversation" />
         </div>
       }
       footer={<FooterIdentity glyph={glyph} name={name} label={label} />}
@@ -451,7 +474,7 @@ export function HomeCard() {
           </div>
         </div>
       }
-      footer={<FooterSimple left="Chat with any book — and the great minds join in" />}
+      footer={<FooterSimple />}
     />
   );
 }
