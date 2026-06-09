@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { savePendingBookIntent } from "@/lib/pendingIntent";
 import { track } from "@/lib/analytics";
+import { bookShareSlug } from "@/lib/catalog";
 import styles from "./Reader.module.css";
 
 /**
@@ -69,7 +70,15 @@ export default function Reader({ id }: { id: string }) {
   const totalRef = useRef(1);
   totalRef.current = totalPages;
 
-  const detailsHref = `/book/${encodeURIComponent(id)}`;
+  // Share/details links use the canonical SLUG, not the uuid — /book/{uuid}
+  // 301-redirects to the slug and X's card crawler won't follow the redirect, so
+  // a shared uuid URL renders the bare summary fallback instead of the OG card.
+  // Resolve once on mount (cached); falls back to the id.
+  const [shareSlug, setShareSlug] = useState(id);
+  useEffect(() => {
+    bookShareSlug(id).then(setShareSlug).catch(() => {});
+  }, [id]);
+  const detailsHref = `/book/${encodeURIComponent(shareSlug)}`;
 
   // ── Data load ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,8 +277,8 @@ export default function Reader({ id }: { id: string }) {
   // ── Share helpers (port of reader-share-* handlers) ───────────────────
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/book/${encodeURIComponent(id)}`
-      : `https://feynman.wiki/book/${encodeURIComponent(id)}`;
+      ? `${window.location.origin}/book/${encodeURIComponent(shareSlug)}`
+      : `https://feynman.wiki/book/${encodeURIComponent(shareSlug)}`;
 
   function copyLink() {
     navigator.clipboard?.writeText(shareUrl).then(
