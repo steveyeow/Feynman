@@ -118,7 +118,10 @@ async function build(type: string, id: string, slug: string, kind: string) {
           description={data.description || data.subtitle}
           cover={cover}
           bg={bookAccent(data.title, isAi)}
-          minds={related.minds.slice(0, 3).map((m) => mindAccent(m.name))}
+          minds={[
+            ...related.minds.slice(0, 3).map((m) => mindAccent(m.name)),
+            "#5e4285", "#855e42", "#428585",
+          ].slice(0, 3)}
         />
       );
     }

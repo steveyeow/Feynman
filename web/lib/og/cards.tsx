@@ -215,7 +215,7 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
           {voice ? <Bubble text={`“${voice}”`} accent={accent} fontSize={32} /> : null}
         </div>
       }
-      footer={<FooterSimple left="Great Minds on Feynman — start a conversation, hear it in their voice" />}
+      footer={<FooterSimple left="Great Minds — chat in their own voice on Feynman" />}
     />
   );
 }
@@ -244,7 +244,7 @@ export function BookCard({ title, author, description, cover, bg, minds }: { tit
           </div>
         </div>
       }
-      footer={<FooterSimple left="Chat with this book on Feynman — ask it anything, in its own words" />}
+      footer={<FooterSimple left="Chat with this book — ask it anything, in its words" />}
     />
   );
 }
@@ -451,7 +451,7 @@ export function HomeCard() {
           </div>
         </div>
       }
-      footer={<FooterSimple left="Ask any book anything · discuss with the thinkers who shaped the field" />}
+      footer={<FooterSimple left="Chat with any book — and the great minds join in" />}
     />
   );
 }
