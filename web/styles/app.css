@@ -4102,6 +4102,17 @@ html.dark .share-status-indicator { background: #60a5fa1a; color: #93c5fd; borde
   font: 500 12px/1 'Inter', sans-serif;
 }
 .publish-toast-copy:hover { background: var(--bg-sidebar); }
+/* Primary "Post on X" CTA — direct tweet alongside the copy-link path. */
+.publish-toast-x {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin-bottom: 10px;
+  padding: 10px 14px; border: 0; border-radius: 8px; cursor: pointer;
+  background: #000; color: #fff;
+  font: 600 13.5px/1 'Inter', sans-serif;
+  transition: opacity 0.12s;
+}
+.publish-toast-x:hover { opacity: 0.85; }
+.publish-toast-x svg { flex-shrink: 0; }
 .publish-toast-actions {
   display: flex; gap: 10px; align-items: center;
 }
