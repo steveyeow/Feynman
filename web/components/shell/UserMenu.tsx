@@ -11,7 +11,7 @@ import ThemeToggle from "@/components/theme/ThemeToggle";
  * and just the theme toggle in anonymous mode (auth off, e.g. local dev).
  */
 export default function UserMenu() {
-  const { authEnabled, user, isPro, tierKnown } = useAuth();
+  const { ready, authEnabled, user, isPro, tierKnown } = useAuth();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -39,7 +39,10 @@ export default function UserMenu() {
   const avatarUrl = meta.avatar_url || meta.picture || "";
   const tier = isPro ? "Pro" : "Free";
   const initial = (user ? name[0] : "")?.toUpperCase() ?? "";
-  const guestLabel = authEnabled ? "Account" : "Guest";
+  // Until auth is resolved (`ready`), show the neutral "Account" — NEVER flash
+  // "Guest" (which implies signed-out) while the config/session are still
+  // loading. "Guest" is only correct on the open-source build (ready + auth off).
+  const guestLabel = authEnabled || !ready ? "Account" : "Guest";
 
   return (
     <div className="sidebar-user-wrap" ref={wrapRef}>
