@@ -9,6 +9,10 @@ import {
   breadcrumbJsonLd,
   fetchMind,
   fetchMindOnTopic,
+  fetchMinds,
+  fetchTopics,
+  filterMindsByTopic,
+  isMindTopicRelevant,
   metaDescription,
   mindEssayJsonLd,
   resolveTopicSlug,
@@ -126,6 +130,18 @@ export default async function MindOnTopicPage({
     [topic, canonical],
   ]);
 
+  const eraDomain = [mind.era, mind.domain].filter(Boolean).join(" · ");
+  // Exploration data — turn the page from a dead-end essay into a hub: the mind's
+  // OTHER perspectives, plus how OTHER minds approach the same topic. Both are
+  // cached lite-list fetches and the page is ISR (renders ~once/day per URL).
+  const [allTopics, allMinds] = await Promise.all([fetchTopics(), fetchMinds()]);
+  const otherTopics = allTopics
+    .filter((t) => isMindTopicRelevant(mind, t) && topicSlug(t) !== canonicalSlug)
+    .slice(0, 6);
+  const otherMinds = filterMindsByTopic(allMinds, topic, 8)
+    .filter((m) => m.id !== mind.id)
+    .slice(0, 6);
+
   return (
     <SeoColumn>
       <JsonLd data={articleLd} />
@@ -138,55 +154,80 @@ export default async function MindOnTopicPage({
       <h1>
         How {mind.name} might approach {topic}
       </h1>
+      {eraDomain ? <p className="seo-meta perspective-byline">{eraDomain}</p> : null}
 
       <section className="seo-section">
         {essayParagraphs.length ? (
-          <>
-            {essayParagraphs.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </>
+          essayParagraphs.map((p, i) => <p key={i}>{p}</p>)
         ) : (
           <>
             <p>
               This is a framed view of how {mind.name}
-              {mind.era ? ` (${mind.era})` : ""} might reason about {topic},
-              drawing on the methods, values, and concerns their work exhibits.
+              {mind.era ? ` (${mind.era})` : ""} might reason about {topic}, drawing
+              on the methods, values, and concerns their work exhibits.
               {mind.domain ? ` ${mind.name} is best known in ${mind.domain}.` : ""}
             </p>
             {mind.bio_summary ? <p>{mind.bio_summary}</p> : null}
             <p>
-              The fullest version of this perspective is interactive — put a
-              question to {mind.name} directly and follow the reasoning where it
-              leads.
+              The fullest version of this perspective is interactive — put a question
+              to {mind.name} directly and follow the reasoning where it leads.
             </p>
           </>
         )}
-        <p>
-          <small>
-            Imagined perspective — an AI synthesis grounded in {mind.name}&rsquo;s
-            recorded ideas and methods, not a quotation or a statement they
-            actually made.
-          </small>
+        <p className="perspective-disclaimer">
+          Imagined perspective — an AI synthesis grounded in {mind.name}&rsquo;s
+          recorded ideas and methods, not a quotation or a statement they actually
+          made.
         </p>
       </section>
 
-      <p className="seo-cta-row">
+      <div className="seo-cta-row perspective-cta">
         <a className="primary" href={readerUrl}>
           Chat with {mind.name} →
         </a>
-        <Link className="secondary" href={`/topic/${canonicalSlug}`}>
-          {topic} on Feynman
-        </Link>
-      </p>
+        <span className="perspective-cta-hint">
+          Ask {mind.name} directly — the perspective comes alive in conversation.
+        </span>
+      </div>
 
-      <footer className="seo-explore-footer">
-        <small>
-          Read more: <Link href={`/mind/${params.id}`}>About {mind.name}</Link>
-          {" · "}
-          <Link href={`/topic/${canonicalSlug}`}>{topic} on Feynman</Link>
-        </small>
-      </footer>
+      {otherTopics.length ? (
+        <section className="seo-section">
+          <h2>More perspectives from {mind.name}</h2>
+          <div className="mind-topic-cards">
+            {otherTopics.map((t) => (
+              <Link
+                key={t}
+                href={`/mind/${params.id}/on/${topicSlug(t)}`}
+                className="mind-topic-card"
+              >
+                <span className="mind-topic-card-eyebrow">How {mind.name} approaches</span>
+                <span className="mind-topic-card-title">{t}</span>
+                <span className="mind-topic-card-cta">Read the perspective →</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {otherMinds.length ? (
+        <section className="seo-section">
+          <h2>How other minds approach {topic}</h2>
+          <ul className="perspective-minds">
+            {otherMinds.map((m) => (
+              <li key={m.id}>
+                <Link href={`/mind/${m.slug || m.id}/on/${canonicalSlug}`}>
+                  <span className="perspective-minds-name">{m.name}</span>
+                  {m.era ? <span className="perspective-minds-era">{m.era}</span> : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <p className="perspective-explore">
+        <Link href={`/topic/${canonicalSlug}`}>Explore all of {topic} on Feynman →</Link>
+      </p>
     </SeoColumn>
   );
 }
