@@ -20,6 +20,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { bookShareSlug } from "@/lib/catalog";
 import type { Outline, OutlineChapter, BookStatus, AiBookStatus } from "@/lib/aibooks";
 
 export type CanvasPhase = "outlining" | "writing";
@@ -102,11 +103,18 @@ function ChatIcon() {
 /** Share popup (Twitter / Copy URL / Email) building ${origin}/book/{id}. */
 function CanvasShare({ title, readId }: { title: string; readId: string }) {
   const [open, setOpen] = useState(false);
+  // Share the canonical SLUG, not the uuid: /book/{uuid} 301-redirects to the
+  // slug and X's card crawler won't follow it, so the OG card doesn't render in
+  // the tweet. Resolve once on mount (cached); falls back to readId.
+  const [slug, setSlug] = useState(readId);
   const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    bookShareSlug(readId).then(setSlug).catch(() => {});
+  }, [readId]);
   const shareUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/book/${encodeURIComponent(readId)}`
-      : `https://feynman.wiki/book/${encodeURIComponent(readId)}`;
+      ? `${window.location.origin}/book/${encodeURIComponent(slug)}`
+      : `https://feynman.wiki/book/${encodeURIComponent(slug)}`;
 
   useEffect(() => {
     if (!open) return;

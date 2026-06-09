@@ -70,3 +70,20 @@ export async function getAgentCached(id: string): Promise<Agent> {
   _agents.set(id, { at: Date.now(), agent });
   return agent;
 }
+
+/**
+ * Resolve a book's canonical slug for SHARE URLs (falls back to the id).
+ *
+ * Share links MUST be /book/{slug}, never /book/{uuid}: the uuid 301-redirects
+ * to the slug, and X's (Twitter) card crawler does NOT follow 301s — a shared
+ * uuid URL renders the bare summary fallback instead of the OG card. Cached via
+ * getAgentCached, so resolving on mount is a no-op on repeat.
+ */
+export async function bookShareSlug(id: string): Promise<string> {
+  try {
+    const a = await getAgentCached(id);
+    return a?.slug || id;
+  } catch {
+    return id;
+  }
+}

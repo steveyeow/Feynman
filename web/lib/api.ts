@@ -219,6 +219,9 @@ export const del = <T = unknown>(path: string, init?: RequestInit) =>
 export interface Agent {
   id: string;
   name: string;
+  /** Descriptive URL slug. Share URLs MUST use this (not the uuid): /book/{uuid}
+   *  301-redirects to /book/{slug}, and X's card crawler doesn't follow 301s. */
+  slug?: string | null;
   author?: string;
   status?: string;
   type?: string;
