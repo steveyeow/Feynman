@@ -241,7 +241,12 @@ def prestore_overviews(batch_size: int = 6) -> tuple[int, int, list[dict[str, An
     ids, total = list_agents_missing_overview(limit=batch_size)
     stored = 0
     details: list[dict[str, Any]] = []
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    # NOT a `with` block: Executor.__exit__ is shutdown(wait=True), which JOINS
+    # the worker — after a future timeout that means blocking on the very thread
+    # that hung, holding the response past the platform kill (the exact failure
+    # this timeout exists to prevent; it ate drain runs #2-#3).
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
         for agent_id in ids:
             if _time.time() - started > _TIME_BUDGET_S:
                 details.append({"id": agent_id[:8], "skipped": "time budget"})
@@ -278,6 +283,10 @@ def prestore_overviews(batch_size: int = 6) -> tuple[int, int, list[dict[str, An
             details.append({"id": agent_id[:8], "ok": True, "ms": ms,
                             "grounded": bool(result.get("grounded")),
                             "provider": result.get("provider", "")})
+    finally:
+        # Fire-and-forget: a zombie generation thread is harmless once the
+        # response is out; waiting for it is what hung the invocation.
+        pool.shutdown(wait=False, cancel_futures=True)
     return stored, max(0, total - stored), details
 
 
