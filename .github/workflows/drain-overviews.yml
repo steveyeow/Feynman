@@ -1,0 +1,35 @@
+# One-off drain: loop the prestore-overviews cron until the backlog is empty.
+# Runs on a GitHub-hosted runner because the dev machine's network
+# intermittently blackholes *.feynman.wiki (fake-IP VPN), while api.github.com
+# stays reachable. Dispatch manually:
+#   gh workflow run drain-overviews.yml --ref ops/drain-overviews
+name: drain-overviews
+on: workflow_dispatch
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    steps:
+      - name: Loop prestore cron until remaining=0
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          consec=0
+          for i in $(seq 1 160); do
+            RESP=$(curl -s --max-time 110 -H "Authorization: Bearer $CRON_SECRET" "https://api.feynman.wiki/api/cron/prestore-overviews" || echo '{}')
+            echo "[$i] $RESP"
+            STATUS=$(echo "$RESP" | jq -r '.status // "fail"')
+            REM=$(echo "$RESP" | jq -r '.remaining // -1')
+            STORED=$(echo "$RESP" | jq -r '.stored // 0')
+            if [ "$STATUS" != "ok" ]; then
+              consec=$((consec+1))
+              if [ "$consec" -ge 10 ]; then echo "ABORT: 10 consecutive failures"; exit 1; fi
+              sleep $((consec*5)); continue
+            fi
+            consec=0
+            if [ "$REM" = "0" ]; then echo "DONE: backlog drained"; exit 0; fi
+            if [ "$STORED" = "0" ]; then echo "stored=0 with remaining=$REM — backing off"; sleep 60; fi
+            sleep 3
+          done
+          echo "Hit call cap; remaining=$REM"
+          exit 1
