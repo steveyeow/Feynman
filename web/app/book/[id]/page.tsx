@@ -50,10 +50,11 @@ function bookDescription(
   author: string,
 ): string {
   const by = author ? ` by ${author}` : "";
-  // Lead with the interactive hook so the SERP snippet differentiates from a
-  // static book summary; append the subtitle for context (clampDescription trims,
-  // keeping the hook up front where it survives SERP truncation).
-  const lead = `Read & chat with this book${by} on Feynman — ask it anything and get answers grounded in its actual text.`;
+  // Hybrid intent: searchers reach book pages with "summary"/"key ideas"/
+  // "{title} wiki" qualifiers (GSC) — answer that intent first, then
+  // differentiate with the Type-0 value (the book itself answers, grounded in
+  // its text — what no static summary site has).
+  const lead = `Summary and key ideas of this book${by} — then chat with the book itself and get answers grounded in its actual text.`;
   return clampDescription(subtitle ? `${lead} ${subtitle}` : lead);
 }
 
@@ -81,7 +82,7 @@ export async function generateMetadata({
   const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
-    title: `Read & chat with ${data.title} — Feynman`,
+    title: `${data.title} — Summary, Key Ideas & Chat | Feynman`,
     description: desc,
     alternates: { canonical },
     ...(isStub ? { robots: { index: false, follow: true } } : {}),
@@ -319,15 +320,20 @@ export default async function BookLandingPage({ params }: PageProps) {
 
       <section className="seo-section">
         {overview ? (
-          overview.overview
-            .split(/\n\n+/)
-            .map((p) => p.trim())
-            .filter(Boolean)
-            .map((p, i) => (
-              <p key={i} className="book-about">
-                {p}
-              </p>
-            ))
+          <>
+            {/* "Summary" is the literal query word searchers use (GSC:
+                "daodejing summary" etc.) — the heading matches the intent. */}
+            <h2>Summary</h2>
+            {overview.overview
+              .split(/\n\n+/)
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p, i) => (
+                <p key={i} className="book-about">
+                  {p}
+                </p>
+              ))}
+          </>
         ) : (
           <p className="book-about">{aboutLine}</p>
         )}
