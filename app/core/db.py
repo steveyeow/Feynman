@@ -1958,17 +1958,28 @@ def ensure_slug_columns() -> None:
                         pass
 
 
-def list_minds(limit: int | None = None) -> list[dict[str, Any]]:
+def list_minds(limit: int | None = None, lite: bool = False) -> list[dict[str, Any]]:
     """List all minds, ordered by popularity.
 
     `limit` is a defensive cap (see `list_agents` rationale).
+
+    `lite=True` projects out the fat text columns (persona, thinking_style,
+    typical_phrases, works) AT THE SQL LAYER — the egress rule: hot request
+    paths (the /api/minds list, sitemap, llms-full, indexnow, seed-count) must
+    not read those columns out of Postgres only to discard them in Python
+    (~5KB/row × 650 rows ≈ MBs per call otherwise). Callers that need the full
+    persona (chat invites via find_existing_mind_by_keys, scripts) keep the
+    default full read.
     """
-    sql = (
-        "SELECT id, name, slug, era, domain, bio_summary, persona, thinking_style, "
+    cols = (
+        "id, name, slug, era, domain, bio_summary, avatar_seed, "
+        "wikidata_url, wikipedia_url, version, chat_count, created_at"
+        if lite else
+        "id, name, slug, era, domain, bio_summary, persona, thinking_style, "
         "typical_phrases, works, avatar_seed, wikidata_url, wikipedia_url, "
-        "version, chat_count, created_at "
-        "FROM minds ORDER BY chat_count DESC, created_at ASC"
+        "version, chat_count, created_at"
     )
+    sql = f"SELECT {cols} FROM minds ORDER BY chat_count DESC, created_at ASC"
     params: tuple[Any, ...] = ()
     if limit is not None:
         sql += " LIMIT ?"
@@ -1989,10 +2000,12 @@ def _row_to_mind(row: dict[str, Any]) -> dict[str, Any]:
         # First-person "voice" self-intro (generated; meta_json.voice). Drives the
         # Feynman-native first-person About. `.get` — absent on list SELECTs / older rows.
         "voice": (json.loads(row["meta_json"]) if row.get("meta_json") else {}).get("voice") or "",
-        "persona": row["persona"],
-        "thinking_style": row["thinking_style"] or "",
-        "typical_phrases": json.loads(row["typical_phrases"] or "[]"),
-        "works": json.loads(row["works"] or "[]"),
+        # .get — absent on lite list SELECTs (projected out at the SQL layer);
+        # full reads (get_mind, default list_minds) still carry them.
+        "persona": row.get("persona"),
+        "thinking_style": row.get("thinking_style") or "",
+        "typical_phrases": json.loads(row.get("typical_phrases") or "[]"),
+        "works": json.loads(row.get("works") or "[]"),
         "avatar_seed": row["avatar_seed"] or "",
         # Wikidata/Wikipedia identity links (sameAs). `.get` — older rows
         # predate the migration; absent → "".
