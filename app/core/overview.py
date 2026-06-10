@@ -215,6 +215,38 @@ def generate_book_overview(
     return parsed
 
 
+def prestore_overviews(batch_size: int = 6) -> tuple[int, int]:
+    """Generate + persist overviews for ready books that lack one. Returns
+    (stored, remaining).
+
+    Runs on Vercel (the cron) because grounded mode embeds the RAG query via
+    Gemini, which is geoblocked from the dev machine — the embed-minds
+    constraint. Bounded per call to stay inside the function timeout; each
+    stored overview is permanent (generate_book_overview short-circuits on
+    meta.overview), so the daily schedule self-fills new books and a manual
+    loop drains a backlog. Empty generations (transient LLM failure) are NOT
+    stored and retry on the next run."""
+    from app.core.db import get_agent, list_agents_missing_overview, update_agent_meta
+
+    ids, total = list_agents_missing_overview(limit=batch_size)
+    stored = 0
+    for agent_id in ids:
+        agent = get_agent(agent_id)
+        if not agent:
+            continue
+        result = generate_book_overview(agent)
+        text = (result.get("overview") or "").strip()
+        if not text:
+            continue
+        update_agent_meta(agent_id, {
+            "overview": text,
+            "key_concepts": result.get("concepts") or [],
+            "overview_grounded": bool(result.get("grounded")),
+        })
+        stored += 1
+    return stored, max(0, total - stored)
+
+
 _TOPIC_OVERVIEW_MAX_CHARS = 1200
 
 
