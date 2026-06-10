@@ -1713,6 +1713,29 @@ def update_agent_meta(agent_id: str, updates: dict[str, Any]) -> None:
         _execute(conn, _q("UPDATE agents SET meta_json = ? WHERE id = ?"), (json.dumps(meta), agent_id))
 
 
+def list_agents_missing_overview(limit: int = 50) -> tuple[list[str], int]:
+    """IDs of ready, non-deleted agents with no stored meta.overview, plus the
+    total remaining count. The filter runs SQL-side (jsonb key test on PG,
+    json_extract on SQLite) so the prestore cron finds candidates without
+    reading hundreds of meta_json blobs per run."""
+    if _USE_PG:
+        where = (
+            "is_deleted = false AND status = 'ready' "
+            "AND NOT (COALESCE(meta_json, '{}')::jsonb ? 'overview')"
+        )
+    else:
+        where = (
+            "is_deleted = 0 AND status = 'ready' "
+            "AND json_extract(COALESCE(meta_json, '{}'), '$.overview') IS NULL"
+        )
+    with get_conn() as conn:
+        total_row = _fetchone(conn, f"SELECT count(*) AS n FROM agents WHERE {where}")
+        rows = _fetchall(conn, _q(
+            f"SELECT id FROM agents WHERE {where} ORDER BY created_at ASC LIMIT ?"
+        ), (limit,))
+    return [r["id"] for r in rows], int(total_row["n"] if total_row else 0)
+
+
 def find_agent_by_name(name: str) -> dict[str, Any] | None:
     """Find an agent by name (case-insensitive)."""
     with get_conn() as conn:

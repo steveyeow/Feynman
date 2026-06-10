@@ -3595,6 +3595,24 @@ def api_cron_voice_minds(request: Request) -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)}
 
 
+@app.get("/api/cron/prestore-overviews")
+def api_cron_prestore_overviews(request: Request) -> dict[str, Any]:
+    """Cron-triggered "About this book" prestore for ready books missing
+    meta.overview (556 at introduction — book hubs rendered overview-less and
+    lazy generations were never persisted). Runs ON Vercel because grounded
+    mode embeds the RAG query via Gemini, geoblocked from the dev machine
+    (embed-minds precedent). Bounded per call for the function timeout; the
+    daily schedule self-fills new books; loop with the CRON_SECRET bearer to
+    drain a backlog (returns remaining)."""
+    _verify_cron(request)
+    try:
+        stored, remaining = overview_module.prestore_overviews(batch_size=6)
+        return {"status": "ok", "stored": stored, "remaining": remaining}
+    except Exception as exc:
+        log.error("Prestore-overviews cron failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
 @app.get("/api/cron/reset-embeddings")
 def api_cron_reset_embeddings() -> dict[str, Any]:
     """Clear all corrupted embeddings so backfill can regenerate them."""
@@ -4283,6 +4301,20 @@ def api_agent_overview(agent_id: str) -> JSONResponse:
         # pin an empty overview in-process; empty falls through and retries.
         if cached.get("overview"):
             _cache_set(cache_key, cached)
+            # Persist fresh generations so each one is paid for exactly once.
+            # In-process TTL + edge cache both evaporate (deploys, pod churn,
+            # cache windows) — without this, every re-crawl of a book hub
+            # re-ran the RAG + LLM round trip, and 556 ready books sat with no
+            # stored overview. provider=="stored" means it came FROM meta.
+            if cached.get("provider") and cached.get("provider") != "stored":
+                try:
+                    update_agent_meta(agent_id, {
+                        "overview": cached.get("overview", ""),
+                        "key_concepts": cached.get("concepts") or [],
+                        "overview_grounded": bool(cached.get("grounded")),
+                    })
+                except Exception as exc:
+                    log.warning("overview persist failed for %s: %s", agent_id, exc)
     return JSONResponse(
         content={
             "overview": cached.get("overview", ""),
