@@ -1719,9 +1719,12 @@ def list_agents_missing_overview(limit: int = 50) -> tuple[list[str], int]:
     json_extract on SQLite) so the prestore cron finds candidates without
     reading hundreds of meta_json blobs per run."""
     if _USE_PG:
+        # jsonb_exists() — NOT the `?` operator: queries here pass through
+        # _q(), whose blind `?`→`%s` rewrite turns the operator into a bogus
+        # placeholder (IndexError at execute). Same semantics, no collision.
         where = (
             "is_deleted = false AND status = 'ready' "
-            "AND NOT (COALESCE(meta_json, '{}')::jsonb ? 'overview')"
+            "AND NOT jsonb_exists(COALESCE(meta_json, '{}')::jsonb, 'overview')"
         )
     else:
         where = (

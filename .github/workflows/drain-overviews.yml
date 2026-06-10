@@ -18,9 +18,11 @@ jobs:
           for i in $(seq 1 160); do
             RESP=$(curl -s --max-time 110 -H "Authorization: Bearer $CRON_SECRET" "https://api.feynman.wiki/api/cron/prestore-overviews" || echo '{}')
             echo "[$i] $RESP"
-            STATUS=$(echo "$RESP" | jq -r '.status // "fail"')
-            REM=$(echo "$RESP" | jq -r '.remaining // -1')
-            STORED=$(echo "$RESP" | jq -r '.stored // 0')
+            # Non-JSON bodies (Vercel 500 pages) must count as a failed try,
+            # not kill the job — jq exits non-zero under bash -e otherwise.
+            STATUS=$(echo "$RESP" | jq -r '.status // "fail"' 2>/dev/null) || STATUS=fail
+            REM=$(echo "$RESP" | jq -r '.remaining // -1' 2>/dev/null) || REM=-1
+            STORED=$(echo "$RESP" | jq -r '.stored // 0' 2>/dev/null) || STORED=0
             if [ "$STATUS" != "ok" ]; then
               consec=$((consec+1))
               if [ "$consec" -ge 10 ]; then echo "ABORT: 10 consecutive failures"; exit 1; fi
