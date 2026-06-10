@@ -71,7 +71,7 @@
    (the user prefers a color over pure black; dark stays white). Mirrors
    CHAT_CTA in lib/og/theme.ts (the share-card pill). Standalone block so it
    covers default + system-dark (unless forced .light) + forced .dark. */
-:root { --chat-cta-bg: #2b3553; --chat-cta-fg: #ffffff; }
+:root { --chat-cta-bg: #15543f; --chat-cta-fg: #ffffff; }
 @media (prefers-color-scheme: dark) { :root:not(.light) { --chat-cta-bg: #f5f5f7; --chat-cta-fg: #1c1c1e; } }
 :root.dark { --chat-cta-bg: #f5f5f7; --chat-cta-fg: #1c1c1e; }
 

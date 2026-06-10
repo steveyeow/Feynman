@@ -194,9 +194,9 @@ function ChatIcon({ size = 24 }: { size?: number }) {
 // The chat value prop, made prominent in the MAIN visual (not a tiny footer
 // line): a dark, button-like CTA pill that signals the card is interactive —
 // the whole point of the product, and the click-through driver.
-function ChatPill({ label, color }: { label: string; color?: string }) {
+function ChatPill({ label }: { label: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", background: color || CHAT_CTA, color: "#ffffff", borderRadius: 999, padding: "15px 30px", marginTop: 30, boxShadow: "0 8px 22px rgba(0,0,0,0.16)" }}>
+    <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", background: CHAT_CTA, color: "#ffffff", borderRadius: 999, padding: "15px 30px", marginTop: 30, boxShadow: "0 8px 22px rgba(0,0,0,0.16)" }}>
       <ChatIcon />
       <div style={{ display: "flex", marginLeft: 13, fontSize: 26, fontWeight: 700, fontFamily: FONT }}>{clip(label, 30)}</div>
     </div>
@@ -241,7 +241,7 @@ export function MindCard({ data, portrait, accent, initials }: { data: MindCardD
   );
 }
 
-export function BookCard({ title, author, subtitle, description, cover, bg, minds, pillColor }: { title: string; author?: string; subtitle?: string; description?: string; cover: string | null; bg: string; minds?: string[]; pillColor?: string }) {
+export function BookCard({ title, author, subtitle, description, cover, bg, minds }: { title: string; author?: string; subtitle?: string; description?: string; cover: string | null; bg: string; minds?: string[] }) {
   const sub = subtitle || description;
   return (
     <Frame
@@ -263,7 +263,7 @@ export function BookCard({ title, author, subtitle, description, cover, bg, mind
               </div>
             ) : null}
             {minds && minds.length ? <MindsCue accents={minds} /> : null}
-            <ChatPill label="Chat with this book" color={pillColor} />
+            <ChatPill label="Chat with this book" />
           </div>
         </div>
       }
