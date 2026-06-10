@@ -215,9 +215,10 @@ def generate_book_overview(
     return parsed
 
 
-def prestore_overviews(batch_size: int = 6) -> tuple[int, int]:
+def prestore_overviews(batch_size: int = 6) -> tuple[int, int, list[dict[str, Any]]]:
     """Generate + persist overviews for ready books that lack one. Returns
-    (stored, remaining).
+    (stored, remaining, details) — details carries per-book timing/provider/
+    error so the caller (cron response → drain-loop logs) is self-diagnosing.
 
     Runs on Vercel (the cron) because grounded mode embeds the RAG query via
     Gemini, which is geoblocked from the dev machine — the embed-minds
@@ -226,25 +227,58 @@ def prestore_overviews(batch_size: int = 6) -> tuple[int, int]:
     meta.overview), so the daily schedule self-fills new books and a manual
     loop drains a backlog. Empty generations (transient LLM failure) are NOT
     stored and retry on the next run."""
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTimeout
     from app.core.db import get_agent, list_agents_missing_overview, update_agent_meta
 
+    _PER_BOOK_TIMEOUT_S = 25.0   # hard cap per generation — a hung provider
+    _TIME_BUDGET_S = 40.0        # stop starting new books past this elapsed
+    #                              (the first drain attempt hung indefinitely
+    #                              inside one generation and the whole call
+    #                              died at the platform limit storing nothing)
+
+    started = _time.time()
     ids, total = list_agents_missing_overview(limit=batch_size)
     stored = 0
-    for agent_id in ids:
-        agent = get_agent(agent_id)
-        if not agent:
-            continue
-        result = generate_book_overview(agent)
-        text = (result.get("overview") or "").strip()
-        if not text:
-            continue
-        update_agent_meta(agent_id, {
-            "overview": text,
-            "key_concepts": result.get("concepts") or [],
-            "overview_grounded": bool(result.get("grounded")),
-        })
-        stored += 1
-    return stored, max(0, total - stored)
+    details: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        for agent_id in ids:
+            if _time.time() - started > _TIME_BUDGET_S:
+                details.append({"id": agent_id[:8], "skipped": "time budget"})
+                break
+            t0 = _time.time()
+            agent = get_agent(agent_id)
+            if not agent:
+                details.append({"id": agent_id[:8], "err": "not found"})
+                continue
+            fut = pool.submit(generate_book_overview, agent)
+            try:
+                result = fut.result(timeout=_PER_BOOK_TIMEOUT_S)
+            except _FTimeout:
+                # Abandon this book for now (the worker thread is left to
+                # finish/die with the invocation); the next run retries it.
+                details.append({"id": agent_id[:8], "err": "timeout",
+                                "ms": int((_time.time() - t0) * 1000)})
+                break  # a hung provider would just eat the remaining budget
+            except Exception as exc:  # generate never raises, but belt+braces
+                details.append({"id": agent_id[:8], "err": str(exc)[:80]})
+                continue
+            ms = int((_time.time() - t0) * 1000)
+            text = (result.get("overview") or "").strip()
+            if not text:
+                details.append({"id": agent_id[:8], "err": "empty", "ms": ms,
+                                "provider": result.get("provider", "")})
+                continue
+            update_agent_meta(agent_id, {
+                "overview": text,
+                "key_concepts": result.get("concepts") or [],
+                "overview_grounded": bool(result.get("grounded")),
+            })
+            stored += 1
+            details.append({"id": agent_id[:8], "ok": True, "ms": ms,
+                            "grounded": bool(result.get("grounded")),
+                            "provider": result.get("provider", "")})
+    return stored, max(0, total - stored), details
 
 
 _TOPIC_OVERVIEW_MAX_CHARS = 1200

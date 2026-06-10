@@ -3606,8 +3606,12 @@ def api_cron_prestore_overviews(request: Request) -> dict[str, Any]:
     drain a backlog (returns remaining)."""
     _verify_cron(request)
     try:
-        stored, remaining = overview_module.prestore_overviews(batch_size=6)
-        return {"status": "ok", "stored": stored, "remaining": remaining}
+        batch = max(1, min(8, int(request.query_params.get("batch", "4"))))
+    except ValueError:
+        batch = 4
+    try:
+        stored, remaining, details = overview_module.prestore_overviews(batch_size=batch)
+        return {"status": "ok", "stored": stored, "remaining": remaining, "details": details}
     except Exception as exc:
         log.error("Prestore-overviews cron failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
