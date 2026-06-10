@@ -48,7 +48,7 @@ function descFor(mind: MindDetail): string {
   // {occupation}") — then differentiates with the Type-0 value (a living entry
   // you can question) instead of reading like another static bio.
   const who = [mind.era, mind.domain].filter(Boolean).join(" · ");
-  const lead = `Who is ${mind.name}?${who ? ` ${who}.` : ""} Biography and key ideas — then ask ${mind.name} directly and get answers in their own voice. A living entry, not a static page.`;
+  const lead = `Who is ${mind.name}?${who ? ` ${who}.` : ""} Biography and key ideas — then ask ${mind.name} anything and get answers in their own voice. A living entry, not a static page.`;
   return metaDescription(mind.bio_summary ? `${lead} ${mind.bio_summary}` : lead);
 }
 
@@ -65,12 +65,12 @@ export async function generateMetadata({
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
   return {
-    // Title carries the verified search-intent words (biography/ideas — the
-    // wiki/biography/occupation qualifier cluster in GSC) PLUS the
-    // differentiator (dialogue). "Chat with X" alone matched chat-intent
-    // queries that get zero impressions; pure "Biography" would make us a
-    // worse Wikipedia. Hybrid serves both.
-    title: `${mind.name} — Biography, Key Ideas & Dialogue | Feynman`,
+    // Title = verified intent words (biography/ideas per GSC) + a hook no
+    // static site can write. "& Dialogue" was too abstract — at a glance it
+    // read like Wikipedia/Goodreads. "Ask Them Anything" is concrete (the AMA
+    // format everyone knows), names a capability only a living entry has, and
+    // sits mid-title so it survives SERP truncation.
+    title: `${mind.name} — Biography, Ideas & Ask Them Anything | Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {

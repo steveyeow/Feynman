@@ -54,7 +54,7 @@ function bookDescription(
   // "{title} wiki" qualifiers (GSC) — answer that intent first, then
   // differentiate with the Type-0 value (the book itself answers, grounded in
   // its text — what no static summary site has).
-  const lead = `Summary and key ideas of this book${by} — then chat with the book itself and get answers grounded in its actual text.`;
+  const lead = `Summary and key ideas of this book${by} — then ask the book itself anything and get answers grounded in its actual text.`;
   return clampDescription(subtitle ? `${lead} ${subtitle}` : lead);
 }
 
@@ -82,7 +82,10 @@ export async function generateMetadata({
   const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
-    title: `${data.title} — Summary, Key Ideas & Chat | Feynman`,
+    // "& Chat" read like every static summary site; "Ask the Book" is the
+    // capability nobody else can claim — concrete, three words, query-relevant
+    // neighbors (Summary, Key Ideas) intact.
+    title: `${data.title} — Summary, Key Ideas & Ask the Book | Feynman`,
     description: desc,
     alternates: { canonical },
     ...(isStub ? { robots: { index: false, follow: true } } : {}),
