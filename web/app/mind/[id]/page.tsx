@@ -43,12 +43,12 @@ export function generateStaticParams() {
 }
 
 function descFor(mind: MindDetail): string {
-  const domain = mind.domain ? ` about ${mind.domain}` : "";
-  // Lead with the interactive hook — what a static encyclopedia can't offer — so
-  // the SERP snippet differentiates from Wikipedia instead of reading like another
-  // third-person bio. The bio is appended for context/keywords; metaDescription
-  // trims, keeping the hook up front (where it survives SERP truncation).
-  const lead = `Chat with ${mind.name} on Feynman — ask${domain}, answered in their own words. An interactive great mind, not a static encyclopedia entry.`;
+  // Hybrid intent: GSC shows searchers qualify with wiki/biography/who-is/
+  // occupation — so the snippet opens by ANSWERING that intent ("Who is X?
+  // {occupation}") — then differentiates with the Type-0 value (a living entry
+  // you can question) instead of reading like another static bio.
+  const who = [mind.era, mind.domain].filter(Boolean).join(" · ");
+  const lead = `Who is ${mind.name}?${who ? ` ${who}.` : ""} Biography and key ideas — then ask ${mind.name} directly and get answers in their own voice. A living entry, not a static page.`;
   return metaDescription(mind.bio_summary ? `${lead} ${mind.bio_summary}` : lead);
 }
 
@@ -65,7 +65,12 @@ export async function generateMetadata({
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
   return {
-    title: `Chat with ${mind.name} — Feynman`,
+    // Title carries the verified search-intent words (biography/ideas — the
+    // wiki/biography/occupation qualifier cluster in GSC) PLUS the
+    // differentiator (dialogue). "Chat with X" alone matched chat-intent
+    // queries that get zero impressions; pure "Biography" would make us a
+    // worse Wikipedia. Hybrid serves both.
+    title: `${mind.name} — Biography, Key Ideas & Dialogue | Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {
@@ -287,12 +292,12 @@ export default async function MindPage({
       ) : null}
 
       {/* ③ In their voice — signature phrases + core approach (first-person feel). */}
-      <MindPhrases phrases={mind.typical_phrases} />
+      <MindPhrases phrases={mind.typical_phrases} name={mind.name} mindId={params.id} />
       {/* Full persona stays private; the API exposes a bounded excerpt. */}
       <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
 
       {/* ④ Encyclopedic context — demoted below the distinctive content. */}
-      <MindBio bio={mind.bio_summary} />
+      <MindBio bio={mind.bio_summary} name={mind.name} />
       <MindThinkingStyle style={mind.thinking_style} />
 
       {libraryExtra.length ? (

@@ -587,6 +587,20 @@ body { background-color: var(--bg-home); }
 .insight-card-who { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 5px; }
 .insight-card p { margin: 0; line-height: 1.6; color: var(--text); }
 
+/* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
+   about directly (quote → prefilled chat), the living-entry differentiator. ── */
+.notable-quotes { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 18px; }
+.notable-quote blockquote {
+  margin: 0; padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--accent);
+  font-size: 16.5px; line-height: 1.55; font-style: italic; color: var(--text);
+}
+.notable-quote-ask {
+  display: inline-block; margin: 6px 0 0 19px;
+  font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none;
+}
+.notable-quote-ask:hover { text-decoration: underline; }
+
 /* ── "Think with X" — Type-2 imagined-perspective cards (the distinctive supply) ── */
 .mind-topic-cards {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

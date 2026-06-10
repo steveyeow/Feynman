@@ -36,10 +36,12 @@ export function Section({
   );
 }
 
-export function MindBio({ bio }: { bio?: string }) {
+export function MindBio({ bio, name }: { bio?: string; name?: string }) {
   if (!bio) return null;
+  // Question-form heading — matches the verified "who is/was X" query pattern
+  // (GSC) and the People-Also-Ask format; "About" matched nothing.
   return (
-    <Section heading="About">
+    <Section heading={name ? `Who is ${name}?` : "About"}>
       <p>{bio}</p>
     </Section>
   );
@@ -56,19 +58,43 @@ export function MindThinkingStyle({ style }: { style?: string }) {
 
 export function MindPhrases({
   phrases,
+  name,
+  mindId,
   limit = 6,
 }: {
   phrases?: string[];
+  name?: string;
+  mindId?: string;
   limit?: number;
 }) {
   const list = (phrases || []).filter(Boolean).slice(0, limit);
   if (!list.length) return null;
+  // "Notable quotes" — quote-fragment reverse lookups already rank with zero
+  // effort (GSC: '"things generate themselves" guo xiang' at pos ~7), so each
+  // quote gets an anchored, indexable block. The ask-link is the Type-0
+  // differentiator: on Feynman a quote isn't a dead string — the author is
+  // right there to explain it (quote → prefilled chat).
   return (
-    <Section heading="Characteristic phrases">
-      <ul className="characteristic-phrases">
+    <Section heading="Notable quotes">
+      {name ? (
+        <p className="seo-meta">
+          In {name}&apos;s own words — and you can ask about any of them.
+        </p>
+      ) : null}
+      <ul className="notable-quotes">
         {list.map((p, i) => (
-          <li key={i}>
-            <q>{p}</q>
+          <li key={i} id={`quote-${i + 1}`} className="notable-quote">
+            <blockquote>{`“${p}”`}</blockquote>
+            {name && mindId ? (
+              <Link
+                className="notable-quote-ask"
+                href={`/?mind=${encodeURIComponent(mindId)}&q=${encodeURIComponent(
+                  `What did you mean by "${p}"?`,
+                )}`}
+              >
+                Ask {name} about this →
+              </Link>
+            ) : null}
           </li>
         ))}
       </ul>
