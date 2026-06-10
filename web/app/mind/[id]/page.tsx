@@ -70,7 +70,7 @@ export async function generateMetadata({
     // read like Wikipedia/Goodreads. "Ask Them Anything" is concrete (the AMA
     // format everyone knows), names a capability only a living entry has, and
     // sits mid-title so it survives SERP truncation.
-    title: `${mind.name} — Biography, Ideas & Ask Them Anything | Feynman`,
+    title: `${mind.name} — Biography, Ideas & Ask Me Anything | Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {
