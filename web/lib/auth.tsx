@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import { getProConfig, type ProConfig } from "@/lib/config";
 import { initSupabase } from "@/lib/supabase";
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // true, so a Pro user never flashes "Free" before the tier resolves.
   const [tierKnown, setTierKnown] = useState(false);
   const [config, setConfig] = useState<ProConfig | null>(null);
+  const router = useRouter();
   const clientRef = useRef<SupabaseClient | null>(null);
   // The signed-in identity we last fetched the tier for. onAuthStateChange fires
   // applySession on every TOKEN_REFRESHED; without this guard each fire re-ran an
@@ -147,6 +149,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     return { error: null };
   }, []);
+
+  // Post-OAuth return path. Google OAuth is a full-page redirect that always
+  // lands on the origin, so LoginForm stashes any same-site ?next= in
+  // sessionStorage before redirecting; once the session lands here, finish the
+  // journey. Keyed on identity + guarded on the key existing, so token
+  // refreshes and ordinary sign-ins never navigate.
+  useEffect(() => {
+    if (!user) return;
+    let next: string | null = null;
+    try {
+      next = sessionStorage.getItem("feynman:postLoginNext");
+      if (next) sessionStorage.removeItem("feynman:postLoginNext");
+    } catch {
+      /* best-effort */
+    }
+    if (next && next.startsWith("/") && !next.startsWith("//")) router.push(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const signInWithOAuth = useCallback(async (provider: "google") => {
     const client = clientRef.current;

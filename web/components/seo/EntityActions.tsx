@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import ShareDialog from "@/components/share/ShareDialog";
+import { track } from "@/lib/analytics";
 
 /**
  * Top action bar for SEO entity pages: prominent primary actions (Read /
@@ -33,7 +34,18 @@ export default function EntityActions({
   return (
     <div className="seo-actions">
       {actions.map((a) => (
-        <Link key={a.label} href={a.href} className={`seo-action ${a.variant}`}>
+        <Link
+          key={a.label}
+          href={a.href}
+          className={`seo-action ${a.variant}`}
+          onClick={() => {
+            // The SEO→chat funnel's intent step. href carries the entity
+            // (/?book={slug} | /mind/{slug}/chat), so no per-page wiring.
+            if (/^chat\b/i.test(a.label)) {
+              track("chat_cta_clicked", { label: a.label, href: a.href });
+            }
+          }}
+        >
           {a.label}
         </Link>
       ))}

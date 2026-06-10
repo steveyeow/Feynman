@@ -1012,12 +1012,40 @@ def init_db() -> None:
         pass
 
 
+def _unique_slug(conn, table: str, name: str) -> str | None:
+    """Descriptive URL slug for a new entity, deduped within its table.
+
+    Creation-time companion to scripts/backfill_slugs.py — every creation path
+    (discover cron, chat book_context, minds expansion) must assign a slug at
+    INSERT, otherwise the entity ships a bare-UUID URL into the sitemap and
+    internal links until someone remembers to re-run the backfill (the
+    2026-06-08 minds expansion shipped 481 such URLs). Same slugify + -2/-3
+    dedup as the backfill so the two paths can never disagree. Best-effort on
+    races (no UNIQUE constraint): creation is a low-rate cron/script path, and
+    a rare duplicate slug resolves to the older row, matching backfill order.
+    """
+    from app.core.seo import slugify  # local import — db must stay seo-independent at module load
+
+    base = slugify(name or "", max_len=60)
+    if not base:
+        return None
+    slug = base
+    for k in range(2, 60):
+        row = _fetchone(conn, _q(f"SELECT 1 AS hit FROM {table} WHERE slug = ?"), (slug,))  # noqa: S608 — table is a literal
+        if not row:
+            return slug
+        slug = f"{base}-{k}"
+    # Pathological collision run — fall back to a uuid suffix, never loop.
+    return f"{base}-{uuid.uuid4().hex[:6]}"
+
+
 def create_agent(name: str, agent_type: str, source: str | None, meta: dict[str, Any], user_id: str | None = None) -> str:
     agent_id = str(uuid.uuid4())
     with get_conn() as conn:
+        slug = _unique_slug(conn, "agents", name)
         _execute(conn, _q(
-            "INSERT INTO agents (id, name, type, source, status, meta_json, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        ), (agent_id, name, agent_type, source, "indexing", json.dumps(meta), user_id, _utcnow()))
+            "INSERT INTO agents (id, name, slug, type, source, status, meta_json, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ), (agent_id, name, slug, agent_type, source, "indexing", json.dumps(meta), user_id, _utcnow()))
     return agent_id
 
 
@@ -1817,14 +1845,16 @@ def create_mind(data: dict[str, Any]) -> str:
     """Insert a new mind agent. Returns mind_id."""
     mind_id = str(uuid.uuid4())
     with get_conn() as conn:
+        slug = _unique_slug(conn, "minds", data["name"])
         _execute(conn, _q(
             """INSERT INTO minds
-               (id, name, era, domain, bio_summary, persona, thinking_style,
+               (id, name, slug, era, domain, bio_summary, persona, thinking_style,
                 typical_phrases, works, avatar_seed, version, chat_count, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)"""
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)"""
         ), (
             mind_id,
             data["name"],
+            slug,
             data.get("era", ""),
             data.get("domain", ""),
             data.get("bio_summary", ""),

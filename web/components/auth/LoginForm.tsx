@@ -38,6 +38,18 @@ export default function LoginForm() {
       setError("Authentication is not configured.");
       return;
     }
+    // The OAuth round-trip is a full-page redirect that lands back on the
+    // origin, so a ?next= return path can't ride the URL the way the password
+    // flow's router.push does. Stash it in sessionStorage (same tab survives
+    // the redirect); AuthProvider consumes it once the session lands.
+    try {
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        sessionStorage.setItem("feynman:postLoginNext", next);
+      }
+    } catch {
+      /* best-effort */
+    }
     // OAuth redirects away on success, so only clear busy on error — the button
     // stays "Connecting…" until the navigation happens.
     setGoogleBusy(true);
