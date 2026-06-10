@@ -819,7 +819,6 @@ def sitemap_redirect():
 @app.get("/sitemap.xml")
 def sitemap_xml():
     from fastapi.responses import Response
-    from datetime import date
 
     cached = _cache_get("sitemap_xml", _SEO_CACHE_TTL)
     if cached is not None:
@@ -832,7 +831,19 @@ def sitemap_xml():
             },
         )
 
-    today = date.today().isoformat()
+    def _lastmod(ts) -> str:
+        """<lastmod> line from a stored created_at, or '' to omit the tag.
+
+        Google only trusts lastmod when it's consistently truthful — the
+        previous render stamped every URL with date.today(), which (a) taught
+        Google to ignore our lastmod entirely and (b) wasted the strongest
+        crawl-prioritization signal a crawl-budget-limited young domain has.
+        created_at is the honest timestamp we store for entities; URLs with no
+        real timestamp simply omit the tag (valid per the protocol).
+        """
+        s = str(ts or "")[:10]
+        return f"\n    <lastmod>{s}</lastmod>" if len(s) == 10 else ""
+
     pages = [
         {"loc": "/", "priority": "1.0", "changefreq": "daily"},
         {"loc": "/terms", "priority": "0.3", "changefreq": "yearly"},
@@ -842,7 +853,6 @@ def sitemap_xml():
     for p in pages:
         urls += f"""  <url>
     <loc>{_SITE_URL}{p["loc"]}</loc>
-    <lastmod>{today}</lastmod>
     <changefreq>{p["changefreq"]}</changefreq>
     <priority>{p["priority"]}</priority>
   </url>
@@ -873,11 +883,18 @@ def sitemap_xml():
         chunks_by_agent = count_chunks_batch(ready_ids)
         for agent in ready_agents:
             agent_id = agent["id"]
-            aslug = agent.get("slug") or agent_id  # descriptive URL; UUID fallback
+            # Slug-less entities stay OUT of the sitemap. Advertising the bare
+            # UUID URL throws away the keyword signal and — once the slug
+            # backfill runs — turns the advertised URL into a 301, churning
+            # crawl budget twice for the same page. backfill_slugs.py (or the
+            # creation-time slug in db.py) makes this gate a no-op in steady
+            # state; it exists so a future batch import can't regress it.
+            aslug = agent.get("slug")
+            if not aslug:
+                continue
             priority = "0.7" if agent.get("type") == "ai_book" else "0.5"
             urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{aslug}</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/book/{aslug}</loc>{_lastmod(agent.get("created_at"))}
     <changefreq>monthly</changefreq>
     <priority>{priority}</priority>
   </url>
@@ -893,17 +910,19 @@ def sitemap_xml():
                 if not qslug:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{aslug}/q/{qslug}</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/book/{aslug}/q/{qslug}</loc>{_lastmod(agent.get("created_at"))}
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
 """
         all_minds = list_minds(limit=5000)
-        for mind in all_minds:
+        # Same slug gate as books: a mind without a slug isn't advertised (see
+        # the comment above) — the 2026-06-08 expansion shipped 481 UUID URLs
+        # into the sitemap exactly this way.
+        slugged_minds = [m for m in all_minds if m.get("slug")]
+        for mind in slugged_minds:
             urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/mind/{mind["slug"]}</loc>{_lastmod(mind.get("created_at"))}
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -911,7 +930,7 @@ def sitemap_xml():
         # Phase 4B — mind-on-topic compound URLs. Only emit pairs that
         # pass the relevance filter so we don't list /mind/X/on/Y for
         # combos that the route would 404 anyway.
-        for mind in all_minds:
+        for mind in slugged_minds:
             for topic in TOPIC_TAGS:
                 if not qa_module.is_mind_topic_relevant(mind, topic):
                     continue
@@ -919,8 +938,7 @@ def sitemap_xml():
                 if not tslug:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/on/{tslug}</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/mind/{mind["slug"]}/on/{tslug}</loc>{_lastmod(mind.get("created_at"))}
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
@@ -933,7 +951,6 @@ def sitemap_xml():
                 continue
             urls += f"""  <url>
     <loc>{_SITE_URL}/topic/{slug}</loc>
-    <lastmod>{today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -949,24 +966,24 @@ def sitemap_xml():
                 [a["id"] for a in ready_agents]
             )
             for agent in ready_agents:
+                if not agent.get("slug"):
+                    continue
                 if agent_insight_counts.get(agent["id"], 0) < insight_count_min:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent.get("slug") or agent["id"]}/insights</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/book/{agent["slug"]}/insights</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
 """
             mind_insight_counts = count_assistant_messages_for_minds_batch(
-                [m["id"] for m in all_minds]
+                [m["id"] for m in slugged_minds]
             )
-            for mind in all_minds:
+            for mind in slugged_minds:
                 if mind_insight_counts.get(mind["id"], 0) < insight_count_min:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/dialogues</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/mind/{mind["slug"]}/dialogues</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
@@ -986,24 +1003,24 @@ def sitemap_xml():
                 [a["id"] for a in ready_agents]
             )
             for agent in ready_agents:
+                if not agent.get("slug"):
+                    continue
                 if agent_discussion_counts.get(agent["id"], 0) < 1:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/book/{agent.get("slug") or agent["id"]}/discussions</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/book/{agent["slug"]}/discussions</loc>
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
   </url>
 """
             mind_discussion_counts = count_approved_public_sessions_per_mind(
-                [m["id"] for m in all_minds]
+                [m["id"] for m in slugged_minds]
             )
-            for mind in all_minds:
+            for mind in slugged_minds:
                 if mind_discussion_counts.get(mind["id"], 0) < 1:
                     continue
                 urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind.get("slug") or mind["id"]}/discussions</loc>
-    <lastmod>{today}</lastmod>
+    <loc>{_SITE_URL}/mind/{mind["slug"]}/discussions</loc>
     <changefreq>weekly</changefreq>
     <priority>0.4</priority>
   </url>

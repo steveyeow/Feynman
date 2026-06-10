@@ -21,7 +21,11 @@ import { createSession, bumpSessions } from "@/lib/chat";
 import { startWriteBook } from "@/lib/writeBook";
 import { useAuth } from "@/lib/auth";
 import { useProGate } from "@/components/pro/ProOverlay";
-import { restorePendingBookIntent, savePendingBookIntent } from "@/lib/pendingIntent";
+import {
+  restorePendingBookIntent,
+  savePendingBookIntent,
+  savePendingMindIntent,
+} from "@/lib/pendingIntent";
 import { track } from "@/lib/analytics";
 import {
   SelectedChips,
@@ -188,9 +192,11 @@ export default function HomeComposer() {
     const intent = restorePendingBookIntent();
     if (intent) {
       if (intent.question) setValue(intent.question);
-      preselectBook(intent.bookId);
+      if (intent.bookId) preselectBook(intent.bookId);
+      if (intent.mindId) preselectMind(intent.mindId);
       track("pending_intent_restored", {
         via: intent.via,
+        entity: intent.bookId ? "book" : "mind",
         had_question: !!intent.question,
       });
     }
@@ -274,19 +280,33 @@ export default function HomeComposer() {
   const submit = async () => {
     const msg = value.trim();
     if (!msg || busy) return;
-    // Anonymous visitor on the hosted build: stash the book + question they came
-    // for, then bounce through login. After sign-up the composer restores the
-    // intent and resumes the chat (mirrors Reader.askQuestion + the
-    // pending-intent system). The cross-surface "Chat" CTAs route anonymous
-    // users into this composer with a book preselected, so this is the single
-    // funnel gate that keeps the book from being lost through login.
+    // Anonymous visitor on the hosted build: stash the entity (book OR mind) +
+    // question they came for, then bounce through login. After sign-up the
+    // composer restores the intent and resumes the chat (mirrors
+    // Reader.askQuestion + the pending-intent system). The cross-surface "Chat"
+    // CTAs route anonymous users into this composer with an entity preselected,
+    // so this is the single funnel gate that keeps it from being lost through
+    // login. The ?next= return path carries the same state explicitly — it
+    // survives the password flow's router.push and (via the sessionStorage
+    // handoff in LoginForm/auth) the Google OAuth full-page redirect.
     if (authEnabled && !user) {
       const book = [...books.values()][0];
+      const mind = [...minds.values()][0];
       if (book) {
         savePendingBookIntent(book.agentId || book.id, { question: msg, via: "home_composer" });
+      } else if (mind) {
+        savePendingMindIntent(mind.id, { question: msg, via: "home_composer" });
       }
-      track("pending_intent_saved", { via: "home_composer" });
-      router.push("/login");
+      track("pending_intent_saved", {
+        via: "home_composer",
+        entity: book ? "book" : mind ? "mind" : "none",
+      });
+      const qs = new URLSearchParams();
+      if (book) qs.set("book", book.agentId || book.id);
+      else if (mind) qs.set("mind", mind.id);
+      if (msg) qs.set("q", msg);
+      const search = qs.toString();
+      router.push(search ? `/login?next=${encodeURIComponent(`/?${search}`)}` : "/login");
       return;
     }
     // Inviting minds requires pro on the hosted build (legacy app.js 3149).

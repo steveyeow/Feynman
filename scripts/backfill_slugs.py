@@ -68,7 +68,11 @@ def main() -> int:
     # before we read. Adding a NULL column is harmless on a dry run.
     ensure_slug_columns()
 
-    agents = list_agents(limit=100000)
+    # lite=True — the backfill only reads id/name/slug/created_at; the full
+    # SELECT * pulls every book's ~9KB meta_json (~8MB+) through the
+    # non-pooling DSN, which is both needless Supabase egress and flaky over
+    # long-haul connections (observed server-side disconnect mid-read).
+    agents = list_agents(limit=100000, lite=True)
     minds = list_minds(limit=100000)
     print(f"loaded {len(agents)} agents, {len(minds)} minds", file=sys.stderr)
     na = backfill("book", agents, update_agent_slug, args.apply)

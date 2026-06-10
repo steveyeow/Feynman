@@ -19,22 +19,31 @@
 export const PENDING_INTENT_KEY = "feynman:pendingChat";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
-export interface PendingBookIntent {
-  bookId: string;
+/**
+ * A pending chat intent carries the ENTITY the visitor came for — a book
+ * (`bookId`, the original shape) or a great mind (`mindId`). Exactly one is
+ * set. Minds were silently dropped through login before this field existed —
+ * and mind pages are the majority of the SEO surface.
+ */
+export interface PendingChatIntent {
+  bookId?: string;
+  mindId?: string;
   question: string;
   via: string;
   ts: number;
 }
 
-/** Persist a book-chat intent. Best-effort; storage failures are swallowed. */
-export function savePendingBookIntent(
-  bookId: string,
-  opts: { question?: string; via?: string } = {},
+/** Back-compat alias (original book-only shape). */
+export type PendingBookIntent = PendingChatIntent;
+
+function saveIntent(
+  entity: Partial<PendingChatIntent>,
+  opts: { question?: string; via?: string },
 ): void {
-  if (!bookId || typeof window === "undefined") return;
+  if (typeof window === "undefined") return;
   try {
-    const intent: PendingBookIntent = {
-      bookId,
+    const intent: PendingChatIntent = {
+      ...entity,
       question: opts.question || "",
       via: opts.via || "reader",
       ts: Date.now(),
@@ -45,20 +54,39 @@ export function savePendingBookIntent(
   }
 }
 
+/** Persist a book-chat intent. Best-effort; storage failures are swallowed. */
+export function savePendingBookIntent(
+  bookId: string,
+  opts: { question?: string; via?: string } = {},
+): void {
+  if (!bookId) return;
+  saveIntent({ bookId }, opts);
+}
+
+/** Persist a mind-chat intent (the /?mind= composer + mind-page gates). */
+export function savePendingMindIntent(
+  mindId: string,
+  opts: { question?: string; via?: string } = {},
+): void {
+  if (!mindId) return;
+  saveIntent({ mindId }, opts);
+}
+
 /** Read + validate TTL. Returns the intent or null. Does NOT clear it. */
-export function readPendingBookIntent(): PendingBookIntent | null {
+export function readPendingBookIntent(): PendingChatIntent | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(PENDING_INTENT_KEY);
     if (!raw) return null;
-    const intent = JSON.parse(raw) as Partial<PendingBookIntent>;
-    if (!intent?.bookId) return null;
+    const intent = JSON.parse(raw) as Partial<PendingChatIntent>;
+    if (!intent?.bookId && !intent?.mindId) return null;
     if (intent.ts && Date.now() - intent.ts > TTL_MS) {
       localStorage.removeItem(PENDING_INTENT_KEY);
       return null;
     }
     return {
       bookId: intent.bookId,
+      mindId: intent.mindId,
       question: intent.question || "",
       via: intent.via || "reader",
       ts: intent.ts || Date.now(),

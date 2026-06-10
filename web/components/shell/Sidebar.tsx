@@ -10,7 +10,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import ChatHistory from "@/components/chat/ChatHistory";
 import UserMenu from "./UserMenu";
 
@@ -75,6 +75,21 @@ export default function Sidebar() {
   const pathname = usePathname() || "/";
   const [collapsed, setCollapsed] = useState(false);
 
+  // Small screens start collapsed: ≤900px the sidebar becomes a fixed overlay
+  // (app.css), so the desktop expanded-by-default covered the page content on
+  // every mobile visit. Keyed on pathname so navigating FROM the open overlay
+  // also dismisses it (it would otherwise sit over the destination page).
+  // Layout effect rather than a state initializer — the SSR markup is
+  // "expanded", and flipping before first paint avoids both the hydration
+  // mismatch and a visible flash.
+  useLayoutEffect(() => {
+    try {
+      if (window.matchMedia("(max-width: 900px)").matches) setCollapsed(true);
+    } catch {
+      /* matchMedia unavailable → keep the desktop default */
+    }
+  }, [pathname]);
+
   // The collapse styling lives on `.app-layout.sidebar-collapsed` (styles.css),
   // but this aside can't set a class on its parent in JSX — so sync it
   // imperatively. The migration toggled `data-collapsed` on the aside instead,
@@ -86,6 +101,7 @@ export default function Sidebar() {
   }, [collapsed]);
 
   return (
+    <>
     <aside className="app-sidebar" id="app-sidebar" data-collapsed={collapsed}>
       <div className="sidebar-header">
         <Link
@@ -166,5 +182,22 @@ export default function Sidebar() {
         <UserMenu />
       </div>
     </aside>
+    {/* Mobile-only floating opener (index.html #sidebar-float-btn). ≤900px the
+        collapsed sidebar is width:0 — the in-rail brand glyph collapses with
+        it, so without this sibling button there is no way to reopen. CSS shows
+        it only when .sidebar-collapsed is active under 900px. */}
+    <button
+      id="sidebar-float-btn"
+      className="sidebar-float-btn"
+      title="Open sidebar"
+      aria-label="Open sidebar"
+      onClick={() => setCollapsed(false)}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <line x1="9" y1="3" x2="9" y2="21" />
+      </svg>
+    </button>
+    </>
   );
 }

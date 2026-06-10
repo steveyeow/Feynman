@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { track } from "@/lib/analytics";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { createSession, bumpSessions, queueSaveMessage } from "@/lib/chat";
 import { post } from "@/lib/api";
@@ -43,6 +44,16 @@ export default function MindChat({
   const needsSignIn = authEnabled && !user;
   const needsPaywall = !needsSignIn && !isProUser;
   const gated = needsSignIn || needsPaywall;
+
+  // Measure the gate itself: how many SEO-funnel visitors reach this surface
+  // and which wall they hit. Together with chat_cta_clicked (EntityActions)
+  // and upgrade_prompt_shown (ProOverlay) this makes the hard-gate funnel
+  // readable in PostHog: cta → wall → login/upgrade → paid.
+  useEffect(() => {
+    if (!ready) return;
+    if (needsSignIn) track("signin_wall_shown", { surface: "mind_chat", mind_id: mindId });
+    else if (needsPaywall) track("paywall_shown", { surface: "mind_chat", mind_id: mindId });
+  }, [ready, needsSignIn, needsPaywall, mindId]);
 
   // The session backing this chat (created once, when not gated).
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -119,7 +130,10 @@ export default function MindChat({
                 {needsSignIn ? (
                   <>
                     <p>Sign in to chat with {mind.name}</p>
-                    <Link href="/login" className={styles.fallbackLink}>
+                    <Link
+                      href={`/login?next=${encodeURIComponent(`/mind/${mind.slug || mindId}/chat`)}`}
+                      className={styles.fallbackLink}
+                    >
                       Sign in →
                     </Link>
                   </>
