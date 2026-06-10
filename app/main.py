@@ -915,7 +915,7 @@ def sitemap_xml():
     <priority>0.5</priority>
   </url>
 """
-        all_minds = list_minds(limit=5000)
+        all_minds = list_minds(limit=5000, lite=True)
         # Same slug gate as books: a mind without a slug isn't advertised (see
         # the comment above) — the 2026-06-08 expansion shipped 481 UUID URLs
         # into the sitemap exactly this way.
@@ -1245,7 +1245,7 @@ The project draws inspiration from Richard Feynman's approach to learning:
 
 """
     try:
-        for mind in list_minds(limit=5000):
+        for mind in list_minds(limit=5000, lite=True):
             name = mind.get("name", "Unknown")
             domain = mind.get("domain", "")
             content += f"- [{name}]({_SITE_URL}/mind/{mind['id']}): {domain}\n"
@@ -3533,7 +3533,7 @@ def api_cron_indexnow(request: Request) -> dict[str, Any]:
             continue
         urls.append(f"{_SITE_URL}/book/{a['id']}")
     # Recent minds → /mind/{id}
-    for m in list_minds(limit=2000):
+    for m in list_minds(limit=2000, lite=True):
         if (m.get("created_at") or "") < cutoff:
             continue
         urls.append(f"{_SITE_URL}/mind/{m['id']}")
@@ -3553,7 +3553,7 @@ def api_cron_indexnow(request: Request) -> dict[str, Any]:
 def api_cron_seed_minds(request: Request) -> dict[str, Any]:
     """Cron-triggered mind seeding. Seeds a batch per run (Hobby has 60s timeout)."""
     _verify_cron(request)
-    existing_count = len(list_minds(limit=5000))
+    existing_count = len(list_minds(limit=5000, lite=True))
     if existing_count >= len(SEED_MINDS):
         return {"status": "complete", "total": existing_count}
     seeded = _seed_minds_batch(_SEED_BATCH_SIZE)
@@ -5127,12 +5127,12 @@ _embed_backfill_done = False
 def api_list_minds(background_tasks: BackgroundTasks):
     from fastapi.responses import JSONResponse
     global _embed_backfill_done
-    minds = list_minds(limit=5000)
+    minds = list_minds(limit=5000, lite=True)
     # Lazy seeding: seed 1 mind per request to stay within Vercel's 10s timeout
     if _IS_SERVERLESS and len(minds) < len(SEED_MINDS):
         seeded = _seed_minds_batch(_LAZY_SEED_SIZE)
         if seeded:
-            minds = list_minds(limit=5000)
+            minds = list_minds(limit=5000, lite=True)
     # Lazy embedding backfill: only schedule if there's actual work
     if not _embed_backfill_done:
         _embed_backfill_done = True
