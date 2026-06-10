@@ -67,6 +67,14 @@
   --bg-hover: #f3f4f6;
 }
 
+/* Chat-with CTA color — an elegant ink-navy in light mode, white in dark
+   (the user prefers a color over pure black; dark stays white). Mirrors
+   CHAT_CTA in lib/og/theme.ts (the share-card pill). Standalone block so it
+   covers default + system-dark (unless forced .light) + forced .dark. */
+:root { --chat-cta-bg: #15543f; --chat-cta-fg: #ffffff; }
+@media (prefers-color-scheme: dark) { :root:not(.light) { --chat-cta-bg: #f5f5f7; --chat-cta-fg: #1c1c1e; } }
+:root.dark { --chat-cta-bg: #f5f5f7; --chat-cta-fg: #1c1c1e; }
+
 /* Dark material — surfaces from the production dark bgs, not tinted. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
@@ -303,7 +311,7 @@ body { background-color: var(--bg-home); }
    near-white on dark) instead of the loud accent blue, matching the dark
    "Chat with" pill on the share cards. Neutral shadow, soft lift on hover. */
 .seo-action.primary {
-  background: var(--btn-solid-bg); color: var(--btn-solid-color); border-color: transparent;
+  background: var(--chat-cta-bg); color: var(--chat-cta-fg); border-color: transparent;
   box-shadow: 0 1px 2px rgba(0,0,0,0.10), 0 4px 14px rgba(0,0,0,0.14);
 }
 .seo-action.primary:hover { transform: translateY(-1px); opacity: 0.92; box-shadow: 0 3px 8px rgba(0,0,0,0.14), 0 10px 26px rgba(0,0,0,0.18); }

@@ -25,6 +25,7 @@ import {
   INK_SOFT,
   INK_MUTE,
   HAIRLINE,
+  CHAT_CTA,
   clip,
 } from "@/lib/og/theme";
 
@@ -195,7 +196,7 @@ function ChatIcon({ size = 24 }: { size?: number }) {
 // the whole point of the product, and the click-through driver.
 function ChatPill({ label }: { label: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", background: INK, color: "#ffffff", borderRadius: 999, padding: "15px 30px", marginTop: 30, boxShadow: "0 8px 22px rgba(0,0,0,0.14)" }}>
+    <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", background: CHAT_CTA, color: "#ffffff", borderRadius: 999, padding: "15px 30px", marginTop: 30, boxShadow: "0 8px 22px rgba(0,0,0,0.16)" }}>
       <ChatIcon />
       <div style={{ display: "flex", marginLeft: 13, fontSize: 26, fontWeight: 700, fontFamily: FONT }}>{clip(label, 30)}</div>
     </div>
