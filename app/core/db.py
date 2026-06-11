@@ -2152,6 +2152,19 @@ def list_minds_missing_questions(limit: int = 50) -> list[dict[str, Any]]:
         return [dict(r) for r in rows]
 
 
+def count_minds_missing_questions() -> int:
+    """True remaining count for the mind-qa backfill. list_minds_missing_questions
+    caps its list (limit param), so `len(list) - done` misreports a large backlog
+    as a constant (e.g. 197 forever with a 200 cap) — which also false-triggers
+    drain-loop stall guards. COUNT(*) is exact and cheap."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT count(*) AS n FROM minds "
+            "WHERE id NOT IN (SELECT DISTINCT mind_id FROM mind_questions)"
+        ), ())
+        return int(row["n"] if row else 0)
+
+
 def list_mind_question_slugs() -> list[dict[str, Any]]:
     """All (mind_id, slug) pairs — one slim query for the sitemap."""
     with get_conn() as conn:
