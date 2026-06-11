@@ -57,6 +57,10 @@ def main() -> int:
                         help="Create at most this many NEW minds this run (quota control).")
     parser.add_argument("--sleep", type=float, default=1.0,
                         help="Seconds to sleep between mind creations (throttle Gemini).")
+    parser.add_argument("--sparql-throttle", type=float, default=None,
+                        help="Seconds between WDQS/SPARQL domain queries. Raise to ~70-90 "
+                             "during a WDQS outage that rate-limits to 1 req/min (else the "
+                             "15 domain queries all 429 and discovery returns nothing).")
     parser.add_argument("--link-works", action="store_true",
                         help="Link existing catalog books to each mind (off by default — "
                              "avoid until you want the extra cross-links).")
@@ -89,7 +93,8 @@ def main() -> int:
     print(f"have {len(existing)} minds; querying Wikidata candidates…", file=sys.stderr)
 
     try:
-        candidates = discover_candidates(per_domain_limit=args.per_domain)
+        candidates = discover_candidates(per_domain_limit=args.per_domain,
+                                         sparql_throttle=args.sparql_throttle)
     except Exception as exc:
         print(f"Wikidata discovery failed: {exc}", file=sys.stderr)
         return 2
