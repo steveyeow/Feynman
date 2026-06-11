@@ -10,6 +10,7 @@
     { "path": "/api/cron/discover", "schedule": "0 6 * * 3" },
     { "path": "/api/cron/embed-minds", "schedule": "0 0 * * *" },
     { "path": "/api/cron/voice-minds", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/mind-qa", "schedule": "0 3 * * *" },
     { "path": "/api/cron/prestore-overviews", "schedule": "30 2 * * *" },
     { "path": "/api/cron/indexnow", "schedule": "0 4 * * *" },
     { "path": "/api/cron/egress-watch", "schedule": "0 8 * * *" }

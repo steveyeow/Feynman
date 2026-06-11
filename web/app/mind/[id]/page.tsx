@@ -23,6 +23,7 @@ import {
   fetchMindLibrary,
   fetchMindThemes,
   fetchMindDialogues,
+  fetchMindQuestions,
   isMindTopicRelevant,
   mindSameAs,
   metaDescription,
@@ -101,7 +102,7 @@ export default async function MindPage({
   if (!mind) notFound();
 
   // Enrichment in parallel; each degrades to empty on failure.
-  const [agents, related, topics, library, themes, dialogues] = await Promise.all([
+  const [agents, related, topics, library, themes, dialogues, mindQuestions] = await Promise.all([
     fetchAgents(),
     fetchRelatedMinds(mind),
     fetchTopics(),
@@ -111,6 +112,7 @@ export default async function MindPage({
     // content (matches the sitemap's ≥3-message gate), so the thousands of new
     // minds don't link to an empty dialogues page.
     fetchMindDialogues(params.id, 3),
+    fetchMindQuestions(params.id),
   ]);
 
   const matchingTopics = topics.filter((t) => isMindTopicRelevant(mind, t));
@@ -293,6 +295,21 @@ export default async function MindPage({
 
       {/* ③ In their voice — signature phrases + core approach (first-person feel). */}
       <MindPhrases phrases={mind.typical_phrases} name={mind.name} mindId={params.id} />
+
+      {/* Pre-answered Q&A pages (the person-question search demand: "was X a…",
+          "X's theory explained"). Gated on stored answers — never empty links. */}
+      {mindQuestions.length ? (
+        <section className="seo-section">
+          <h2>Questions about {mind.name}</h2>
+          <ul>
+            {mindQuestions.map((q) => (
+              <li key={q.slug}>
+                <Link href={`/mind/${params.id}/q/${q.slug}`}>{q.question}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {/* Full persona stays private; the API exposes a bounded excerpt. */}
       <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
 
