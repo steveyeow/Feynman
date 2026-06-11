@@ -83,3 +83,31 @@
   font-weight: 600;
   text-decoration: none;
 }
+
+/* Gated chat shell — the greeting bubble + composer are visible (the product,
+   not a wall); send routes to sign-in / the Pro overlay. */
+.gateGreetName {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.gateGreetText {
+  margin: 0;
+  line-height: 1.6;
+}
+.gateHint {
+  padding: 6px 16px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.gateUpgradeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
