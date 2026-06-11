@@ -285,7 +285,10 @@ def backfill_mind_questions(batch_size: int = 3) -> tuple[int, int]:
                 done += 1
         except Exception as exc:
             log.warning("mind-qa generation failed for %s: %s", m.get("name"), exc)
-    return done, max(0, len(missing) - done)
+    # True remaining via COUNT — len(missing) is capped by the list limit, which
+    # made `remaining` read as a constant (e.g. 197) on a large backlog.
+    from .db import count_minds_missing_questions
+    return done, count_minds_missing_questions()
 
 
 def backfill_mind_voices(batch_size: int = 6) -> tuple[int, int]:
