@@ -82,9 +82,13 @@ export async function generateMetadata({
   const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
-    // Intent words (summary/key-ideas per GSC) + the product verb. "Chat" over
-    // "Ask the Book" per user decision — matches the on-page CTA language.
-    title: `${data.title} — Summary, Key Ideas & Chat | Feynman`,
+    // Type-0 title rule (seo-geo-master-plan §3.5): state the unique artifact
+    // plainly — the chattable book. Curly quotes mark the title as the book so
+    // "Chat with" parses; author gives the Goodreads-style context. Intent
+    // words (summary/key-ideas per GSC) follow. FROZEN until GSC CTR data.
+    title: data.author
+      ? `Chat with “${data.title}” by ${data.author} — Summary & Key Ideas | Feynman`
+      : `Chat with “${data.title}” — Summary & Key Ideas | Feynman`,
     description: desc,
     alternates: { canonical },
     ...(isStub ? { robots: { index: false, follow: true } } : {}),

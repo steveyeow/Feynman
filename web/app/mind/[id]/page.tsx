@@ -67,11 +67,13 @@ export async function generateMetadata({
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
   return {
-    // Title = verified intent words (biography/ideas per GSC) + the product's
-    // own verb. "Chat" over "Ask …" per user decision — Chat is the brand
-    // language everywhere (every CTA says "Chat with X"), so the SERP promise
-    // and the on-page action match.
-    title: `${mind.name} — Biography, Ideas & Chat | Feynman`,
+    // Type-0 title rule (seo-geo-master-plan §3.5): the title states the
+    // unique artifact plainly — here, the chattable thinker — like every other
+    // type does (Type 1 = the question, Type 2 = "How X might approach Y").
+    // "Chat with {Name}" LEADS (the capability no static site has, and the
+    // exact on-page CTA), intent words (biography/ideas per GSC) follow.
+    // FROZEN until GSC CTR data says otherwise — do not wordsmith further.
+    title: `Chat with ${mind.name} — Biography & Key Ideas | Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {
