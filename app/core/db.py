@@ -5,6 +5,8 @@ import logging
 import os
 import re
 import secrets
+import threading
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -90,20 +92,121 @@ def _pg():
     import psycopg2.extras
     return psycopg2
 
+
+# ── In-process connection pool (PG) ──────────────────────────────────────
+# Every get_conn() used to open a FRESH connection — a full TCP+TLS+SCRAM
+# handshake to the Supabase pooler (cross-region from the Vercel function,
+# ~300-500ms) PER QUERY. That handshake, not query execution, dominated every
+# API round-trip (measured 2026-06-11: detail pages cost ~0.67s × N fetches).
+# Reusing warm connections drops a query to ~RTT+exec.
+#
+# Server-side, the runtime DSN already points at pgbouncer (port 6543,
+# TRANSACTION mode), which is what makes holding idle CLIENT connections cheap:
+# an idle client conn maps to no Postgres backend. psycopg2 uses no prepared
+# statements or session state, so transaction-mode reuse is safe. Each process
+# (Vercel instance, script) gets its own small pool; FastAPI sync endpoints run
+# in a threadpool, hence ThreadedConnectionPool. On burst (pool exhausted) we
+# fall back to a direct one-shot connection — the pre-pool behavior, never an
+# error.
+_PG_POOL: Any = None
+_PG_POOL_LOCK = threading.Lock()
+_PG_POOL_MAX = max(1, int(os.getenv("DB_POOL_MAX", "8") or "8"))
+# id(conn) → monotonic checkin time. Bounded: only live pooled conns (≤ max).
+_PG_LAST_USED: dict[int, float] = {}
+# Revalidate (SELECT 1) a conn idle longer than this before trusting it — the
+# pooler/network may have dropped it. Recently-used checkouts skip the ping.
+_PG_IDLE_PING_S = 30.0
+
+
+def _pg_pool():
+    global _PG_POOL
+    if _PG_POOL is None:
+        with _PG_POOL_LOCK:
+            if _PG_POOL is None:
+                from psycopg2.pool import ThreadedConnectionPool
+
+                _PG_POOL = ThreadedConnectionPool(1, _PG_POOL_MAX, DATABASE_URL)
+    return _PG_POOL
+
+
+def _checkout_pg() -> tuple[Any, bool]:
+    """A validated pooled connection, or a direct one-shot fallback.
+
+    Returns (conn, direct). A `direct` connection is closed on checkin instead
+    of being returned to the pool.
+    """
+    try:
+        pool = _pg_pool()
+        conn = pool.getconn()
+    except Exception:
+        # Pool exhausted (burst) or pool init failed → pre-pool behavior.
+        return _pg().connect(DATABASE_URL), True
+
+    # Validate: discard dead conns; ping ones idle long enough to be suspect.
+    for _ in range(_PG_POOL_MAX + 1):
+        if not getattr(conn, "closed", 1):
+            idle = time.monotonic() - _PG_LAST_USED.get(id(conn), 0.0)
+            if idle < _PG_IDLE_PING_S:
+                return conn, False
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                cur.fetchone()
+                conn.rollback()  # end the ping's implicit transaction
+                return conn, False
+            except Exception:
+                pass  # stale — discard below and try the next one
+        _PG_LAST_USED.pop(id(conn), None)
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        try:
+            conn = pool.getconn()
+        except Exception:
+            return _pg().connect(DATABASE_URL), True
+    return conn, False  # bounded loop spent; the caller's query surfaces any error
+
+
+def _checkin_pg(conn: Any, direct: bool) -> None:
+    if direct:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return
+    _PG_LAST_USED[id(conn)] = time.monotonic()
+    try:
+        # putconn itself rolls back any transaction left open before pooling.
+        _PG_POOL.putconn(conn)
+    except Exception:
+        _PG_LAST_USED.pop(id(conn), None)
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 @contextmanager
 def get_conn():
     if _USE_PG:
-        pg = _pg()
-        conn = pg.connect(DATABASE_URL)
-        conn.autocommit = False
+        # autocommit stays at psycopg2's default (False) — never toggled, so
+        # pooled reuse can't inherit a surprising mode from a prior checkout.
+        conn, direct = _checkout_pg()
         try:
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise
         finally:
-            conn.close()
+            _checkin_pg(conn, direct)
     else:
         import sqlite3
         _ensure_dirs()
