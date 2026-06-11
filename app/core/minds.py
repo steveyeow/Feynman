@@ -232,7 +232,15 @@ _QA_SYSTEM = (
     "answer AS the thinker in the first person. Answers must be grounded in the "
     "thinker's documented work and ideas — no invented quotes, dates, or facts. "
     "Strictly avoid religion, party politics, health, and family/private life; for "
-    "living people stay on their public professional record only."
+    "living people stay on their public professional record only. "
+    # Two categories proven problematic in the first full generation pass
+    # (audited 2026-06-11; offending rows deleted by hand):
+    "NEVER write questions that ask whether a living person is a dictator/"
+    "authoritarian or any other political-label question about a living person. "
+    "NEVER write questions asking the thinker to answer for deaths, famines, "
+    "atrocities, or other historical harms in the first person (a persona "
+    "deflecting responsibility reads as apologia) — critiques of their IDEAS are "
+    "fine; trials of their CONDUCT are not."
 )
 
 
