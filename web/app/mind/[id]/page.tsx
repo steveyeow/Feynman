@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -49,7 +50,7 @@ function descFor(mind: MindDetail): string {
   // {occupation}") — then differentiates with the Type-0 value (a living entry
   // you can question) instead of reading like another static bio.
   const who = [mind.era, mind.domain].filter(Boolean).join(" · ");
-  const lead = `Who is ${mind.name}?${who ? ` ${who}.` : ""} Biography and key ideas — then ask ${mind.name} anything and get answers in their own voice. A living entry, not a static page.`;
+  const lead = `Who is ${mind.name}?${who ? ` ${who}.` : ""} Biography and key ideas — then chat with ${mind.name} directly and get answers in their own voice. A living entry, not a static page.`;
   return metaDescription(mind.bio_summary ? `${lead} ${mind.bio_summary}` : lead);
 }
 
@@ -66,12 +67,11 @@ export async function generateMetadata({
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
   return {
-    // Title = verified intent words (biography/ideas per GSC) + a hook no
-    // static site can write. "& Dialogue" was too abstract — at a glance it
-    // read like Wikipedia/Goodreads. "Ask Them Anything" is concrete (the AMA
-    // format everyone knows), names a capability only a living entry has, and
-    // sits mid-title so it survives SERP truncation.
-    title: `${mind.name} — Biography, Ideas & Ask Me Anything | Feynman`,
+    // Title = verified intent words (biography/ideas per GSC) + the product's
+    // own verb. "Chat" over "Ask …" per user decision — Chat is the brand
+    // language everywhere (every CTA says "Chat with X"), so the SERP promise
+    // and the on-page action match.
+    title: `${mind.name} — Biography, Ideas & Chat | Feynman`,
     description: desc,
     alternates: { canonical },
     openGraph: {
@@ -98,37 +98,19 @@ export default async function MindPage({
 }: {
   params: { id: string };
 }) {
-  const mind = await fetchMind(params.id);
+  const id = params.id;
+  // FAST PATH — only the primary mind row + the (small) topic list the hero's
+  // starter chips need. Everything heavier (full catalog for works, related-mind
+  // similarity, library/themes/dialogues/questions) is fetched inside Suspense
+  // boundaries below, so the hero + the mind's own content (voice, perspectives,
+  // phrases, bio) paint in ~one round-trip instead of waiting on all ~7 fetches.
+  const [mind, topics] = await Promise.all([fetchMind(id), fetchTopics()]);
   if (!mind) notFound();
-
-  // Enrichment in parallel; each degrades to empty on failure.
-  const [agents, related, topics, library, themes, dialogues, mindQuestions] = await Promise.all([
-    fetchAgents(),
-    fetchRelatedMinds(mind),
-    fetchTopics(),
-    fetchMindLibrary(params.id),
-    fetchMindThemes(params.id),
-    // Gate the "Recent dialogues" link: only advertise it once the page has real
-    // content (matches the sitemap's ≥3-message gate), so the thousands of new
-    // minds don't link to an empty dialogues page.
-    fetchMindDialogues(params.id, 3),
-    fetchMindQuestions(params.id),
-  ]);
 
   const matchingTopics = topics.filter((t) => isMindTopicRelevant(mind, t));
 
-  // "Books in this mind's library" = linked books NOT already in Notable Works
-  // (dedupe by case-insensitive title), per render_books_for_mind.
-  const workTitles = new Set((mind.works || []).map((w) => w.toLowerCase().trim()));
-  const libraryExtra = library.filter((b) => !workTitles.has((b.name || "").toLowerCase().trim()));
-
-  const canonical = abs(`/mind/${params.id}`);
-  const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
-  // Chat with a single mind → the DEDICATED 1:1 chat page (not the multi-mind
-  // home composer, which would treat the mind as an invited participant). The
-  // Chat action lives at the TOP.
-  const chatHref = `/mind/${encodeURIComponent(params.id)}/chat`;
-
+  const canonical = abs(`/mind/${id}`);
+  const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(id)}`);
   const eraDomain = [mind.era, mind.domain].filter(Boolean).join(" · ");
 
   const personLd = personJsonLd({
@@ -147,7 +129,7 @@ export default async function MindPage({
   ]);
 
   const actions: EntityAction[] = [
-    { label: `Chat with ${mind.name}`, href: chatHref, variant: "primary" },
+    { label: `Chat with ${mind.name}`, href: `/mind/${encodeURIComponent(id)}/chat`, variant: "primary" },
   ];
 
   // First-person hook — the mind's own signature line (a real quote, no
@@ -178,7 +160,7 @@ export default async function MindPage({
         {starters.map((s) => (
           <Link
             key={s.q}
-            href={`/?mind=${encodeURIComponent(params.id)}&q=${encodeURIComponent(s.q)}`}
+            href={`/?mind=${encodeURIComponent(id)}&q=${encodeURIComponent(s.q)}`}
             className="mind-starter-chip"
           >
             <svg
@@ -205,31 +187,13 @@ export default async function MindPage({
     </>
   );
 
-  // Rail = genuinely complementary "Related minds" only. The topic list lives in
-  // the body ("How {mind} approaches key topics"); a rail "Topics" card repeated
-  // the same labels on-screen (the bug the /topic review removed), so the
-  // body section now carries BOTH the essay link and the topic-hub link instead.
-  // Rail = the mind's own Notable works (credibility + book links, promoted from
-  // the page bottom to the top-right) followed by complementary Related minds.
-  const hasWorks = (mind.works || []).filter(Boolean).length > 0;
-  const rail =
-    hasWorks || related.length ? (
-      <>
-        <MindWorks works={mind.works} agents={agents} variant="rail" />
-        {related.length ? (
-          <div className="seo-rail-card">
-            <h3>Related minds</h3>
-            <ul>
-              {related.slice(0, 8).map((rm) => (
-                <li key={rm.id}>
-                  <Link href={`/mind/${rm.slug || rm.id}`}>{rm.name}</Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </>
-    ) : null;
+  // Rail (Notable works + Related minds) needs the full catalog + similarity —
+  // stream it so it never blocks the hero.
+  const rail = (
+    <Suspense fallback={null}>
+      <MindRail id={id} mind={mind} />
+    </Suspense>
+  );
 
   return (
     <EntityLayout hero={hero} rail={rail}>
@@ -259,7 +223,7 @@ export default async function MindPage({
             {matchingTopics.slice(0, 8).map((t) => (
               <Link
                 key={t}
-                href={`/mind/${params.id}/on/${topicSlug(t)}`}
+                href={`/mind/${id}/on/${topicSlug(t)}`}
                 className="mind-topic-card"
               >
                 <span className="mind-topic-card-eyebrow">How {mind.name} approaches</span>
@@ -271,45 +235,20 @@ export default async function MindPage({
         </section>
       ) : null}
 
-      {/* ② A LIVING mind: what people actually discuss + recent dialogues (Type 4). */}
-      {themes.length ? (
-        <section className="seo-section">
-          <h2>What people explore with {mind.name}</h2>
-          <p className="seo-meta">
-            Topics readers have actually been discussing with {mind.name} on Feynman.
-            Updates as new conversations happen.
-          </p>
-          <ul className="theme-list">
-            {themes.map((t) => (
-              <li key={t.topic} className="theme-chip">
-                {t.topic}
-                {t.count > 1 ? <span className="theme-count"> ×{t.count}</span> : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {dialogues.length >= 3 ? (
-        <DialoguesLink mindId={params.id} name={mind.name} />
-      ) : null}
+      {/* ② A LIVING mind: what people discuss + recent dialogues (Type 4).
+          Deferred — community aggregates, not core to the first paint. */}
+      <Suspense fallback={null}>
+        <MindLivingSections id={id} name={mind.name} />
+      </Suspense>
 
       {/* ③ In their voice — signature phrases + core approach (first-person feel). */}
-      <MindPhrases phrases={mind.typical_phrases} name={mind.name} mindId={params.id} />
+      <MindPhrases phrases={mind.typical_phrases} name={mind.name} mindId={id} />
 
-      {/* Pre-answered Q&A pages (the person-question search demand: "was X a…",
-          "X's theory explained"). Gated on stored answers — never empty links. */}
-      {mindQuestions.length ? (
-        <section className="seo-section">
-          <h2>Questions about {mind.name}</h2>
-          <ul>
-            {mindQuestions.map((q) => (
-              <li key={q.slug}>
-                <Link href={`/mind/${params.id}/q/${q.slug}`}>{q.question}</Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {/* Pre-answered Q&A pages (the person-question search demand). Deferred. */}
+      <Suspense fallback={null}>
+        <MindQuestionsSection id={id} name={mind.name} />
+      </Suspense>
+
       {/* Full persona stays private; the API exposes a bounded excerpt. */}
       <MindPersonaExcerpt persona={mind.persona_excerpt || mind.persona} />
 
@@ -317,18 +256,130 @@ export default async function MindPage({
       <MindBio bio={mind.bio_summary} name={mind.name} />
       <MindThinkingStyle style={mind.thinking_style} />
 
-      {libraryExtra.length ? (
-        <section className="seo-section">
-          <h2>Books in {mind.name}&apos;s library</h2>
-          <ul className="related-books">
-            {libraryExtra.map((b) => (
-              <li key={b.id}>
-                <Link href={`/book/${b.slug || b.id}`}>{b.name}</Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {/* Books in the mind's library (minus Notable works) — deferred. */}
+      <Suspense fallback={null}>
+        <MindLibrarySection id={id} name={mind.name} works={mind.works} />
+      </Suspense>
     </EntityLayout>
   );
+}
+
+// ── Deferred (streamed) sections ─────────────────────────────────────────
+// Each fetches its own data and degrades to nothing on failure, so a slow or
+// failing enrichment fetch never blocks (or breaks) the hero + core content.
+
+async function MindRail({ id, mind }: { id: string; mind: MindDetail }) {
+  try {
+    const [agents, related] = await Promise.all([fetchAgents(), fetchRelatedMinds(mind)]);
+    const hasWorks = (mind.works || []).filter(Boolean).length > 0;
+    if (!hasWorks && !related.length) return null;
+    return (
+      <>
+        <MindWorks works={mind.works} agents={agents} variant="rail" />
+        {related.length ? (
+          <div className="seo-rail-card">
+            <h3>Related minds</h3>
+            <ul>
+              {related.slice(0, 8).map((rm) => (
+                <li key={rm.id}>
+                  <Link href={`/mind/${rm.slug || rm.id}`}>{rm.name}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </>
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function MindLivingSections({ id, name }: { id: string; name: string }) {
+  try {
+    const [themes, dialogues] = await Promise.all([
+      fetchMindThemes(id),
+      fetchMindDialogues(id, 3),
+    ]);
+    return (
+      <>
+        {themes.length ? (
+          <section className="seo-section">
+            <h2>What people explore with {name}</h2>
+            <p className="seo-meta">
+              Topics readers have actually been discussing with {name} on Feynman.
+              Updates as new conversations happen.
+            </p>
+            <ul className="theme-list">
+              {themes.map((t) => (
+                <li key={t.topic} className="theme-chip">
+                  {t.topic}
+                  {t.count > 1 ? <span className="theme-count"> ×{t.count}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {dialogues.length >= 3 ? <DialoguesLink mindId={id} name={name} /> : null}
+      </>
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function MindQuestionsSection({ id, name }: { id: string; name: string }) {
+  try {
+    const mindQuestions = await fetchMindQuestions(id);
+    if (!mindQuestions.length) return null;
+    return (
+      <section className="seo-section">
+        <h2>Questions about {name}</h2>
+        <ul>
+          {mindQuestions.map((q) => (
+            <li key={q.slug}>
+              <Link href={`/mind/${id}/q/${q.slug}`}>{q.question}</Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function MindLibrarySection({
+  id,
+  name,
+  works,
+}: {
+  id: string;
+  name: string;
+  works?: string[];
+}) {
+  try {
+    const library = await fetchMindLibrary(id);
+    // "Books in this mind's library" = linked books NOT already in Notable Works
+    // (dedupe by case-insensitive title).
+    const workTitles = new Set((works || []).map((w) => w.toLowerCase().trim()));
+    const libraryExtra = library.filter(
+      (b) => !workTitles.has((b.name || "").toLowerCase().trim()),
+    );
+    if (!libraryExtra.length) return null;
+    return (
+      <section className="seo-section">
+        <h2>Books in {name}&apos;s library</h2>
+        <ul className="related-books">
+          {libraryExtra.map((b) => (
+            <li key={b.id}>
+              <Link href={`/book/${b.slug || b.id}`}>{b.name}</Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  } catch {
+    return null;
+  }
 }
