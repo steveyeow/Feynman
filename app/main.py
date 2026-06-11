@@ -927,6 +927,20 @@ def sitemap_xml():
     <priority>0.6</priority>
   </url>
 """
+        # Per-mind Q&A pages — only minds with STORED answers are advertised
+        # (the row exists ⇒ the page renders substantively; no thin shells).
+        from .core.db import list_mind_question_slugs
+        _mq: dict[str, list[str]] = {}
+        for _r in list_mind_question_slugs():
+            _mq.setdefault(_r["mind_id"], []).append(_r["slug"])
+        for mind in slugged_minds:
+            for qslug in _mq.get(mind["id"], []):
+                urls += f"""  <url>
+    <loc>{_SITE_URL}/mind/{mind["slug"]}/q/{qslug}</loc>{_lastmod(mind.get("created_at"))}
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+"""
         # Phase 4B — mind-on-topic compound URLs. Only emit pairs that
         # pass the relevance filter so we don't list /mind/X/on/Y for
         # combos that the route would 404 anyway.
@@ -3593,6 +3607,48 @@ def api_cron_voice_minds(request: Request) -> dict[str, Any]:
     except Exception as exc:
         log.error("Voice-minds cron failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/api/cron/mind-qa")
+def api_cron_mind_qa(request: Request) -> dict[str, Any]:
+    """Pre-store per-mind Q&A pages (/mind/{id}/q/{slug}) for minds that have
+    none — the mind-side mirror of the book /q pages, driven by verified search
+    demand for person-specific questions (GSC: 'was rousseau a romantic',
+    'bf skinner educational background', …). Bounded per call (one chat-LLM
+    round trip per mind); the daily schedule self-fills new minds; loop with
+    the CRON_SECRET bearer to drain a backlog."""
+    _verify_cron(request)
+    from .core.minds import backfill_mind_questions
+    try:
+        done, remaining = backfill_mind_questions(batch_size=3)
+        return {"status": "ok", "minds_done": done, "remaining": remaining}
+    except Exception as exc:
+        log.error("Mind-qa cron failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/api/minds/{mind_id}/questions")
+def api_mind_questions(mind_id: str) -> JSONResponse:
+    """Stored Q&A list for a mind (slug + question). Powers the detail-page
+    'Questions about {name}' section and the q-page related list."""
+    from .core.db import list_mind_questions
+    return JSONResponse(
+        content={"questions": list_mind_questions(mind_id)},
+        headers={"Cache-Control": "public, max-age=300, s-maxage=3600"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/q/{slug}")
+def api_mind_question(mind_id: str, slug: str) -> JSONResponse:
+    """One stored, pre-answered mind question — zero LLM at request time."""
+    from .core.db import get_mind_question
+    qa = get_mind_question(mind_id, slug)
+    if not qa:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return JSONResponse(
+        content=qa,
+        headers={"Cache-Control": "public, max-age=300, s-maxage=86400"},
+    )
 
 
 @app.get("/api/cron/prestore-overviews")

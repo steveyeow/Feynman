@@ -761,6 +761,44 @@ export async function fetchMindOnTopic(id: string, slug: string): Promise<MindOn
   }
 }
 
+export interface MindQuestionItem {
+  slug: string;
+  question: string;
+}
+
+export interface MindQA {
+  slug: string;
+  question: string;
+  answer: string;
+  created_at?: string;
+}
+
+/** Stored Q&A list for a mind (slug + question) — detail-page section + related list. */
+export async function fetchMindQuestions(id: string): Promise<MindQuestionItem[]> {
+  try {
+    const res = await get<{ questions?: MindQuestionItem[] }>(
+      `/api/minds/${encodeURIComponent(id)}/questions`,
+      { next: { revalidate: 600 } },
+    );
+    return Array.isArray(res?.questions) ? res.questions : [];
+  } catch {
+    return [];
+  }
+}
+
+/** One pre-answered mind question (zero LLM at request time — stored by the mind-qa cron). */
+export async function fetchMindQA(id: string, slug: string): Promise<MindQA | null> {
+  try {
+    const res = await get<MindQA>(
+      `/api/minds/${encodeURIComponent(id)}/q/${encodeURIComponent(slug)}`,
+      { next: { revalidate: 86400 } },
+    );
+    return res && res.question ? res : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PublicDiscussion {
   id: string;
   title: string;

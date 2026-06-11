@@ -22,6 +22,8 @@ from .db import (
     list_mind_memories,
     list_minds,
     list_minds_missing_embeddings,
+    add_mind_question,
+    list_minds_missing_questions,
     list_minds_missing_voice,
     list_minds_with_embeddings,
     update_mind_embedding,
@@ -223,6 +225,67 @@ def _voice_prompt(name: str, domain: str, bio: str, style: str) -> str:
         "'Hi', 'Hail') — open directly with your name or an idea. "
         f"Ground it in:\n{(bio or '')[:380]}\n{(style or '')[:280]}"
     )
+
+
+_QA_SYSTEM = (
+    "You write search-optimized Q&A entries for an encyclopedia of thinkers, then "
+    "answer AS the thinker in the first person. Answers must be grounded in the "
+    "thinker's documented work and ideas — no invented quotes, dates, or facts. "
+    "Strictly avoid religion, party politics, health, and family/private life; for "
+    "living people stay on their public professional record only."
+)
+
+
+def _qa_prompt(m: dict[str, Any]) -> str:
+    try:
+        works = ", ".join(json.loads(m.get("works") or "[]")[:4])
+    except Exception:
+        works = ""
+    return (
+        f"Thinker: {m['name']} ({m.get('era') or ''}; {m.get('domain') or ''}).\n"
+        f"Bio: {(m.get('bio_summary') or '')[:400]}\n"
+        f"Thinking style: {(m.get('thinking_style') or '')[:280]}\n"
+        f"Notable works: {works}\n\n"
+        "Write exactly 5 Q&A pairs that real people would Google about this thinker. "
+        "Mix: one \"What is X known for?\"-style; one on their central theory/idea; one "
+        "how/why question about their method or influence; one common misconception or "
+        "critique; one connecting their ideas to a present-day question. Questions are "
+        "phrased in the third person, the way a searcher would type them (40-90 chars). "
+        "Answers are in the FIRST person as the thinker, 90-150 words, concrete, no "
+        "greetings or sign-offs.\n"
+        'Return STRICT JSON only: [{"q": "...", "a": "..."}]'
+    )
+
+
+def backfill_mind_questions(batch_size: int = 3) -> tuple[int, int]:
+    """Generate + store ~5 pre-answered Q&A pages for minds that have none.
+    Returns (minds_done, remaining); call repeatedly to drain — mirrors the
+    voice/embed backfills, drives /api/cron/mind-qa. One bulk_chat call per
+    mind (chat provider → DeepSeek fallback, not geoblocked)."""
+    from .seo import slugify
+
+    missing = list_minds_missing_questions(limit=200)
+    done = 0
+    for m in missing[:batch_size]:
+        try:
+            res, _ = bulk_chat(system=_QA_SYSTEM, user=_qa_prompt(m))
+            raw = (res.content or "").strip()
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.M).strip()
+            pairs = json.loads(raw)
+            stored = 0
+            for p in pairs[:6]:
+                q = (p.get("q") or "").strip()
+                a = (p.get("a") or "").strip()
+                slug = slugify(q)
+                if len(q) < 12 or len(a) < 60 or not slug:
+                    continue
+                add_mind_question(m["id"], slug, q, a)
+                stored += 1
+            if stored:
+                done += 1
+        except Exception as exc:
+            log.warning("mind-qa generation failed for %s: %s", m.get("name"), exc)
+    return done, max(0, len(missing) - done)
 
 
 def backfill_mind_voices(batch_size: int = 6) -> tuple[int, int]:
