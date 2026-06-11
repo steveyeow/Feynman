@@ -374,19 +374,34 @@ _DOMAIN_DESC_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 
-def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> list[dict[str, Any]]:
+def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5,
+                        sparql_throttle: float | None = None) -> list[dict[str, Any]]:
     """Walk every TOPIC_TAG → top N candidates, deduped by qid.
 
-    Throttles between SPARQL calls to respect Wikidata's 1 req/sec norm.
+    `throttle` paces the (generous) Wikipedia enrichment; `sparql_throttle`
+    (defaults to `throttle`) paces the WDQS/SPARQL domain calls — raise it to
+    ~70-90s during a WDQS outage that rate-limits to 1 req/min, so the 15 domain
+    queries don't all 429.
     Returns enriched candidates with bio_summary pulled from EN Wikipedia.
     """
+    if sparql_throttle is None:
+        sparql_throttle = throttle
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     # "action" forces the WDQS-free path; otherwise try SPARQL first and, in
     # "auto", switch to the action API for the rest the moment SPARQL fails (so
     # one WDQS outage doesn't waste 15 slow retries).
     use_sparql = _DISCOVERY_MODE != "action"
+    first_domain = True
     for domain, occ_qid in DOMAIN_QUERIES.items():
+        # Pace BEFORE each domain query. The old tail-of-loop sleep was skipped
+        # by the failure `continue` paths, so during a WDQS 1-req/min outage all
+        # 15 domains fired within seconds and every one 429'd (2026-06-11 run) —
+        # --sparql-throttle silently did nothing exactly when it was needed.
+        # Sleeping up front paces success AND failure paths alike.
+        if not first_domain and sparql_throttle:
+            time.sleep(sparql_throttle)
+        first_domain = False
         log.info("Querying domain %s (occupation %s)…", domain, occ_qid)
         thinkers: list[dict[str, Any]] | None = None
         if use_sparql:
@@ -418,7 +433,6 @@ def discover_candidates(per_domain_limit: int = 50, throttle: float = 0.5) -> li
             if _kw and not any(k in (c.get("description") or "").lower() for k in _kw):
                 continue
             out.append(c)
-        time.sleep(throttle)
     # Enrich with Wikipedia bio + a human-readable era. Best-effort + disk-cached.
     for c in out:
         try:
