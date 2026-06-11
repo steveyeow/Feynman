@@ -18,8 +18,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { track } from "@/lib/analytics";
+import { savePendingMindIntent } from "@/lib/pendingIntent";
 import { useProGate } from "@/components/pro/ProOverlay";
 import { createSession, bumpSessions, queueSaveMessage } from "@/lib/chat";
 import { post } from "@/lib/api";
@@ -38,6 +40,10 @@ export default function MindChat({
 }) {
   const { ready, authEnabled, user } = useAuth();
   const { isProUser, requirePro } = useProGate();
+  const router = useRouter();
+  // Draft typed into the GATED composer (anonymous / free users) — saved as a
+  // pending intent on send so it survives the sign-in round trip.
+  const [draft, setDraft] = useState("");
 
   // Anonymous (auth on, not signed in) → sign-in prompt; signed-in non-pro
   // (hosted) → paywall. Open-source → isProUser always true so neither fires.
@@ -119,37 +125,93 @@ export default function MindChat({
     domain: mind.domain,
   };
 
-  // Gated (hosted) — show the prompt alongside the agent-info sidebar, no chat.
+  // Gated (hosted) — render the REAL chat surface (the mind's first-person
+  // greeting + a live composer) so a SEO-funnel visitor sees the product, not
+  // a bare wall. The gate fires on SEND: anonymous → the draft is saved as a
+  // pending intent (restored + auto-sent after sign-in, the #131 flow) and we
+  // go to /login; signed-in free → the Pro overlay. Minds chat itself stays
+  // Pro-only.
   if (gated) {
+    const greeting =
+      (mind.voice || "").trim() ||
+      `I'm ${mind.name}. Ask me anything — I answer in my own voice, grounded in my work.`;
+    const chatPath = `/mind/${mind.slug || mindId}/chat`;
+    const gateSend = () => {
+      const q = draft.trim();
+      if (needsSignIn) {
+        if (q) {
+          savePendingMindIntent(mindId, { question: q, via: "mind_chat_gate" });
+          track("pending_intent_saved", { surface: "mind_chat_gate", mind_id: mindId });
+        }
+        // With a message saved, land on the composer surface (/) where the
+        // intent auto-restores and sends after sign-in; bare sends come back.
+        router.push(`/login?next=${encodeURIComponent(q ? "/" : chatPath)}`);
+        return;
+      }
+      requirePro();
+    };
     return (
       <div className={`mind-page ${styles.page}`}>
         <div className="chat-with-sidebar">
           <div className="chat-main">
             <div className="chat-messages">
-              <div className={styles.fallback}>
+              <div className="chat-message assistant">
+                <div className={styles.gateGreetName}>{mind.name}</div>
+                <p className={styles.gateGreetText}>{greeting}</p>
+              </div>
+              <p className={styles.gateHint}>
                 {needsSignIn ? (
                   <>
-                    <p>Sign in to chat with {mind.name}</p>
+                    Sign in to reply — your first message will be sent right after.{" "}
                     <Link
-                      href={`/login?next=${encodeURIComponent(`/mind/${mind.slug || mindId}/chat`)}`}
                       className={styles.fallbackLink}
+                      href={`/login?next=${encodeURIComponent(chatPath)}`}
                     >
                       Sign in →
                     </Link>
                   </>
                 ) : (
                   <>
-                    <p>Chatting with {mind.name} is a Pro feature.</p>
+                    Chatting with {mind.name} is a Pro feature.{" "}
                     <button
                       type="button"
-                      className={styles.fallbackLink}
-                      style={{ background: "none", border: "none", cursor: "pointer" }}
+                      className={styles.gateUpgradeBtn}
                       onClick={() => requirePro()}
                     >
                       Upgrade to Pro →
                     </button>
                   </>
                 )}
+              </p>
+            </div>
+            <div className="chat-composer chat-composer-inline">
+              <textarea
+                className="composer-input"
+                rows={1}
+                placeholder={`Message ${mind.name}…`}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    gateSend();
+                  }
+                }}
+              />
+              <div className="composer-toolbar">
+                <div className="composer-left" />
+                <button
+                  type="button"
+                  className="composer-send-btn"
+                  title="Send"
+                  aria-label="Send"
+                  onClick={gateSend}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>

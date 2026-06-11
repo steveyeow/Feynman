@@ -151,6 +151,8 @@ export interface ProGate {
 export function useProGate(): ProGate {
   const isProUser = useIsProUser();
   const { showProOverlay } = useProOverlay();
+  const { authEnabled, user } = useAuth();
+  const router = useRouter();
 
   const requirePro = useCallback(
     (action?: () => void): boolean => {
@@ -158,10 +160,22 @@ export function useProGate(): ProGate {
         action?.();
         return true;
       }
+      // Gate ORDER: an anonymous visitor must be sent to sign-in, never shown
+      // the paywall — a plans modal means nothing without an account, and
+      // closing it stranded people on /login anyway (the reported bug). Only
+      // a signed-in free user sees the upgrade overlay.
+      if (authEnabled && !user) {
+        const next =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search
+            : "/";
+        router.push(`/login?next=${encodeURIComponent(next)}`);
+        return false;
+      }
       showProOverlay();
       return false;
     },
-    [isProUser, showProOverlay],
+    [isProUser, authEnabled, user, router, showProOverlay],
   );
 
   return { isProUser, requirePro, showProOverlay };
