@@ -1,4 +1,5 @@
 {
+  "regions": ["sfo1"],
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://api.feynman.wiki/api/:path*" },
     { "source": "/sitemap.xml", "destination": "https://api.feynman.wiki/sitemap.xml" },
