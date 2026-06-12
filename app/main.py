@@ -816,6 +816,26 @@ def sitemap_redirect():
     return RedirectResponse("/sitemap.xml", status_code=301)
 
 
+# Editorial-layer advertising freeze (2026-06-12). Entity DETAIL pages
+# (/mind/x, /book/x) are database records with the chat product behind them —
+# they grow with supply and are always advertised. The EDITORIAL layer
+# (/q Q&A, /on essays) is generated content: advertising thousands of new
+# templated AI pages at once on a young low-trust domain is the exact
+# footprint of Google's scaled-content-abuse classifier, and at 208 indexed
+# pages they wouldn't get crawled-in this quarter anyway (zero upside, tail
+# risk only). So editorial URLs are only advertised for entities created
+# BEFORE this cutoff — i.e. the set Google already has. The supply keeps
+# being generated and the pages stay live + indexable + internally linked
+# (organic earn-in); raising this date is the release valve, one tranche at
+# a time, as GSC shows the core layer indexing healthily.
+_EDITORIAL_ADVERTISE_CUTOFF = "2026-06-12"
+
+
+def _editorial_frozen(entity: dict[str, Any]) -> bool:
+    created = str(entity.get("created_at") or "")[:10]
+    return (not created) or created >= _EDITORIAL_ADVERTISE_CUTOFF
+
+
 @app.get("/sitemap.xml")
 def sitemap_xml():
     from fastapi.responses import Response
@@ -905,6 +925,8 @@ def sitemap_xml():
             # their low-quality /q/ pages to Google.
             if chunks_by_agent.get(agent_id, 0) < _MIN_CHUNKS_FOR_Q_URLS:
                 continue
+            if _editorial_frozen(agent):
+                continue
             for q in questions_by_agent.get(agent_id, []):
                 qslug = seo_render.slugify(q)
                 if not qslug:
@@ -934,6 +956,8 @@ def sitemap_xml():
         for _r in list_mind_question_slugs():
             _mq.setdefault(_r["mind_id"], []).append(_r["slug"])
         for mind in slugged_minds:
+            if _editorial_frozen(mind):
+                continue
             for qslug in _mq.get(mind["id"], []):
                 urls += f"""  <url>
     <loc>{_SITE_URL}/mind/{mind["slug"]}/q/{qslug}</loc>{_lastmod(mind.get("created_at"))}
@@ -945,6 +969,8 @@ def sitemap_xml():
         # pass the relevance filter so we don't list /mind/X/on/Y for
         # combos that the route would 404 anyway.
         for mind in slugged_minds:
+            if _editorial_frozen(mind):
+                continue
             for topic in TOPIC_TAGS:
                 if not qa_module.is_mind_topic_relevant(mind, topic):
                     continue
