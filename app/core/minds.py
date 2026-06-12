@@ -249,18 +249,28 @@ def _qa_prompt(m: dict[str, Any]) -> str:
         works = ", ".join(json.loads(m.get("works") or "[]")[:4])
     except Exception:
         works = ""
+    # Characteristic phrases shape the VOICE (tone, cadence) — they are not
+    # quotes to paste verbatim (the system prompt forbids invented quotes).
+    try:
+        phrases = "; ".join(json.loads(m.get("typical_phrases") or "[]")[:8])
+    except Exception:
+        phrases = ""
     return (
         f"Thinker: {m['name']} ({m.get('era') or ''}; {m.get('domain') or ''}).\n"
         f"Bio: {(m.get('bio_summary') or '')[:400]}\n"
+        f"Persona: {(m.get('persona') or '')[:700]}\n"
         f"Thinking style: {(m.get('thinking_style') or '')[:280]}\n"
+        f"Characteristic phrases (for voice, do not quote verbatim): {phrases}\n"
         f"Notable works: {works}\n\n"
         "Write exactly 5 Q&A pairs that real people would Google about this thinker. "
         "Mix: one \"What is X known for?\"-style; one on their central theory/idea; one "
         "how/why question about their method or influence; one common misconception or "
         "critique; one connecting their ideas to a present-day question. Questions are "
         "phrased in the third person, the way a searcher would type them (40-90 chars). "
-        "Answers are in the FIRST person as the thinker, 90-150 words, concrete, no "
-        "greetings or sign-offs.\n"
+        "Answers are in the FIRST person as the thinker, 130-180 words, concrete and "
+        "specific — name their actual concepts and works, and let the persona and "
+        "characteristic phrases above shape the voice so it reads as unmistakably THIS "
+        "thinker, not a generic first-person summary. No greetings or sign-offs.\n"
         'Return STRICT JSON only: [{"q": "...", "a": "..."}]'
     )
 
@@ -272,7 +282,10 @@ def backfill_mind_questions(batch_size: int = 3) -> tuple[int, int]:
     mind (chat provider → DeepSeek fallback, not geoblocked)."""
     from .seo import slugify
 
-    missing = list_minds_missing_questions(limit=200)
+    # limit=batch_size (not a fixed 200): the row now carries the fat persona +
+    # typical_phrases columns, and we only consume batch_size of them — reading
+    # 200 to use 3 would waste egress. True backlog count comes from COUNT below.
+    missing = list_minds_missing_questions(limit=batch_size)
     done = 0
     for m in missing[:batch_size]:
         try:

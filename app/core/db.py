@@ -2244,11 +2244,15 @@ def get_mind_question(mind_id: str, slug: str) -> dict[str, Any] | None:
 
 
 def list_minds_missing_questions(limit: int = 50) -> list[dict[str, Any]]:
-    """Minds with no stored Q&A yet — drives /api/cron/mind-qa. Slim columns
-    only (the egress rule); ordered by popularity so visible minds fill first."""
+    """Minds with no stored Q&A yet — drives /api/cron/mind-qa. persona +
+    typical_phrases are the voice-density inputs for _qa_prompt (without them the
+    answers read as generic first-person); they're fat columns, so the caller
+    passes limit=batch_size to keep the read tiny (egress rule). Ordered by
+    popularity so visible minds fill first."""
     with get_conn() as conn:
         rows = _fetchall(conn, _q(
-            "SELECT id, name, era, domain, bio_summary, thinking_style, works FROM minds "
+            "SELECT id, name, era, domain, bio_summary, persona, thinking_style, "
+            "typical_phrases, works FROM minds "
             "WHERE id NOT IN (SELECT DISTINCT mind_id FROM mind_questions) "
             "ORDER BY chat_count DESC, created_at ASC LIMIT ?"
         ), (limit,))
