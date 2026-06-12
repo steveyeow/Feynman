@@ -17,6 +17,14 @@ TOPIC_TAGS = [
     "Computer Science", "Biology", "History", "Mathematics",
     "Business & Strategy", "Neuroscience", "Literature",
     "Political Science", "Sociology", "Art & Design", "Self-Development",
+    # 2026-06-12 expansion — the ONLY two candidates that passed the data gate
+    # (>=8 minds match via is_mind_topic_relevant against real domain strings;
+    # 37 other candidates audited and rejected: most match <5 minds because
+    # mind.domain uses this same coarse vocabulary, and high scorers like
+    # "Political Philosophy" are stem-overlap duplicates of existing hubs).
+    # AI also tracks verified GSC demand (lecun/hinton/hassabis queries) and
+    # grows with every tech-minds batch.
+    "Artificial Intelligence", "Ethics",
 ]
 
 # Number of books to discover per topic
