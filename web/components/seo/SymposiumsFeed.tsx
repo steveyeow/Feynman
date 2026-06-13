@@ -33,7 +33,7 @@ export default function SymposiumsFeed({ debates }: { debates: DebateListItem[] 
             <button
               key={t}
               type="button"
-              className={`symposium-filter${active === t ? " active" : ""}`}
+              className={`topic-tag${active === t ? " active" : ""}`}
               aria-selected={active === t}
               onClick={() => setActive(t)}
             >

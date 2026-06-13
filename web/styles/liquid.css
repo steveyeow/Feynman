@@ -619,14 +619,9 @@ body { background-color: var(--bg-home); }
 /* ── /symposiums index — a single-column question stream (the question is the
    hook), with topic chips to filter. Not grouped, not a grid. ── */
 .symposium-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 6px; }
-.symposium-filter {
-  padding: 6px 14px; border-radius: 999px; border: 1px solid var(--border);
-  background: transparent; color: var(--text-secondary);
-  font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
-}
-.symposium-filter:hover { color: var(--text); border-color: var(--border-strong); }
-.symposium-filter.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* Chips reuse Library's .topic-tag verbatim (same pill, same BLACK active state)
+   so the two filter bars stay identical — only the container layout above is
+   symposium-specific. Don't reintroduce a .symposium-filter class; it drifts. */
 .symposium-feed { display: flex; flex-direction: column; }
 .seo-content a.symposium-row {
   display: flex; flex-direction: column; gap: 12px; padding: 22px 4px;
