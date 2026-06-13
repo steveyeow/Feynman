@@ -11,6 +11,7 @@ import {
   dialoguesArticleJsonLd,
   fetchMind,
   fetchMindDialogues,
+  fetchMindDebates,
   metaDescription,
 } from "@/lib/seo-mind";
 
@@ -74,7 +75,10 @@ export default async function MindDialoguesPage({
   // not the multi-mind home composer), so a cold visitor can start talking.
   const chatHref = `/mind/${encodeURIComponent(params.id)}/chat`;
 
-  const dialogues = await fetchMindDialogues(params.id, 10);
+  const [dialogues, debates] = await Promise.all([
+    fetchMindDialogues(params.id, 10),
+    fetchMindDebates(params.id),
+  ]);
 
   const articleLd = dialoguesArticleJsonLd({
     headline: `AI dialogues with ${mind.name}`,
@@ -159,6 +163,19 @@ export default async function MindDialoguesPage({
           </p>
         </section>
       )}
+
+      {debates.length ? (
+        <section className="seo-section">
+          <h2>Debates {mind.name} joined</h2>
+          <ul>
+            {debates.map((d) => (
+              <li key={d.slug}>
+                <Link href={`/debate/${d.slug}`}>{d.question}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </EntityLayout>
   );
 }

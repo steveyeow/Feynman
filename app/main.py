@@ -995,6 +995,21 @@ def sitemap_xml():
     <priority>0.8</priority>
   </url>
 """
+        # Multi-mind debates (Type 4) — emergent symposium transcripts. High
+        # uniqueness + low template-risk (multi-perspective, cross-referencing),
+        # so these ARE advertised, unlike the frozen /q /on editorial layer. The
+        # curated seed set keeps the count small, so no scaled-content footprint.
+        from .core.db import list_debates as _list_debates
+        for _d in _list_debates(limit=500):
+            _dslug = _d.get("slug")
+            if not _dslug:
+                continue
+            urls += f"""  <url>
+    <loc>{_SITE_URL}/debate/{_dslug}</loc>{_lastmod(_d.get("created_at"))}
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+"""
         # Phase 8 — live AI insights / dialogues. Only entities with
         # ≥3 publishable assistant messages get a sitemap entry — empty
         # /insights pages would burn crawl budget and trigger "thin
@@ -4475,6 +4490,57 @@ def api_mind_dialogues(mind_id: str) -> JSONResponse:
     publishable = insights_module.select_publishable(raw, limit=10)
     return JSONResponse(
         content={"dialogues": publishable},
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=1800"},
+    )
+
+
+@app.get("/api/debates/{slug}")
+def api_debate(slug: str) -> JSONResponse:
+    """A multi-mind debate + its ordered turns (the /debate/{slug} render).
+    Public, no feature flag — debates are curated generated content, not UGC."""
+    from .core.db import get_debate_by_slug, get_mind
+    d = get_debate_by_slug(slug)
+    if not d:
+        raise HTTPException(status_code=404, detail="Debate not found")
+    # Attach each participating mind's slug (for chat-funnel links on the page).
+    mind_slugs: dict[str, str] = {}
+    for t in d.get("turns", []):
+        mid = t.get("mind_id")
+        if mid and mid not in mind_slugs:
+            m = get_mind(mid)
+            if m:
+                mind_slugs[mid] = m.get("slug") or mid
+    d["mind_slugs"] = mind_slugs
+    return JSONResponse(
+        content=d,
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=86400"},
+    )
+
+
+@app.get("/api/debates")
+def api_debates_list() -> JSONResponse:
+    """All published debates (slug + question + topic) — the /debates index."""
+    from .core.db import list_debates
+    try:
+        rows = list_debates(limit=500)
+    except Exception:
+        rows = []
+    return JSONResponse(
+        content={"debates": rows},
+        headers={"Cache-Control": "public, max-age=1800, s-maxage=3600"},
+    )
+
+
+@app.get("/api/minds/{mind_id}/debates")
+def api_mind_debates(mind_id: str) -> JSONResponse:
+    """Debates this mind argued in — the 'Recent debates' rail on /mind/{id}."""
+    from .core.db import list_debates_for_mind
+    try:
+        rows = list_debates_for_mind(mind_id, limit=10)
+    except Exception:
+        rows = []
+    return JSONResponse(
+        content={"debates": rows},
         headers={"Cache-Control": "public, max-age=1800, s-maxage=1800"},
     )
 
