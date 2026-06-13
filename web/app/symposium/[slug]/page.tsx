@@ -11,6 +11,7 @@ import {
   fetchDebate,
   metaDescription,
 } from "@/lib/seo-mind";
+import { mindColor, mindInitials } from "@/lib/minds";
 
 // Symposium (Type-4): 2-4 great minds argue ONE question, each engaging the
 // prior speakers by name. The emergent cross-referencing transcript is the
@@ -77,6 +78,16 @@ export default async function DebatePage({
   const canonical = abs(`/symposium/${d.slug}`);
   const names = uniqueNames(d.turns);
   const ref = (mindId: string) => d.mind_slugs?.[mindId] || mindId;
+  // Where the deeper round begins = the first time a speaker takes a second
+  // turn. Used to drop a "the discussion deepens" divider between movements.
+  const secondRoundAt = (() => {
+    const seen = new Set<string>();
+    for (let i = 0; i < d.turns.length; i++) {
+      if (seen.has(d.turns[i].mind_id)) return i;
+      seen.add(d.turns[i].mind_id);
+    }
+    return -1;
+  })();
 
   const ld = debateJsonLd({
     question: d.question,
@@ -107,25 +118,41 @@ export default async function DebatePage({
         An AI-mediated symposium you can join.
       </p>
 
-      <section className="seo-section insights">
-        {d.turns.map((t, i) => (
-          <article key={i} className="insight-card">
-            <Link
-              href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}
-              className="insight-card-who"
-            >
-              {t.mind_name}
-            </Link>
-            {t.content
-              .split(/\n\n+/)
-              .map((p) => p.trim())
-              .filter(Boolean)
-              .map((p, j) => (
-                <p key={j}>{p}</p>
-              ))}
-          </article>
-        ))}
-      </section>
+      <div className="symposium-thread">
+        {d.turns.map((t, i) => {
+          const href = `/mind/${encodeURIComponent(ref(t.mind_id))}`;
+          return (
+            <div key={i}>
+              {i === secondRoundAt ? (
+                <div className="symposium-round-break">The discussion deepens</div>
+              ) : null}
+              <article className="symposium-turn">
+                <Link
+                  href={href}
+                  className="symposium-avatar"
+                  style={{ background: mindColor(t.mind_name) }}
+                  aria-hidden="true"
+                  tabIndex={-1}
+                >
+                  {mindInitials(t.mind_name)}
+                </Link>
+                <div className="symposium-turn-body">
+                  <Link href={href} className="symposium-turn-author">
+                    {t.mind_name}
+                  </Link>
+                  {t.content
+                    .split(/\n\n+/)
+                    .map((p) => p.trim())
+                    .filter(Boolean)
+                    .map((p, j) => (
+                      <p key={j}>{p}</p>
+                    ))}
+                </div>
+              </article>
+            </div>
+          );
+        })}
+      </div>
 
       <p className="seo-cta-row">
         <a

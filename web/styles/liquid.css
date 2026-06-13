@@ -587,6 +587,40 @@ body { background-color: var(--bg-home); }
 .insight-card-who { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 5px; }
 .insight-card p { margin: 0; line-height: 1.6; color: var(--text); }
 
+/* ── Symposium thread — a multi-mind debate read as a real conversation:
+   colored initials avatar + speaker + remark, separated like a transcript. ── */
+.symposium-thread { display: flex; flex-direction: column; margin-top: 6px; max-width: 720px; }
+.symposium-turn {
+  display: flex; gap: 14px; padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+}
+.symposium-turn:last-child { border-bottom: none; }
+.symposium-avatar {
+  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 16px; letter-spacing: 0.5px;
+  text-decoration: none; user-select: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.symposium-avatar:hover { transform: scale(1.05); box-shadow: 0 0 0 3px var(--accent-light); }
+.symposium-turn-body { flex: 1; min-width: 0; }
+.symposium-turn-author {
+  display: inline-block; font-size: 15px; font-weight: 650;
+  color: var(--text); text-decoration: none; margin-bottom: 2px;
+}
+.symposium-turn-author:hover { color: var(--accent); }
+.symposium-turn-body p { margin: 8px 0 0; line-height: 1.72; color: var(--text); }
+/* Round divider — marks where the opening round ends and the deeper exchange
+   begins, so a long symposium reads as two movements not one wall. */
+.symposium-round-break {
+  display: flex; align-items: center; gap: 12px;
+  margin: 26px 0 6px; color: var(--text-muted);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase;
+}
+.symposium-round-break::before, .symposium-round-break::after {
+  content: ""; flex: 1; height: 1px; background: var(--border);
+}
+
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */
 .notable-quotes { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 18px; }

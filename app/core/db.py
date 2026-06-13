@@ -3546,6 +3546,16 @@ def add_debate_turn(debate_id: str, mind_id: str, mind_name: str, turn_index: in
         ), (str(uuid.uuid4()), debate_id, mind_id, mind_name, turn_index, content, _utcnow()))
 
 
+def delete_debate_by_question(question: str) -> None:
+    """Remove a debate + its turns by question (no FK, so cascade by hand).
+    Lets the generator re-run a seed with deeper/longer rounds (force mode)."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q("SELECT id FROM debates WHERE question = ?"), (question,))
+        for r in rows:
+            _execute(conn, _q("DELETE FROM debate_turns WHERE debate_id = ?"), (r["id"],))
+            _execute(conn, _q("DELETE FROM debates WHERE id = ?"), (r["id"],))
+
+
 def get_debate_by_slug(slug: str) -> dict[str, Any] | None:
     """A debate + its ordered turns, by slug (the /debate/{slug} render)."""
     with get_conn() as conn:
