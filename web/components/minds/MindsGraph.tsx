@@ -660,6 +660,12 @@ export default function MindsGraph() {
     // ── Cleanup (fixes the legacy listener leak) ───────────────────────────
     return () => {
       disposed = true;
+      // Persist current positions on unmount (switching menus) — NOT only on the
+      // sim's 'end' (which takes ~8s and never fires if you leave sooner). This
+      // is what makes a return visit restore instead of replaying the entrance.
+      // Guard on alpha so a quick bounce during the initial flow doesn't freeze a
+      // half-formed (still-clustered-at-origin) graph for next time.
+      if (!sim || sim.alpha() < 0.4) savePositions();
       if (raf) cancelAnimationFrame(raf);
       sim?.stop();
       sim = null;
