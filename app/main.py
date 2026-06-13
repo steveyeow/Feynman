@@ -3495,8 +3495,15 @@ def api_cron_egress_watch(request: Request) -> dict[str, Any]:
     if not _USE_PG:
         return {"status": "skip", "reason": "not postgres"}
 
-    _DB_LIMIT = 500 * 1024 * 1024  # Supabase free tier
-    _ROWS_DELTA_ALERT = int(os.getenv("EGRESS_WATCH_ROWS_DELTA", "3000000"))
+    # Supabase Pro (since 2026-06-11): 8GB disk, 250GB egress. The free-tier
+    # 500MB limit is long gone — keeping it here fired a 95.9% false alarm at
+    # 479MB (really ~6% of 8GB). Override via env if the plan changes.
+    _DB_LIMIT = int(os.getenv("EGRESS_WATCH_DB_LIMIT_BYTES", str(8 * 1024 * 1024 * 1024)))
+    _DB_LIMIT_LABEL = os.getenv("EGRESS_WATCH_DB_LIMIT_LABEL", "8GB Pro")
+    # rows-delta is an egress-spike proxy; on Pro (250GB) the bar is higher, and
+    # my own backfills/diagnostics read millions of (narrow) rows without it
+    # mattering — 10M default so it only fires on a genuine SELECT* fat-table run.
+    _ROWS_DELTA_ALERT = int(os.getenv("EGRESS_WATCH_ROWS_DELTA", "10000000"))
     try:
         with get_conn() as conn:
             db_bytes = int(_fetchone(conn, _q(
@@ -3523,7 +3530,7 @@ def api_cron_egress_watch(request: Request) -> dict[str, Any]:
     db_pct = round(100 * db_bytes / _DB_LIMIT, 1)
     alerts: list[str] = []
     if db_pct >= 90:
-        alerts.append(f"Database size at {db_pct}% of the 500MB free limit")
+        alerts.append(f"Database size at {db_pct}% of the {_DB_LIMIT_LABEL} limit")
     if rows_delta is not None and rows_delta >= _ROWS_DELTA_ALERT:
         alerts.append(
             f"{rows_delta:,} DB rows read since last check "
