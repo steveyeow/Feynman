@@ -24,6 +24,7 @@ import {
   fetchMindLibrary,
   fetchMindThemes,
   fetchMindDialogues,
+  fetchMindDebates,
   fetchMindQuestions,
   isMindTopicRelevant,
   mindSameAs,
@@ -272,12 +273,28 @@ export default async function MindPage({
 
 async function MindRail({ id, mind }: { id: string; mind: MindDetail }) {
   try {
-    const [agents, related] = await Promise.all([fetchAgents(), fetchRelatedMinds(mind)]);
+    const [agents, related, symposiums] = await Promise.all([
+      fetchAgents(),
+      fetchRelatedMinds(mind),
+      fetchMindDebates(id),
+    ]);
     const hasWorks = (mind.works || []).filter(Boolean).length > 0;
-    if (!hasWorks && !related.length) return null;
+    if (!hasWorks && !related.length && !symposiums.length) return null;
     return (
       <>
         <MindWorks works={mind.works} agents={agents} variant="rail" />
+        {symposiums.length ? (
+          <div className="seo-rail-card">
+            <h3>Symposiums</h3>
+            <ul>
+              {symposiums.slice(0, 6).map((s) => (
+                <li key={s.slug}>
+                  <Link href={`/symposium/${s.slug}`}>{s.question}</Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {related.length ? (
           <div className="seo-rail-card">
             <h3>Related minds</h3>
