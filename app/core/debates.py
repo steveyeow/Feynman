@@ -164,6 +164,36 @@ SEED_DEBATES: list[dict[str, Any]] = [
      "minds": ["Confucius", "John Dewey", "Plato", "Jean-Jacques Rousseau"]},
     {"q": "Is the pursuit of happiness the right aim of life?", "topic": "Personal Meaning",
      "minds": ["Aristotle", "Epicurus", "Arthur Schopenhauer", "John Stuart Mill"]},
+
+    # ── AI / founders / product (2026-06-13) — the questions a tech/Twitter
+    # audience actually argues, cast from the modern tech minds already in the
+    # library (clashing positions, no power/atrocity figures, no junk stubs).
+    # AI → topic "Artificial Intelligence"; startups + product → "Business &
+    # Strategy" (closest TOPIC_TAGS hub; both surface on /symposiums + topic).
+    {"q": "Is artificial general intelligence close, or a fantasy?", "topic": "Artificial Intelligence",
+     "minds": ["Geoffrey Hinton", "Ray Kurzweil", "Melanie Mitchell", "Ilya Sutskever"]},
+    {"q": "Should we slow down AI development?", "topic": "Artificial Intelligence",
+     "minds": ["Geoffrey Hinton", "Marc Andreessen", "Shoshana Zuboff", "Andrej Karpathy"]},
+    {"q": "Is open-source AI safer than keeping it locked down?", "topic": "Artificial Intelligence",
+     "minds": ["Sam Altman", "Marc Andreessen", "Richard Stallman", "Yoshua Bengio"]},
+    {"q": "Will AI take our jobs, or free us from them?", "topic": "Artificial Intelligence",
+     "minds": ["Sam Altman", "Peter Drucker", "Naval Ravikant", "Norbert Wiener"]},
+    {"q": "Does a large language model actually understand language?", "topic": "Artificial Intelligence",
+     "minds": ["Noam Chomsky", "Ilya Sutskever", "Melanie Mitchell", "Geoffrey Hinton"]},
+    {"q": "Can a machine be genuinely creative?", "topic": "Artificial Intelligence",
+     "minds": ["Ada Lovelace", "Marvin Minsky", "Jaron Lanier", "Andrej Karpathy"]},
+    {"q": "Should founders raise venture capital or bootstrap?", "topic": "Business & Strategy",
+     "minds": ["Paul Graham", "Naval Ravikant", "Jeff Bezos", "Marc Andreessen"]},
+    {"q": "First to market or best in market — which wins?", "topic": "Business & Strategy",
+     "minds": ["Peter Thiel", "Jeff Bezos", "Clayton Christensen", "Marc Andreessen"]},
+    {"q": "Should you follow your passion or chase a market need?", "topic": "Business & Strategy",
+     "minds": ["Naval Ravikant", "Cal Newport", "Steve Jobs", "Sam Altman"]},
+    {"q": "Is monopoly good or bad for innovation?", "topic": "Business & Strategy",
+     "minds": ["Peter Thiel", "Adam Smith", "Warren Buffett", "Andrew Carnegie"]},
+    {"q": "Should product decisions follow data or vision?", "topic": "Business & Strategy",
+     "minds": ["Steve Jobs", "Jeff Bezos", "Clayton Christensen", "Bret Victor"]},
+    {"q": "Do more features make a product better or worse?", "topic": "Business & Strategy",
+     "minds": ["Steve Jobs", "Fred Brooks", "Donald Knuth", "Paul Graham"]},
 ]
 
 
