@@ -24,6 +24,15 @@ export async function generateMetadata(): Promise<Metadata> {
         "2-4 great thinkers take up one question, each in their own voice. Read the symposium, then chat with any of them.",
       url: canonical,
       siteName: "Feynman",
+      images: [abs("/og?type=symposiums")],
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: "@steve_yeow",
+      title: "Symposiums — great minds on today's questions",
+      description:
+        "2-4 great thinkers take up one question, each in their own voice. Read the symposium, then chat with any of them.",
+      images: [abs("/og?type=symposiums")],
     },
   };
 }
