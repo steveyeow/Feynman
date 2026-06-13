@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import SeoColumn from "@/components/seo/SeoColumn";
 import JsonLd from "@/components/seo/JsonLd";
-import { SITE_URL, abs, breadcrumbJsonLd, fetchDebatesList, type DebateListItem } from "@/lib/seo-mind";
-import { mindColor, mindInitials } from "@/lib/minds";
+import SymposiumsFeed from "@/components/seo/SymposiumsFeed";
+import { SITE_URL, abs, breadcrumbJsonLd, fetchDebatesList } from "@/lib/seo-mind";
 
 // The symposiums index — the discovery surface for Type-4 multi-mind symposia
 // (the philosophie.ai-style feed). Question-led entries: a sharp question pulls
@@ -67,36 +66,7 @@ export default async function SymposiumsIndexPage() {
       </p>
 
       {debates.length ? (
-        groupByTopic(debates).map(([topic, items]) => (
-          <section key={topic} className="seo-section">
-            <h2>{topic}</h2>
-            <div className="symposium-grid">
-              {items.map((d) => (
-                <Link key={d.slug} href={`/symposium/${d.slug}`} className="symposium-card">
-                  <div className="symposium-card-q">{d.question}</div>
-                  {d.participants && d.participants.length ? (
-                    <div className="symposium-card-minds">
-                      <span className="symposium-card-avatars">
-                        {d.participants.slice(0, 5).map((name, i) => (
-                          <span
-                            key={i}
-                            className="symposium-card-avatar"
-                            style={{ background: mindColor(name) }}
-                          >
-                            {mindInitials(name)}
-                          </span>
-                        ))}
-                      </span>
-                      <span className="symposium-card-names">
-                        {d.participants.join(", ")}
-                      </span>
-                    </div>
-                  ) : null}
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))
+        <SymposiumsFeed debates={debates} />
       ) : (
         <section className="seo-section">
           <p>No symposiums yet — check back soon.</p>
@@ -104,19 +74,4 @@ export default async function SymposiumsIndexPage() {
       )}
     </SeoColumn>
   );
-}
-
-/** Group symposiums by topic, preserving first-seen topic order. */
-function groupByTopic(debates: DebateListItem[]): [string, DebateListItem[]][] {
-  const order: string[] = [];
-  const map = new Map<string, DebateListItem[]>();
-  for (const d of debates) {
-    const t = d.topic || "Other";
-    if (!map.has(t)) {
-      map.set(t, []);
-      order.push(t);
-    }
-    map.get(t)!.push(d);
-  }
-  return order.map((t) => [t, map.get(t)!]);
 }
