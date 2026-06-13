@@ -12,11 +12,12 @@ import {
   metaDescription,
 } from "@/lib/seo-mind";
 
-// Type-4 multi-mind debate: 2-4 great minds argue ONE question, each engaging
-// the prior speakers by name. The emergent cross-referencing transcript is the
+// Symposium (Type-4): 2-4 great minds argue ONE question, each engaging the
+// prior speakers by name. The emergent cross-referencing transcript is the
 // unique citable artifact — it exists nowhere else (Wikipedia is dead bio,
 // Wikiquote is isolated quotes). Curated + generated, so it's advertised in the
-// sitemap (unlike the frozen /q /on editorial layer).
+// sitemap (unlike the frozen /q /on editorial layer). User-facing name is
+// "symposium"; internal API/table/fn names stay "debate(s)" as implementation.
 
 export const revalidate = 86400;
 export const dynamicParams = true;
@@ -35,14 +36,14 @@ export async function generateMetadata({
   params: { slug: string };
 }): Promise<Metadata> {
   const d = await fetchDebate(params.slug);
-  if (!d) return { title: "Debate not found — Feynman" };
+  if (!d) return { title: "Symposium not found — Feynman" };
   const names = uniqueNames(d.turns);
-  const canonical = abs(`/debate/${d.slug}`);
-  const title = `${d.question} — ${names.slice(0, 3).join(", ")} debate | Feynman`;
+  const canonical = abs(`/symposium/${d.slug}`);
+  const title = `${d.question} — a symposium with ${names.slice(0, 3).join(", ")} | Feynman`;
   const desc = metaDescription(
-    `${names.join(", ")} debate the question "${d.question}" — each argues in their own voice, engaging the others, then you can join the conversation. A living symposium, not a static page.`,
+    `${names.join(", ")} in symposium on "${d.question}" — each argues in their own voice, engaging the others, then you can join the conversation. A living symposium, not a static page.`,
   );
-  const ogImage = abs(`/og?type=debate&slug=${encodeURIComponent(d.slug)}`);
+  const ogImage = abs(`/og?type=symposium&slug=${encodeURIComponent(d.slug)}`);
   return {
     title,
     description: desc,
@@ -73,7 +74,7 @@ export default async function DebatePage({
   const d = await fetchDebate(params.slug);
   if (!d) notFound();
 
-  const canonical = abs(`/debate/${d.slug}`);
+  const canonical = abs(`/symposium/${d.slug}`);
   const names = uniqueNames(d.turns);
   const ref = (mindId: string) => d.mind_slugs?.[mindId] || mindId;
 
@@ -89,7 +90,7 @@ export default async function DebatePage({
   });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
-    ["Debates", abs("/debates")],
+    ["Symposiums", abs("/symposiums")],
     [d.question, canonical],
   ]);
 
@@ -98,7 +99,7 @@ export default async function DebatePage({
       <JsonLd data={ld} />
       <JsonLd data={breadcrumbLd} />
 
-      {d.topic ? <p className="seo-meta">{d.topic} · Debate</p> : <p className="seo-meta">Debate</p>}
+      {d.topic ? <p className="seo-meta">{d.topic} · Symposium</p> : <p className="seo-meta">Symposium</p>}
       <h1>{d.question}</h1>
       <p className="seo-meta">
         {names.length} great minds in conversation — each argues in their own

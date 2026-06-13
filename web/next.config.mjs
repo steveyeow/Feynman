@@ -18,6 +18,15 @@ const API_BASE =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    // The feature shipped briefly at /debate(s) before being renamed to
+    // /symposium(s). Those URLs were in one sitemap render, so 301 them so any
+    // early crawl consolidates onto the new path instead of 404-ing.
+    return [
+      { source: "/debate/:slug", destination: "/symposium/:slug", permanent: true },
+      { source: "/debates", destination: "/symposiums", permanent: true },
+    ];
+  },
   async rewrites() {
     // Local-dev proxy so the browser talks same-origin to the FastAPI on :8001.
     // PRODUCTION rewrites (incl. SEO/OG/share → the Python backend) live in

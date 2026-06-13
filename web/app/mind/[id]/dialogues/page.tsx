@@ -166,11 +166,11 @@ export default async function MindDialoguesPage({
 
       {debates.length ? (
         <section className="seo-section">
-          <h2>Debates {mind.name} joined</h2>
+          <h2>Symposiums {mind.name} joined</h2>
           <ul>
             {debates.map((d) => (
               <li key={d.slug}>
-                <Link href={`/debate/${d.slug}`}>{d.question}</Link>
+                <Link href={`/symposium/${d.slug}`}>{d.question}</Link>
               </li>
             ))}
           </ul>

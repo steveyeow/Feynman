@@ -995,17 +995,18 @@ def sitemap_xml():
     <priority>0.8</priority>
   </url>
 """
-        # Multi-mind debates (Type 4) — emergent symposium transcripts. High
-        # uniqueness + low template-risk (multi-perspective, cross-referencing),
-        # so these ARE advertised, unlike the frozen /q /on editorial layer. The
-        # curated seed set keeps the count small, so no scaled-content footprint.
+        # Multi-mind symposiums (Type 4) — emergent transcripts. High uniqueness
+        # + low template-risk (multi-perspective, cross-referencing), so these
+        # ARE advertised, unlike the frozen /q /on editorial layer. The curated
+        # seed set keeps the count small, so no scaled-content footprint.
+        # (User-facing path is /symposium; the table/fns keep the "debate" name.)
         from .core.db import list_debates as _list_debates
         for _d in _list_debates(limit=500):
             _dslug = _d.get("slug")
             if not _dslug:
                 continue
             urls += f"""  <url>
-    <loc>{_SITE_URL}/debate/{_dslug}</loc>{_lastmod(_d.get("created_at"))}
+    <loc>{_SITE_URL}/symposium/{_dslug}</loc>{_lastmod(_d.get("created_at"))}
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
