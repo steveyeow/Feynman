@@ -40,10 +40,12 @@ import {
   OgMiniCover,
   SymposiumCard,
   SymposiumTurnCard,
+  SymposiumsIndexCard,
 } from "@/lib/og/cards";
 import {
   fetchMind,
   fetchDebate,
+  fetchDebatesList,
   fetchPublicAnswer,
   fetchPublicDiscussion,
   fetchMindOnTopic,
@@ -317,6 +319,11 @@ async function build(type: string, id: string, slug: string, kind: string) {
           label={data.author ? clip(data.author, 44) : isInsights ? "Reader insights" : "Reader discussions"}
         />
       );
+    }
+
+    case "symposiums": {
+      const list = await fetchDebatesList();
+      return <SymposiumsIndexCard questions={list.map((d) => d.question)} />;
     }
 
     case "symposium": {

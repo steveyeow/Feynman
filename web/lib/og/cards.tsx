@@ -504,6 +504,36 @@ export function SymposiumCard({
   );
 }
 
+// The /symposiums index card — the discovery surface IS a collection of live
+// debates. Leads with a few REAL questions (a sharp question pulls far harder
+// than the generic home "knowledge network" tagline it used to fall back to).
+export function SymposiumsIndexCard({ questions }: { questions: string[] }) {
+  return (
+    <Frame
+      body={
+        <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
+          <div style={{ display: "flex", fontSize: 17, letterSpacing: 2, color: INK_MUTE, marginBottom: 14, fontFamily: FONT }}>
+            SYMPOSIUMS
+          </div>
+          <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: INK, lineHeight: 1.14, marginBottom: 28, maxWidth: 1000 }}>
+            Great minds debate the big questions
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {questions.slice(0, 3).map((q, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", fontSize: 27, color: INK_SOFT, fontFamily: FONT, marginBottom: 13 }}>
+                <div style={{ display: "flex", color: INK_MUTE, marginRight: 14 }}>—</div>
+                <div style={{ display: "flex" }}>{clip(q, 60)}</div>
+              </div>
+            ))}
+          </div>
+          <ChatPill label="Browse the symposiums" />
+        </div>
+      }
+      footer={<FooterSimple />}
+    />
+  );
+}
+
 // Single-turn card: one mind's contribution within a symposium. The question is
 // the context strip; the remark is the bubble; the CTA chats with that mind.
 export function SymposiumTurnCard({
