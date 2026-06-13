@@ -27,7 +27,7 @@ import {
   bookJsonld,
   breadcrumbJsonld,
 } from "@/lib/seo-book";
-import { fetchTopics } from "@/lib/seo-mind";
+import { fetchTopics, fetchDebatesList } from "@/lib/seo-mind";
 
 // ISR. The EMPTY generateStaticParams() is load-bearing: it opts this dynamic
 // route into the static/ISR path — prerender NONE at build (there are thousands
@@ -115,13 +115,14 @@ export default async function BookLandingPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Enrichment — all independent, all degrade to empty on failure.
-  const [questions, passages, related, overview, topics, readMeta] = await Promise.all([
+  const [questions, passages, related, overview, topics, readMeta, allDebates] = await Promise.all([
     getQuestions(id),
     getSamplePassages(id, 3),
     getRelatedForBook(id),
     getBookOverview(id),
     fetchTopics(),
     getBookReadMeta(id),
+    fetchDebatesList(),
   ]);
   // Author + subtitle for AI books live in the ai_books row (the /read endpoint),
   // NOT the agent meta_json — so they must come from readMeta to match what the
@@ -134,6 +135,11 @@ export default async function BookLandingPage({ params }: PageProps) {
   // "Topic" rail links to a real /topic/{slug} instead of 404'ing on ad-hoc
   // categories like "Business" (→ "Business & Strategy") or junk values.
   const canonicalTopic = canonicalTopicForCategory(data.category, topics);
+  // Symposiums in the book's topic — surfaced as "Related debates" (a topic-
+  // level tie-in, NOT claimed to be about this book), the least-forced link.
+  const relatedDebates = canonicalTopic
+    ? allDebates.filter((d) => d.topic === canonicalTopic).slice(0, 4)
+    : [];
   // Only surface the category in display chrome when it's a real category, not
   // a leaked chat query stored as the category by topic-discovery.
   const cleanCategory = isCleanCategory(data.category) ? data.category : "";
@@ -263,6 +269,18 @@ export default async function BookLandingPage({ params }: PageProps) {
                     {" "}● {m.activity.count} {m.activity.count === 1 ? "chat" : "chats"}
                   </span>
                 ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {relatedDebates.length ? (
+        <div className="seo-rail-card">
+          <h3>Related debates</h3>
+          <ul>
+            {relatedDebates.map((d) => (
+              <li key={d.slug}>
+                <Link href={`/symposium/${d.slug}`}>{d.question}</Link>
               </li>
             ))}
           </ul>
