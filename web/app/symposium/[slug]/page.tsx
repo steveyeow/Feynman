@@ -78,16 +78,16 @@ export default async function DebatePage({
   const canonical = abs(`/symposium/${d.slug}`);
   const names = uniqueNames(d.turns);
   const ref = (mindId: string) => d.mind_slugs?.[mindId] || mindId;
-  // Where the deeper round begins = the first time a speaker takes a second
-  // turn. Used to drop a "the discussion deepens" divider between movements.
-  const secondRoundAt = (() => {
-    const seen = new Set<string>();
-    for (let i = 0; i < d.turns.length; i++) {
-      if (seen.has(d.turns[i].mind_id)) return i;
-      seen.add(d.turns[i].mind_id);
+  // Distinct participants in first-appearance order — the group-chat header row
+  // (and the footer chat funnel). One entry per mind even though they speak twice.
+  const participants: typeof d.turns = [];
+  const seenP = new Set<string>();
+  for (const t of d.turns) {
+    if (!seenP.has(t.mind_id)) {
+      seenP.add(t.mind_id);
+      participants.push(t);
     }
-    return -1;
-  })();
+  }
 
   const ld = debateJsonLd({
     question: d.question,
@@ -110,71 +110,83 @@ export default async function DebatePage({
       <JsonLd data={ld} />
       <JsonLd data={breadcrumbLd} />
 
-      {d.topic ? <p className="seo-meta">{d.topic} · Symposium</p> : <p className="seo-meta">Symposium</p>}
+      <p className="seo-meta">{d.topic ? `${d.topic} · Symposium` : "Symposium"}</p>
       <h1>{d.question}</h1>
-      <p className="seo-meta">
-        {names.length} great minds in conversation — each argues in their own
-        voice, grounded in their documented ideas, engaging the others by name.
-        An AI-mediated symposium you can join.
-      </p>
 
-      <div className="symposium-thread">
-        {d.turns.map((t, i) => {
-          const href = `/mind/${encodeURIComponent(ref(t.mind_id))}`;
-          return (
-            <div key={i}>
-              {i === secondRoundAt ? (
-                <div className="symposium-round-break">The discussion deepens</div>
-              ) : null}
-              <article className="symposium-turn">
-                <Link
-                  href={href}
-                  className="symposium-avatar"
-                  style={{ background: mindColor(t.mind_name) }}
-                  aria-hidden="true"
-                  tabIndex={-1}
-                >
-                  {mindInitials(t.mind_name)}
-                </Link>
-                <div className="symposium-turn-body">
-                  <Link href={href} className="symposium-turn-author">
-                    {t.mind_name}
-                  </Link>
-                  {t.content
-                    .split(/\n\n+/)
-                    .map((p) => p.trim())
-                    .filter(Boolean)
-                    .map((p, j) => (
-                      <p key={j}>{p}</p>
-                    ))}
-                </div>
-              </article>
-            </div>
-          );
-        })}
+      {/* Group-chat header: the minds in the room, each a chat entry point. */}
+      <div className="symposium-participants">
+        {participants.map((t) => (
+          <Link
+            key={t.mind_id}
+            href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}
+            className="symposium-participant"
+          >
+            <span
+              className="symposium-pill-avatar"
+              style={{ background: mindColor(t.mind_name) }}
+            >
+              {mindInitials(t.mind_name)}
+            </span>
+            <span className="symposium-pill-name">{t.mind_name}</span>
+          </Link>
+        ))}
       </div>
-
-      <p className="seo-cta-row">
-        <a
-          className="primary"
-          href={`/mind/${encodeURIComponent(ref(d.turns[0].mind_id))}/chat`}
-        >
-          Chat with {d.turns[0].mind_name} →
-        </a>
+      <p className="seo-meta symposium-intro">
+        {names.length} great minds on this question — each in their own voice,
+        engaging the others. Tap anyone to chat.
       </p>
 
-      <section className="seo-section">
-        <h2>Chat with any of them</h2>
-        <ul>
-          {d.turns.map((t, i) => (
-            <li key={i}>
-              <Link href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}>
+      {/* The conversation, read as a thread (one bubble per turn). */}
+      <div className="symposium-thread">
+        {d.turns.map((t, i) => (
+          <article key={i} className="symposium-turn">
+            <span
+              className="symposium-avatar"
+              style={{ background: mindColor(t.mind_name) }}
+              aria-hidden="true"
+            >
+              {mindInitials(t.mind_name)}
+            </span>
+            <div className="symposium-turn-body">
+              <Link
+                href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}
+                className="symposium-turn-author"
+              >
                 {t.mind_name}
               </Link>
-            </li>
+              {t.content
+                .split(/\n\n+/)
+                .map((p) => p.trim())
+                .filter(Boolean)
+                .map((p, j) => (
+                  <p key={j}>{p}</p>
+                ))}
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Footer funnel: continue with any voice in the room (no single pick). */}
+      <div className="symposium-footer">
+        <p className="seo-meta">Continue the conversation — chat with any of them:</p>
+        <div className="symposium-participants">
+          {participants.map((t) => (
+            <Link
+              key={t.mind_id}
+              href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}
+              className="symposium-participant"
+            >
+              <span
+                className="symposium-pill-avatar"
+                style={{ background: mindColor(t.mind_name) }}
+              >
+                {mindInitials(t.mind_name)}
+              </span>
+              <span className="symposium-pill-name">{t.mind_name}</span>
+            </Link>
           ))}
-        </ul>
-      </section>
+        </div>
+      </div>
     </SeoColumn>
   );
 }
