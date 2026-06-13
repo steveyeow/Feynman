@@ -27,6 +27,7 @@ from .db import (
     add_debate_turn,
     create_debate,
     debate_question_exists,
+    delete_debate_by_question,
     get_mind_by_name,
 )
 from .providers import bulk_chat
@@ -56,7 +57,7 @@ def _voice_bits(m: dict[str, Any]) -> tuple[str, str]:
     return phrases, works
 
 
-def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: bool) -> str:
+def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: bool, is_later_round: bool = False) -> str:
     phrases, works = _voice_bits(m)
     head = (
         f"You are {m['name']} ({m.get('era') or ''}; {m.get('domain') or ''}).\n"
@@ -70,6 +71,18 @@ def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: 
         body = (
             f"You open the symposium. State your position as {m['name']} — the core "
             "claim and the reasoning that makes it unmistakably yours."
+        )
+    elif is_later_round:
+        # Second pass: the discussion exists, so push it forward instead of
+        # restating an opening — this is what turns 3-4 isolated takes into an
+        # actual symposium with depth.
+        body = (
+            f"The symposium so far:\n{transcript}\n\n"
+            f"As {m['name']}, the discussion has developed — now go deeper. Pick the "
+            "single strongest challenge another speaker has raised to your view and "
+            "meet it head-on, OR pinpoint exactly where you and another speaker "
+            "fundamentally diverge and why it matters. Name them. Do NOT restate your "
+            "opening — advance it with a concrete distinction, example, or consequence."
         )
     else:
         body = (
@@ -88,16 +101,23 @@ def _clean(text: str) -> str:
     return t.strip()
 
 
-def generate_debate(question: str, minds: list[dict[str, Any]], rounds: int = 1) -> list[dict[str, Any]]:
+def generate_debate(question: str, minds: list[dict[str, Any]], rounds: int = 2) -> list[dict[str, Any]]:
     """Round-robin generation. Each speaker sees the running transcript. Returns
-    a list of {mind, turn_index, content}. A failed/short turn is skipped."""
+    a list of {mind, turn_index, content}. A failed/short turn is skipped.
+
+    rounds=2 (default) gives a real symposium, not 3-4 isolated takes: round 1 =
+    opening positions that reference each other; round 2 = each speaker goes
+    deeper, meeting the strongest challenge or sharpening a true disagreement."""
     turns: list[dict[str, Any]] = []
     transcript = ""
     idx = 0
-    for _r in range(rounds):
+    for r in range(rounds):
         for m in minds:
             try:
-                res, _ = bulk_chat(system=_DEBATE_SYSTEM, user=_debate_prompt(question, m, transcript, idx == 0))
+                res, _ = bulk_chat(
+                    system=_DEBATE_SYSTEM,
+                    user=_debate_prompt(question, m, transcript, idx == 0, is_later_round=(r >= 1)),
+                )
             except Exception as exc:
                 log.warning("debate turn failed for %s: %s", m.get("name"), exc)
                 continue
@@ -147,13 +167,16 @@ SEED_DEBATES: list[dict[str, Any]] = [
 ]
 
 
-def run_debate_batch(limit: int | None = None, rounds: int = 1) -> tuple[int, int]:
-    """Generate + store debates from the seed list. Idempotent (skips questions
-    already debated). Returns (created, remaining). Drives a local script."""
+def run_debate_batch(limit: int | None = None, rounds: int = 2, force: bool = False) -> tuple[int, int]:
+    """Generate + store debates from the seed list. Idempotent: skips questions
+    already debated UNLESS force=True, which regenerates them (delete old turns
+    first) — used to re-run the seeds at a deeper round count. Returns
+    (created, remaining). Drives a local script."""
     created = 0
     remaining = 0
     for seed in SEED_DEBATES:
-        if debate_question_exists(seed["q"]):
+        exists = debate_question_exists(seed["q"])
+        if exists and not force:
             continue
         remaining += 1
         if limit is not None and created >= limit:
@@ -172,6 +195,10 @@ def run_debate_batch(limit: int | None = None, rounds: int = 1) -> tuple[int, in
         if len(turns) < 2:
             log.warning("debate %r: only %d turns generated, skipping", seed["q"], len(turns))
             continue
+        # Only delete the old version AFTER a successful regeneration, so a
+        # mid-run failure never leaves a question with no symposium at all.
+        if exists and force:
+            delete_debate_by_question(seed["q"])
         d = create_debate(seed["q"], seed["topic"], [t["mind"]["id"] for t in turns])
         for t in turns:
             add_debate_turn(d["id"], t["mind"]["id"], t["mind"]["name"], t["turn_index"], t["content"])
