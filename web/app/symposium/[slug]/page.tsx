@@ -167,26 +167,17 @@ export default async function DebatePage({
       </div>
 
       {/* Footer funnel: continue with any voice in the room (no single pick). */}
-      <div className="symposium-footer">
-        <p className="seo-meta">Continue the conversation — chat with any of them:</p>
-        <div className="symposium-participants">
-          {participants.map((t) => (
-            <Link
-              key={t.mind_id}
-              href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}
-              className="symposium-participant"
-            >
-              <span
-                className="symposium-pill-avatar"
-                style={{ background: mindColor(t.mind_name) }}
-              >
-                {mindInitials(t.mind_name)}
-              </span>
-              <span className="symposium-pill-name">{t.mind_name}</span>
+      <p className="symposium-footer seo-meta">
+        Continue the conversation —{" "}
+        {participants.map((t, i) => (
+          <span key={t.mind_id}>
+            {i > 0 ? " · " : ""}
+            <Link href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}>
+              chat with {t.mind_name}
             </Link>
-          ))}
-        </div>
-      </div>
+          </span>
+        ))}
+      </p>
     </SeoColumn>
   );
 }
