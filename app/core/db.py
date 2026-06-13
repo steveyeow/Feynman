@@ -3579,14 +3579,31 @@ def get_debate_by_slug(slug: str) -> dict[str, Any] | None:
 
 
 def list_debates(limit: int = 200) -> list[dict[str, Any]]:
-    """All published debates (slug + question + recency) — the sitemap + index."""
+    """All published debates (slug + question + topic + participant names) — the
+    /symposiums index + sitemap. Participants come from one batched query over
+    debate_turns (names only, no content), ordered by first appearance."""
     with get_conn() as conn:
         rows = _fetchall(conn, _q(
-            "SELECT slug, question, topic, created_at FROM debates "
+            "SELECT id, slug, question, topic, created_at FROM debates "
             "WHERE status = 'published' AND slug IS NOT NULL "
             "ORDER BY created_at DESC LIMIT ?"
         ), (limit,))
-        return [dict(r) for r in rows]
+        debates = [dict(r) for r in rows]
+        if not debates:
+            return []
+        ids = [d["id"] for d in debates]
+        ph = ",".join(["?"] * len(ids))
+        trows = _fetchall(conn, _q(
+            f"SELECT debate_id, mind_name, MIN(turn_index) AS ord FROM debate_turns "  # noqa: S608 — ph is ?-placeholders
+            f"WHERE debate_id IN ({ph}) GROUP BY debate_id, mind_name ORDER BY ord ASC"
+        ), tuple(ids))
+        by_debate: dict[str, list[str]] = {}
+        for t in trows:
+            by_debate.setdefault(t["debate_id"], []).append(t["mind_name"])
+        for d in debates:
+            d["participants"] = by_debate.get(d["id"], [])
+            d.pop("id", None)  # internal — don't leak into the API payload
+        return debates
 
 
 def list_debates_for_mind(mind_id: str, limit: int = 10) -> list[dict[str, Any]]:

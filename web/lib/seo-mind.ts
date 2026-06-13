@@ -421,6 +421,7 @@ export interface DebateListItem {
   question: string;
   topic?: string;
   created_at?: string;
+  participants?: string[];
 }
 
 /** A debate + its ordered turns (GET /api/debates/{slug}); null if absent. */
