@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import EntityLayout from "@/components/seo/EntityLayout";
 import JsonLd from "@/components/seo/JsonLd";
+import ShareButton from "@/components/share/ShareButton";
 import {
   SITE_URL,
   abs,
@@ -143,6 +144,16 @@ export default async function SymposiumPage({
         a living exchange you won&apos;t find anywhere else — read it, then chat with
         any of them yourself.
       </p>
+      <div className="symposium-hero-actions">
+        <ShareButton
+          url={canonical}
+          title={d.question}
+          subject="Symposium"
+          previewImage={abs(`/og?type=symposium&slug=${encodeURIComponent(d.slug)}`)}
+          label="Share this symposium"
+          variant="secondary"
+        />
+      </div>
     </>
   );
 
@@ -195,12 +206,24 @@ export default async function SymposiumPage({
             <div className="mind-msg-body">
               <div className="mind-msg-name symposium-turn-head">
                 <span>{t.mind_name}</span>
-                <Link
-                  href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}
-                  className="symposium-chat-link"
-                >
-                  Chat →
-                </Link>
+                <span className="symposium-turn-actions">
+                  <ShareButton
+                    url={`${canonical}#turn-${i}`}
+                    title={`${t.mind_name} on “${d.question}”`}
+                    subject="From a symposium"
+                    previewImage={abs(
+                      `/og?type=symposium-turn&slug=${encodeURIComponent(d.slug)}&kind=${i}`,
+                    )}
+                    label="Share"
+                    variant="ghost"
+                  />
+                  <Link
+                    href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}
+                    className="symposium-chat-link"
+                  >
+                    Chat →
+                  </Link>
+                </span>
               </div>
               <div className="mind-msg-content">
                 {t.content
