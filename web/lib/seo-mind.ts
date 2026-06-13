@@ -391,6 +391,102 @@ export function dialoguesArticleJsonLd(opts: {
   });
 }
 
+// ─── Multi-mind debates (Type 4) ───
+
+export interface DebateTurn {
+  mind_id: string;
+  mind_name: string;
+  turn_index: number;
+  content: string;
+}
+
+export interface Debate {
+  id: string;
+  slug: string;
+  question: string;
+  topic?: string;
+  created_at?: string;
+  turns: DebateTurn[];
+  mind_slugs?: Record<string, string>;
+}
+
+export interface MindDebateItem {
+  slug: string;
+  question: string;
+  created_at?: string;
+}
+
+export interface DebateListItem {
+  slug: string;
+  question: string;
+  topic?: string;
+  created_at?: string;
+}
+
+/** A debate + its ordered turns (GET /api/debates/{slug}); null if absent. */
+export async function fetchDebate(slug: string): Promise<Debate | null> {
+  try {
+    const res = await get<Debate>(`/api/debates/${encodeURIComponent(slug)}`, {
+      next: { revalidate: 600 },
+    });
+    if (!res || !Array.isArray(res.turns) || res.turns.length === 0) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+/** All published debates — the /debates index feed. */
+export async function fetchDebatesList(): Promise<DebateListItem[]> {
+  try {
+    const res = await get<{ debates?: DebateListItem[] }>(`/api/debates`, {
+      next: { revalidate: 600 },
+    });
+    return Array.isArray(res?.debates) ? res.debates : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Debates a mind argued in — the 'Recent debates' rail on /mind/{id}. */
+export async function fetchMindDebates(id: string): Promise<MindDebateItem[]> {
+  try {
+    const res = await get<{ debates?: MindDebateItem[] }>(
+      `/api/minds/${encodeURIComponent(id)}/debates`,
+      { next: { revalidate: 600 } },
+    );
+    return Array.isArray(res?.debates) ? res.debates : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Debate page schema. DiscussionForumPosting with each mind's turn as a
+ * Comment authored by that thinker (Person) — the multi-author structure
+ * Google understands for a symposium, and the citation hook for LLMs.
+ */
+export function debateJsonLd(opts: {
+  question: string;
+  url: string;
+  created?: string;
+  turns: Array<{ name: string; text: string; url: string }>;
+}): Json {
+  return dropNulls({
+    "@context": "https://schema.org",
+    "@type": "DiscussionForumPosting",
+    headline: opts.question,
+    url: opts.url,
+    datePublished: opts.created || "",
+    author: { "@type": "Organization", name: "Feynman", url: SITE_URL },
+    comment: opts.turns.map((t) => ({
+      "@type": "Comment",
+      text: t.text,
+      author: { "@type": "Person", name: t.name, url: t.url },
+    })),
+  });
+}
+
 /** Truncate to ~N chars on a word boundary with an ellipsis (matches seo.py). */
 export function truncate(text: string, maxChars: number): string {
   const t = (text || "").trim();

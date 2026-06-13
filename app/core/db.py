@@ -1141,6 +1141,42 @@ def init_db() -> None:
     except Exception:
         pass
 
+    # Multi-mind debates (Type-4 generated content: 2-4 minds argue one question,
+    # the emergent transcript is the unique indexable artifact). Two plain new
+    # tables — CREATE TABLE IF NOT EXISTS only, NO ALTER, so this never blocks a
+    # cold start (cf. the 2026-06-10 zombie-lock incident). PG + SQLite share the
+    # DDL, so it lives once here instead of in both schema branches above.
+    try:
+        with get_conn() as conn:
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS debates (
+                    id TEXT PRIMARY KEY,
+                    slug TEXT,
+                    question TEXT NOT NULL,
+                    topic TEXT,
+                    mind_ids TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL DEFAULT 'published',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_debates_slug ON debates(slug)")
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_debates_created ON debates(created_at DESC)")
+            _execute(conn, """
+                CREATE TABLE IF NOT EXISTS debate_turns (
+                    id TEXT PRIMARY KEY,
+                    debate_id TEXT NOT NULL,
+                    mind_id TEXT NOT NULL,
+                    mind_name TEXT NOT NULL,
+                    turn_index INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            _execute(conn, "CREATE INDEX IF NOT EXISTS idx_debate_turns_debate ON debate_turns(debate_id, turn_index)")
+    except Exception:
+        import logging as _log
+        _log.getLogger(__name__).warning("debates schema init skipped", exc_info=True)
+
 
 def _unique_slug(conn, table: str, name: str) -> str | None:
     """Descriptive URL slug for a new entity, deduped within its table.
@@ -3474,6 +3510,93 @@ def list_related_minds(mind_id: str, domain: str, limit: int = 6) -> list[dict[s
                LIMIT ?"""
         ), (mind_id, f"%{primary}%", limit))
         return [dict(r) for r in rows]
+
+
+# ─── Multi-mind debates (Type 4) ───
+
+def get_mind_by_name(name: str) -> dict[str, Any] | None:
+    """Case-insensitive exact-name lookup with the voice fields the debate
+    generator needs (persona/typical_phrases/works). Returns None if absent."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT id, name, slug, era, domain, bio_summary, persona, thinking_style, "
+            "typical_phrases, works FROM minds WHERE LOWER(name) = LOWER(?) "
+            "ORDER BY chat_count DESC LIMIT 1"
+        ), (name.strip(),))
+        return dict(row) if row else None
+
+
+def create_debate(question: str, topic: str, mind_ids: list[str]) -> dict[str, Any]:
+    """Insert a debate shell (turns added separately). Returns {id, slug}."""
+    did = str(uuid.uuid4())
+    with get_conn() as conn:
+        slug = _unique_slug(conn, "debates", question[:60]) or did[:8]
+        _execute(conn, _q(
+            "INSERT INTO debates (id, slug, question, topic, mind_ids, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, 'published', ?)"
+        ), (did, slug, question, topic or "", json.dumps(mind_ids), _utcnow()))
+    return {"id": did, "slug": slug}
+
+
+def add_debate_turn(debate_id: str, mind_id: str, mind_name: str, turn_index: int, content: str) -> None:
+    with get_conn() as conn:
+        _execute(conn, _q(
+            "INSERT INTO debate_turns (id, debate_id, mind_id, mind_name, turn_index, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ), (str(uuid.uuid4()), debate_id, mind_id, mind_name, turn_index, content, _utcnow()))
+
+
+def get_debate_by_slug(slug: str) -> dict[str, Any] | None:
+    """A debate + its ordered turns, by slug (the /debate/{slug} render)."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q(
+            "SELECT id, slug, question, topic, mind_ids, created_at FROM debates "
+            "WHERE slug = ? AND status = 'published'"
+        ), (slug,))
+        if not row:
+            return None
+        d = dict(row)
+        turns = _fetchall(conn, _q(
+            "SELECT mind_id, mind_name, turn_index, content FROM debate_turns "
+            "WHERE debate_id = ? ORDER BY turn_index ASC"
+        ), (d["id"],))
+        d["turns"] = [dict(t) for t in turns]
+        try:
+            d["mind_ids"] = json.loads(d.get("mind_ids") or "[]")
+        except Exception:
+            d["mind_ids"] = []
+        return d
+
+
+def list_debates(limit: int = 200) -> list[dict[str, Any]]:
+    """All published debates (slug + question + recency) — the sitemap + index."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            "SELECT slug, question, topic, created_at FROM debates "
+            "WHERE status = 'published' AND slug IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT ?"
+        ), (limit,))
+        return [dict(r) for r in rows]
+
+
+def list_debates_for_mind(mind_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    """Debates a given mind argued in — the 'Recent debates' rail on /mind/{id}
+    and /mind/{id}/dialogues (the per-mind aggregation, philosophie.ai-style)."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            "SELECT DISTINCT d.slug, d.question, d.created_at FROM debates d "
+            "JOIN debate_turns t ON t.debate_id = d.id "
+            "WHERE t.mind_id = ? AND d.status = 'published' AND d.slug IS NOT NULL "
+            "ORDER BY d.created_at DESC LIMIT ?"
+        ), (mind_id, limit))
+        return [dict(r) for r in rows]
+
+
+def debate_question_exists(question: str) -> bool:
+    """Idempotency guard for the generator — skip a question already debated."""
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT 1 AS hit FROM debates WHERE question = ?"), (question,))
+        return bool(row)
 
 
 # ─── Mind memories ───
