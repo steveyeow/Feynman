@@ -75,6 +75,9 @@ interface PendingChat {
   message: string;
   books?: SelectedBook[];
   minds?: SelectedMind[];
+  // Symposium "join": the prior debate, replayed into the first panel round's
+  // history so the invited minds continue it (consumed once; see seedHistoryRef).
+  seedHistory?: { role: string; content: string }[];
 }
 
 /** True if a first-message handoff for this session is waiting (without
@@ -222,6 +225,9 @@ export default function ChatView({
   // effect below. Pro / open-source users are unaffected (the gate only reads
   // it when !isProUser).
   const invitedOnceRef = useRef(false);
+  // Symposium "join" handoff: the prior debate, injected into the FIRST panel
+  // round's history (consumed once) so the minds pick up where it left off.
+  const seedHistoryRef = useRef<{ role: string; content: string }[] | null>(null);
   const [sending, setSending] = useState(false);
   const [mindsBusy, setMindsBusy] = useState(false);
   const [consent, setConsent] = useState<ConsentState>(null);
@@ -495,6 +501,10 @@ export default function ChatView({
         return m && joinedNames.includes(m.name);
       });
       let responses: MindResponse[] = [];
+      // Symposium "join" replays the prior debate into the FIRST round's history
+      // (consumed once); later rounds carry context via baseMsgs as usual.
+      const seed = seedHistoryRef.current;
+      if (seed) seedHistoryRef.current = null;
       try {
         responses = await panelChat({
           message,
@@ -502,7 +512,7 @@ export default function ChatView({
           invitedMindIds: invitedIds.length ? invitedIds : undefined,
           bookContext: bookCtx.length ? bookCtx : undefined,
           agentIds: agentIds.length ? agentIds : undefined,
-          history: buildPanelHistory(baseMsgs),
+          history: seed ? [...seed, ...buildPanelHistory(baseMsgs)] : buildPanelHistory(baseMsgs),
           targetMinds: targetMinds?.length ? targetMinds : undefined,
         });
       } catch (e) {
@@ -976,6 +986,8 @@ export default function ChatView({
     const seededMinds = new Map((pending.minds || []).map((m) => [m.id, m]));
     if (seededBooks.size) setBooks(seededBooks);
     if (seededMinds.size) setMinds(seededMinds);
+    // Symposium "join": stash the prior debate so the first panel round carries it.
+    if (pending.seedHistory?.length) seedHistoryRef.current = pending.seedHistory;
     // …and pass them as overrides so the send uses them without waiting for the
     // setBooks/setMinds state updates to commit.
     handleSend(pending.message, { books: seededBooks, minds: seededMinds });

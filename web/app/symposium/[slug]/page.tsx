@@ -4,6 +4,7 @@ import Link from "next/link";
 import EntityLayout from "@/components/seo/EntityLayout";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareButton from "@/components/share/ShareButton";
+import JoinDiscussionButton from "@/components/symposium/JoinDiscussionButton";
 import {
   SITE_URL,
   abs,
@@ -146,6 +147,11 @@ export default async function SymposiumPage({
         any of them yourself.
       </p>
       <div className="symposium-hero-actions">
+        <JoinDiscussionButton
+          question={d.question}
+          participants={participants}
+          turns={d.turns}
+        />
         <ShareButton
           url={canonical}
           title={d.question}

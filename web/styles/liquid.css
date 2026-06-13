@@ -614,7 +614,20 @@ body { background-color: var(--bg-home); }
 .seo-content a.symposium-chat-link:hover { opacity: 0.8; }
 /* Compact share button inside a turn (override the default seo-action sizing). */
 .symposium-turn-actions .seo-action { font-size: 12px; padding: 2px 4px; }
-.symposium-hero-actions { margin-top: 16px; }
+.symposium-hero-actions { margin-top: 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* Primary CTA — "Join this discussion" (symposium → live multi-mind chat). Black
+   solid like the site's primary button + .topic-tag.active, so it reads as THE
+   action; Share sits beside it as secondary. */
+.symposium-join-cta {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: 999px;
+  background: var(--btn-solid-bg); color: var(--btn-solid-color);
+  border: 1px solid var(--btn-solid-bg);
+  font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.symposium-join-cta:hover { opacity: 0.88; }
+.symposium-join-cta:disabled { opacity: 0.55; cursor: default; }
 
 /* ── /symposiums index — a single-column question stream (the question is the
    hook), with topic chips to filter. Not grouped, not a grid. ── */
