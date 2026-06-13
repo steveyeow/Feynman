@@ -215,7 +215,7 @@ export default async function SymposiumPage({
                 <span>{t.mind_name}</span>
                 <span className="symposium-turn-actions">
                   <ShareButton
-                    url={`${canonical}#turn-${i}`}
+                    url={`${canonical}/t/${i}`}
                     title={`${t.mind_name} on “${d.question}”`}
                     subject="From a symposium"
                     previewImage={abs(
