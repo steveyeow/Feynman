@@ -69,6 +69,20 @@ const NAV = [
       </>
     ),
   },
+  {
+    href: "/symposiums",
+    label: "Symposiums",
+    cls: "sidebar-symposiums-link",
+    icon: (
+      <>
+        {/* speech bubble with three voices — a multi-mind conversation */}
+        <path d="M4 5h16v10H9l-4 4V5z" />
+        <circle cx="9" cy="10" r="1" />
+        <circle cx="13" cy="10" r="1" />
+        <circle cx="17" cy="10" r="1" />
+      </>
+    ),
+  },
 ];
 
 export default function Sidebar() {
@@ -158,7 +172,11 @@ export default function Sidebar() {
       </Link>
 
       {NAV.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(item.href + "/");
+        const active =
+          pathname === item.href ||
+          pathname.startsWith(item.href + "/") ||
+          // /symposiums (index) should also light up on /symposium/{slug} (detail).
+          (item.href === "/symposiums" && pathname.startsWith("/symposium/"));
         return (
           <Link
             key={item.href}
