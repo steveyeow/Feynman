@@ -218,6 +218,9 @@ body {
 .app-layout.sidebar-collapsed .sidebar-minds-link {
   justify-content: center; padding: 8px; margin: 0 8px 4px;
 }
+.app-layout.sidebar-collapsed .sidebar-symposiums-link {
+  justify-content: center; padding: 8px; margin: 0 8px 4px;
+}
 .app-layout.sidebar-collapsed .sidebar-profile .sidebar-label {
   display: none;
 }
@@ -303,6 +306,16 @@ body {
 }
 .sidebar-minds-link:hover { color: var(--text); background: rgba(128,128,128,0.08); }
 .sidebar-minds-link svg { flex-shrink: 0; }
+.sidebar-symposiums-link {
+  margin: 0 12px 8px; padding: 8px 12px;
+  border-radius: 8px;
+  display: flex; align-items: center; gap: 8px;
+  color: var(--text-muted); text-decoration: none;
+  font-size: 13px; font-weight: 500; font-family: 'Libre Baskerville', Georgia, serif;
+  transition: all 0.15s; white-space: nowrap;
+}
+.sidebar-symposiums-link:hover { color: var(--text); background: rgba(128,128,128,0.08); }
+.sidebar-symposiums-link svg { flex-shrink: 0; }
 
 .profile-info {
   display: flex; flex-direction: column; min-width: 0;

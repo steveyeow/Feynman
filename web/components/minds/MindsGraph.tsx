@@ -134,14 +134,22 @@ export default function MindsGraph() {
     let W = container.clientWidth || 900;
     let H = container.clientHeight || 600;
 
-    // Play the top-left "flow" entrance only on the FIRST visit; afterwards drop
-    // the visitor straight into a settled graph and restore their last pan/zoom.
-    const SEEN_KEY = "feynman:minds-graph-seen";
+    // First visit: play the original top-left flow-in entrance, then save the
+    // SETTLED node positions + view. Every later visit: seat nodes at those
+    // saved positions and keep the sim STOPPED (zero animation — no re-flow, no
+    // center "explosion"), restoring the exact last view. Saving the final
+    // positions (not just pan/zoom, and NOT the raw PCA targets) is what makes a
+    // return visit show precisely where things settled last time.
+    const POS_KEY = "feynman:minds-graph-pos";
     const VIEW_KEY = "feynman:minds-graph-view";
-    let seenIntro = false;
+    let savedPositions: Record<string, [number, number]> | null = null;
     let savedView: { x: number; y: number; k: number } | null = null;
     try {
-      seenIntro = localStorage.getItem(SEEN_KEY) === "1";
+      const rawPos = localStorage.getItem(POS_KEY);
+      if (rawPos) {
+        const p = JSON.parse(rawPos);
+        if (p && typeof p === "object" && Object.keys(p).length) savedPositions = p;
+      }
       const raw = localStorage.getItem(VIEW_KEY);
       if (raw) {
         const v = JSON.parse(raw);
@@ -150,6 +158,18 @@ export default function MindsGraph() {
     } catch {
       /* private mode / disabled storage — just play the default entrance */
     }
+    const savePositions = () => {
+      if (!nodes.length) return;
+      try {
+        const out: Record<string, [number, number]> = {};
+        for (const n of nodes) {
+          if (n.x != null && n.y != null) out[n.id] = [Math.round(n.x), Math.round(n.y)];
+        }
+        localStorage.setItem(POS_KEY, JSON.stringify(out));
+      } catch {
+        /* ignore */
+      }
+    };
 
     const canvas = document.createElement("canvas");
     canvas.className = styles.canvas;
@@ -218,6 +238,12 @@ export default function MindsGraph() {
         .alphaDecay(0.015)
         .on("tick", () => {
           /* draw loop reads positions; nothing to do here */
+        })
+        .on("end", () => {
+          // Sim settled (the first-visit entrance finished, or a drag came to
+          // rest) → persist the final positions so the next visit restores them
+          // with no animation.
+          savePositions();
         });
     }
 
@@ -234,14 +260,16 @@ export default function MindsGraph() {
       const built = buildGraphData(minds, simLinks, layout);
       nodes = built.nodes;
       links = built.links;
-      // Returning visitor: seat nodes AT their PCA targets so the graph appears
-      // already settled (no flow-in from the origin). First-timer: leave x/y
-      // unset so the embedding force does its one-time top-left entrance.
-      if (seenIntro) {
+      // Returning visitor: restore the EXACT last settled positions (saved on
+      // 'end'), so the graph appears exactly as they left it. First-timer:
+      // leave x/y unset so the embedding force does its one-time top-left
+      // entrance from the origin.
+      if (savedPositions) {
         for (const n of nodes) {
-          if (n.layoutPos) {
-            n.x = n.layoutPos.rx * W;
-            n.y = n.layoutPos.ry * H;
+          const p = savedPositions[n.id];
+          if (p) {
+            n.x = p[0];
+            n.y = p[1];
           }
         }
       }
@@ -259,20 +287,16 @@ export default function MindsGraph() {
           });
         }
       }
-      sim = buildSimulation(); // auto-starts at alpha 1, like production
-      if (seenIntro) {
-        // Already seated at targets — run a low-alpha pass so collision/charge
-        // gently de-overlap without a visible flow, instead of a full entrance.
-        sim.alpha(0.25);
-      } else {
-        // First visit: let the entrance play, then remember it so we never
-        // replay it on this device.
-        try {
-          localStorage.setItem(SEEN_KEY, "1");
-        } catch {
-          /* ignore */
-        }
+      sim = buildSimulation();
+      if (savedPositions) {
+        // Return visit: nodes are already at their last settled spots — freeze
+        // the sim so there is ZERO motion (no flow-in, no charge "explosion").
+        // A drag restarts it, and on('end') re-saves the new positions.
+        sim.stop();
       }
+      // First visit: leave the sim running (auto-started at alpha 1) so the
+      // top-left flow-in entrance plays; on('end') then saves the settled
+      // positions for next time.
     })();
 
     // ── Zoom / pan ─────────────────────────────────────────────────────────
