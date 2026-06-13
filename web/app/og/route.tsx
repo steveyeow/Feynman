@@ -78,13 +78,24 @@ export async function GET(req: Request) {
   const kind = searchParams.get("kind") || "";
 
   const fonts = await loadOgFonts();
-  const opts = { ...OG_SIZE, fonts, headers: { "Cache-Control": CACHE } };
+  const opts = { ...OG_SIZE, fonts };
 
+  // @vercel/og's ImageResponse injects its own "immutable, max-age=31536000"
+  // Cache-Control and the `headers` option doesn't reliably override it — the
+  // result drops our s-maxage. WITHOUT s-maxage the Vercel CDN won't cache the
+  // image (x-vercel-cache: MISS), so every social scrape cold-renders it (Satori
+  // + remote portrait fetch ≈ 2s) and slow scrapers (X/Twitter) time out to a
+  // BLANK card. Set it explicitly on the response so the CDN caches it and
+  // re-scrapes are instant. Applies to every card type (book/mind/symposium/…).
   try {
     const el = await build(type, id, slug, kind);
-    return new ImageResponse(el, opts);
+    const img = new ImageResponse(el, opts);
+    img.headers.set("Cache-Control", CACHE);
+    return img;
   } catch {
-    return new ImageResponse(<FallbackCard />, opts);
+    const img = new ImageResponse(<FallbackCard />, opts);
+    img.headers.set("Cache-Control", CACHE);
+    return img;
   }
 }
 
