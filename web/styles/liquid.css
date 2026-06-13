@@ -587,44 +587,42 @@ body { background-color: var(--bg-home); }
 .insight-card-who { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 5px; }
 .insight-card p { margin: 0; line-height: 1.6; color: var(--text); }
 
-/* ── Symposium — a multi-mind conversation, styled like the chat UI: a
-   participants header (the minds in the room) + a light message thread. The
-   .seo-content overrides kill the inherited SEO-prose link underline/blue so
-   avatars and names read as chat, not hyperlinks. ── */
-.symposium-participants { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 10px; }
+/* ── Symposium — a multi-mind conversation, deliberately light: a quiet
+   participants row (no pills/boxes) + a clean message thread. .seo-content
+   overrides kill the inherited SEO-prose link underline/blue so avatars and
+   names read as chat, not hyperlinks. ── */
+.symposium-participants { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0 8px; }
 .seo-content a.symposium-participant {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 4px 12px 4px 4px; border-radius: 999px;
-  background: var(--bg-sidebar); border: 1px solid var(--border);
-  text-decoration: none; color: var(--text);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  display: inline-flex; align-items: center; gap: 7px;
+  text-decoration: none; color: var(--text-secondary);
+  transition: color 0.15s ease;
 }
-.seo-content a.symposium-participant:hover { border-color: var(--accent); background: var(--accent-light); }
+.seo-content a.symposium-participant:hover { color: var(--accent); }
 .symposium-pill-avatar {
-  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 11px; user-select: none;
+  color: #fff; font-weight: 600; font-size: 9px; user-select: none; opacity: 0.9;
 }
-.symposium-pill-name { font-size: 13px; font-weight: 600; color: var(--text); }
-.symposium-intro { margin-bottom: 4px; }
+.symposium-pill-name { font-size: 13px; font-weight: 500; }
+.symposium-intro { margin-bottom: 2px; }
 
-.symposium-thread { display: flex; flex-direction: column; gap: 2px; margin-top: 20px; max-width: 720px; }
-.symposium-turn { display: flex; gap: 12px; padding: 14px 0; }
+.symposium-thread { display: flex; flex-direction: column; margin-top: 22px; max-width: 700px; }
+.symposium-turn { display: flex; gap: 12px; padding: 16px 0; }
+.symposium-turn + .symposium-turn { border-top: 1px solid var(--border); }
 .symposium-avatar {
-  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 13px; user-select: none;
+  color: #fff; font-weight: 600; font-size: 11px; user-select: none; opacity: 0.92;
 }
 .symposium-turn-body { flex: 1; min-width: 0; }
 .seo-content a.symposium-turn-author {
-  display: inline-block; font-size: 14px; font-weight: 650;
-  color: var(--text); text-decoration: none; margin-bottom: 1px;
+  display: inline-block; font-size: 14px; font-weight: 600;
+  color: var(--text); text-decoration: none; margin-bottom: 2px;
 }
 .seo-content a.symposium-turn-author:hover { color: var(--accent); }
-.symposium-turn-body p { margin: 6px 0 0; line-height: 1.7; color: var(--text); }
+.symposium-turn-body p { margin: 4px 0 0; line-height: 1.7; color: var(--text); }
 
-.symposium-footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border); }
-.symposium-footer .seo-meta { margin-bottom: 10px; }
+.symposium-footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border); }
 
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */
