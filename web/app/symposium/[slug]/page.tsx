@@ -137,11 +137,12 @@ export default async function SymposiumPage({
           <span>{joinLabel} in conversation</span>
         </div>
       </div>
-      {/* Lede — tells a cold visitor exactly what this page is + why it's unique. */}
+      {/* Lede — tells a cold visitor what this page is + invites them to chat.
+          Boilerplate-light (no "A symposium:" prefix — the eyebrow already says
+          it; no marketing line) since it repeats across every symposium page. */}
       <p className="symposium-lede">
-        A <strong>symposium</strong>: {participants.length} great minds take up one
-        question — each argues in their own voice and answers the others. It&apos;s
-        a living exchange you won&apos;t find anywhere else — read it, then chat with
+        {participants.length} great minds take up one question — each argues in
+        their own voice and answers the others. Read the exchange, then chat with
         any of them yourself.
       </p>
       <div className="symposium-hero-actions">
