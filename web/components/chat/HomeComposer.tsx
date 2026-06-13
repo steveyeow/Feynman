@@ -366,9 +366,11 @@ export default function HomeComposer() {
 
   const hasContext = books.size > 0 || minds.size > 0;
   const placeholder = hasContext
-    ? minds.size
-      ? "Ask your question... Type @ to mention a mind"
-      : "Ask your question..."
+    ? minds.size >= 2
+      ? "Pose a question — they'll debate it. Type @ to mention a mind"
+      : minds.size
+        ? "Ask your question... Type @ to mention a mind"
+        : "Ask your question..."
     : "Ask about books or topics — great minds will join in...";
 
   return (
@@ -500,6 +502,20 @@ export default function HomeComposer() {
       </div>
 
       <div className="home-starters" id="home-starters">
+        {/* Surface the multi-mind path explicitly: a debate is just this composer
+            with 2+ minds invited, but most people won't discover that. From the
+            empty state, this pill opens the invite popover; the placeholder then
+            nudges "pose a question — they'll debate it". */}
+        {!hasContext ? (
+          <button
+            type="button"
+            className="starter-pill starter-pill-debate"
+            onClick={() => setMindsOpen(true)}
+            title="Invite 2+ great minds and they'll debate your question"
+          >
+            Start a debate between great minds
+          </button>
+        ) : null}
         {starters.map((q) => (
           <button key={q} type="button" className="starter-pill" onClick={() => pickStarter(q)}>
             {q}
