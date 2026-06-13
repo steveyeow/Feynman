@@ -3527,8 +3527,15 @@ def get_mind_by_name(name: str) -> dict[str, Any] | None:
 
 
 def create_debate(question: str, topic: str, mind_ids: list[str]) -> dict[str, Any]:
-    """Insert a debate shell (turns added separately). Returns {id, slug}."""
+    """Insert a debate shell (turns added separately). Returns {id, slug}.
+
+    Capitalize the question's first letter so the title reads correctly in
+    every surface it renders — feed, <h1>, <title>, OG card, JSON-LD, sitemap.
+    CSS can't reach the SEO surfaces, so normalize once at the data layer."""
     did = str(uuid.uuid4())
+    question = (question or "").strip()
+    if question:
+        question = question[0].upper() + question[1:]
     with get_conn() as conn:
         slug = _unique_slug(conn, "debates", question[:60]) or did[:8]
         _execute(conn, _q(
@@ -3550,7 +3557,7 @@ def delete_debate_by_question(question: str) -> None:
     """Remove a debate + its turns by question (no FK, so cascade by hand).
     Lets the generator re-run a seed with deeper/longer rounds (force mode)."""
     with get_conn() as conn:
-        rows = _fetchall(conn, _q("SELECT id FROM debates WHERE question = ?"), (question,))
+        rows = _fetchall(conn, _q("SELECT id FROM debates WHERE LOWER(question) = LOWER(?)"), (question,))
         for r in rows:
             _execute(conn, _q("DELETE FROM debate_turns WHERE debate_id = ?"), (r["id"],))
             _execute(conn, _q("DELETE FROM debates WHERE id = ?"), (r["id"],))
@@ -3622,7 +3629,9 @@ def list_debates_for_mind(mind_id: str, limit: int = 10) -> list[dict[str, Any]]
 def debate_question_exists(question: str) -> bool:
     """Idempotency guard for the generator — skip a question already debated."""
     with get_conn() as conn:
-        row = _fetchone(conn, _q("SELECT 1 AS hit FROM debates WHERE question = ?"), (question,))
+        # Case-insensitive: create_debate stores a capitalized question, but the
+        # generator checks idempotency with the raw (often lowercase) candidate.
+        row = _fetchone(conn, _q("SELECT 1 AS hit FROM debates WHERE LOWER(question) = LOWER(?)"), (question,))
         return bool(row)
 
 
