@@ -281,6 +281,12 @@ export default function MindsGraph() {
     let isOnNode = false;
     let draggedNode: GraphNode | null = null;
     let suppressClick = false;
+    // Drag threshold: a press that doesn't move past a few px is a CLICK (→
+    // profile), not a drag. Without this every node press was treated as a drag
+    // and suppressed the click, so nodes felt un-clickable.
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let didDrag = false;
 
     const zoomBehavior = d3
       .zoom<HTMLCanvasElement, unknown>()
@@ -355,10 +361,13 @@ export default function MindsGraph() {
           return dx * dx + dy * dy < (BASE_R + 8) * (BASE_R + 8);
         });
         if (hit) {
+          // Arm a potential drag, but don't pin/restart yet — only a real move
+          // (past the threshold, in mousemove) promotes this to a drag. A press
+          // with no move stays a click and navigates to the profile.
           draggedNode = hit;
-          hit.fx = hit.x;
-          hit.fy = hit.y;
-          sim?.alphaTarget(0.3).restart();
+          dragStartX = cx;
+          dragStartY = cy;
+          didDrag = false;
           e.stopPropagation();
           e.preventDefault();
         }
@@ -373,6 +382,17 @@ export default function MindsGraph() {
         const rect = canvas.getBoundingClientRect();
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
+        if (!didDrag) {
+          // Below the 4px threshold this is still a click-in-progress — don't
+          // move the node or restart the sim.
+          const ddx = cx - dragStartX;
+          const ddy = cy - dragStartY;
+          if (ddx * ddx + ddy * ddy <= 16) return;
+          didDrag = true;
+          draggedNode.fx = draggedNode.x;
+          draggedNode.fy = draggedNode.y;
+          sim?.alphaTarget(0.3).restart();
+        }
         const [wx, wy] = transform.invert([cx, cy]);
         draggedNode.fx = wx;
         draggedNode.fy = wy;
@@ -384,11 +404,17 @@ export default function MindsGraph() {
       "mouseup",
       () => {
         if (!draggedNode) return;
-        draggedNode.fx = null;
-        draggedNode.fy = null;
+        if (didDrag) {
+          // Real drag → release the pin, cool the sim, and swallow the click so
+          // the drag doesn't also navigate.
+          draggedNode.fx = null;
+          draggedNode.fy = null;
+          suppressClick = true;
+          sim?.alphaTarget(0);
+        }
+        // else: it was a click — leave suppressClick false so it navigates.
         draggedNode = null;
-        suppressClick = true;
-        sim?.alphaTarget(0);
+        didDrag = false;
       },
       { signal },
     );
