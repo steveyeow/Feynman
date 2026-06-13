@@ -205,3 +205,125 @@ def run_debate_batch(limit: int | None = None, rounds: int = 2, force: bool = Fa
         created += 1
         log.info("debate created: %r (%d turns) → /debate/%s", seed["q"], len(turns), d["slug"])
     return created, max(0, remaining - created)
+
+
+# ─── Semi-automatic expansion (scale beyond the curated seeds) ───
+# The quality of a symposium lives in (a) a question great thinkers genuinely
+# disagree on and (b) a cast that actually CLASHES. So we don't pick blindly:
+# an LLM proposes the questions per topic, and an LLM casts the debaters from the
+# topic's relevant minds. Human-in-the-loop is the batch size — generate a wave,
+# review, widen — never a blind thousand.
+
+_QGEN_SYSTEM = (
+    "You design questions for a symposium of history's greatest thinkers. The best "
+    "questions are timeless tensions that real thinkers across traditions genuinely "
+    "and deeply disagree on — not yes/no trivia, not settled facts."
+)
+
+
+def _qgen_prompt(topic: str, n: int) -> str:
+    return (
+        f"Topic: {topic}.\n"
+        f"Give exactly {n} questions in this domain that great thinkers across history "
+        "would genuinely, deeply disagree on — the kind a thoughtful person would "
+        "actually search. Each phrased as a searcher types it, 40-90 chars, no "
+        "numbering.\n"
+        'Return STRICT JSON only: ["question", ...]'
+    )
+
+
+_CAST_SYSTEM = (
+    "You cast participants for a symposium. You pick the thinkers who will produce a "
+    "genuine intellectual CLASH — opposing schools or positions, each with a real "
+    "stake — never four who'd just nod along."
+)
+
+
+def _cast_prompt(question: str, roster: str, n: int) -> str:
+    return (
+        f'Question: "{question}"\n\n'
+        f"Candidate thinkers (name — domain):\n{roster}\n\n"
+        f"Pick the {n} who would produce the deepest, most genuine disagreement on "
+        "THIS question — opposing positions, not allies. Use names EXACTLY as listed.\n"
+        'Return STRICT JSON only: ["Name", ...]'
+    )
+
+
+def _json_list(raw: str) -> list[str]:
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", (raw or "").strip(), flags=re.M).strip()
+    try:
+        out = json.loads(raw)
+        return [str(x).strip() for x in out if str(x).strip()] if isinstance(out, list) else []
+    except Exception:
+        return []
+
+
+def _topic_questions(topic: str, n: int) -> list[str]:
+    res, _ = bulk_chat(system=_QGEN_SYSTEM, user=_qgen_prompt(topic, n))
+    return _json_list(res.content or "")[:n]
+
+
+def _candidates_for_topic(topic: str, limit: int = 24) -> list[dict[str, Any]]:
+    """Famous, topic-relevant minds as the casting pool (name + domain suffice;
+    persona is fetched per-pick later)."""
+    from .db import list_minds
+    from .qa import is_mind_topic_relevant
+    minds = list_minds(limit=5000, lite=True)
+    rel = [m for m in minds if is_mind_topic_relevant(m, topic)]
+    rel.sort(key=lambda m: -(m.get("chat_count") or 0))
+    return rel[:limit]
+
+
+def _pick_debaters(question: str, candidates: list[dict[str, Any]], n: int = 4) -> list[str]:
+    roster = "\n".join(f"- {m['name']} — {(m.get('domain') or '')[:48]}" for m in candidates)
+    res, _ = bulk_chat(system=_CAST_SYSTEM, user=_cast_prompt(question, roster, n))
+    return _json_list(res.content or "")[:n]
+
+
+def expand_symposiums(
+    per_topic: int = 5, topics: list[str] | None = None, limit: int | None = None,
+) -> tuple[int, int]:
+    """LLM-proposed questions × LLM-cast debaters per topic. Idempotent (skips
+    existing questions). Returns (created, attempted). Drives a local script."""
+    from .catalog import TOPIC_TAGS
+    created = attempted = 0
+    for topic in (topics or TOPIC_TAGS):
+        try:
+            questions = _topic_questions(topic, per_topic)
+        except Exception as exc:
+            log.warning("qgen failed for %s: %s", topic, exc)
+            continue
+        cands = _candidates_for_topic(topic)
+        if len(cands) < 3:
+            log.warning("topic %s: only %d candidate minds, skipping", topic, len(cands))
+            continue
+        for q in questions:
+            q = q.strip()
+            if not q or debate_question_exists(q):
+                continue
+            if limit is not None and created >= limit:
+                return created, attempted
+            attempted += 1
+            try:
+                names = _pick_debaters(q, cands, 4)
+            except Exception as exc:
+                log.warning("cast failed for %r: %s", q, exc)
+                continue
+            minds, seen = [], set()
+            for nm in names:
+                m = get_mind_by_name(nm)
+                if m and m.get("persona") and m["id"] not in seen:
+                    minds.append(m)
+                    seen.add(m["id"])
+            if len(minds) < 2:
+                log.warning("symposium %r: only %d cast minds resolved, skipping", q, len(minds))
+                continue
+            turns = generate_debate(q, minds, rounds=2)
+            if len(turns) < 2:
+                continue
+            d = create_debate(q, topic, [t["mind"]["id"] for t in turns])
+            for t in turns:
+                add_debate_turn(d["id"], t["mind"]["id"], t["mind"]["name"], t["turn_index"], t["content"])
+            created += 1
+            log.info("symposium: %r [%s] (%d turns) → /symposium/%s", q, topic, len(turns), d["slug"])
+    return created, attempted
