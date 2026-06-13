@@ -591,6 +591,13 @@ body { background-color: var(--bg-home); }
    participants strip + .mind-message rows (32px avatar + name + content) for the
    thread, so it reads identically to a real chat room. Only layout tweaks here:
    left-align the notice and add paragraph spacing for multi-para remarks. ── */
+/* User-made symposium (a published multi-mind discussion) reuses the curated
+   symposium header treatment on /discussions/[id]. */
+.discussion-symposium-h1 {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 28px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2;
+  margin: 2px 0 4px; color: var(--text);
+}
 .symposium-join { justify-content: flex-start; margin: 14px 0 12px; }
 .symposium-lede { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 620px; margin: 0; }
 .symposium-lede strong { color: var(--text); font-weight: 650; }

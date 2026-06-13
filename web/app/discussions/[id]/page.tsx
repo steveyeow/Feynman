@@ -13,6 +13,7 @@ import MessageList from "@/components/chat/MessageList";
 import ContinueComposer from "@/components/chat/ContinueComposer";
 import ShareButton from "@/components/share/ShareButton";
 import type { Message } from "@/lib/chat";
+import { mindColor, mindInitials } from "@/lib/minds";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
 // GET /api/public-discussions/{id} (mirrors the legacy public_session_page:
@@ -153,20 +154,59 @@ export default async function PublicDiscussionPage({
       disc.messages.filter((m) => m.role === "mind").map((m) => m.speaker || ""),
     ),
   ].filter(Boolean) as string[];
+  // A multi-mind discussion (2+ minds spoke) is a user-made symposium — give it
+  // the same header as the curated /symposium pages (question title + a
+  // participant roster strip) instead of the generic "shared conversation"
+  // banner. Single-mind / book chats keep the plain banner.
+  const isSymposium = knownMindNames.length >= 2;
+  const roster =
+    knownMindNames.length <= 1
+      ? knownMindNames[0] || ""
+      : knownMindNames.slice(0, -1).join(", ") +
+        " and " +
+        knownMindNames[knownMindNames.length - 1];
 
   return (
     <SeoColumn>
       <JsonLd data={forumLd} />
       <JsonLd data={breadcrumbLd} />
 
-      {/* h1 kept for SEO but visually hidden — the chat itself has no big title;
-          the question is the first turn of the transcript below. */}
-      <h1 className="sr-only">{title}</h1>
-      <div className="shared-banner">
-        <span className="shared-banner-label">Shared conversation on Feynman</span>
-        <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
-        <ShareButton url={canonical} subject="Shared conversation" title={title} variant="ghost" />
-      </div>
+      {isSymposium ? (
+        // User-made symposium: question as the visible title + a participant
+        // roster strip (the same .mind-join-notice treatment as /symposium).
+        <>
+          <p className="seo-meta">Symposium · shared by {disc.handle || "Anonymous"}</p>
+          <h1 className="discussion-symposium-h1">{title}</h1>
+          <div className="chat-system-notice mind-join-notice symposium-join">
+            <div className="join-notice-inner">
+              {knownMindNames.map((name) => (
+                <span
+                  key={name}
+                  className="join-avatar"
+                  style={{ background: mindColor(name) }}
+                >
+                  {mindInitials(name)}
+                </span>
+              ))}
+              <span>{roster} in conversation</span>
+            </div>
+          </div>
+          <div className="symposium-hero-actions">
+            <ShareButton url={canonical} subject="Symposium" title={title} variant="secondary" />
+          </div>
+        </>
+      ) : (
+        <>
+          {/* h1 kept for SEO but visually hidden — the chat itself has no big
+              title; the question is the first turn of the transcript below. */}
+          <h1 className="sr-only">{title}</h1>
+          <div className="shared-banner">
+            <span className="shared-banner-label">Shared conversation on Feynman</span>
+            <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
+            <ShareButton url={canonical} subject="Shared conversation" title={title} variant="ghost" />
+          </div>
+        </>
+      )}
 
       <div className="shared-transcript">
         <MessageList messages={transcript} knownMindNames={knownMindNames} />
