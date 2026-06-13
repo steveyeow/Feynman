@@ -11,6 +11,7 @@ export default function ShareButton({
   url,
   subject,
   title,
+  previewImage,
   defaultText,
   label = "Share",
   variant = "ghost",
@@ -18,6 +19,8 @@ export default function ShareButton({
   url: string;
   subject?: string;
   title?: string;
+  /** og:image to preview; when omitted ShareDialog reads the page's meta. */
+  previewImage?: string;
   defaultText?: string;
   label?: string;
   variant?: "ghost" | "secondary";
@@ -34,7 +37,7 @@ export default function ShareButton({
         {label}
       </button>
       {open ? (
-        <ShareDialog url={url} subject={subject} title={title} defaultText={defaultText} onClose={() => setOpen(false)} />
+        <ShareDialog url={url} subject={subject} title={title} previewImage={previewImage} defaultText={defaultText} onClose={() => setOpen(false)} />
       ) : null}
     </>
   );

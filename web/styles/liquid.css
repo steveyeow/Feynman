@@ -598,15 +598,23 @@ body { background-color: var(--bg-home); }
 .symposium-thread .mind-msg-content p { margin: 0 0 10px; }
 .symposium-thread .mind-msg-content p:last-child { margin-bottom: 0; }
 /* Per-turn chat entry on the name line (right) — replaces the footer link row. */
-.symposium-turn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.symposium-turn-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+/* Per-turn actions (Share + Chat) — hover-revealed on desktop, always-on for
+   touch — so each turn carries its own share + chat entry without clutter. */
+.symposium-turn-actions {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.mind-message:hover .symposium-turn-actions { opacity: 1; }
+@media (hover: none) { .symposium-turn-actions { opacity: 1; } }
 .seo-content a.symposium-chat-link {
   font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: none;
-  white-space: nowrap; flex-shrink: 0; opacity: 0; transition: opacity 0.15s ease;
+  white-space: nowrap;
 }
-.mind-message:hover .symposium-chat-link { opacity: 0.9; }
-.seo-content a.symposium-chat-link:hover { opacity: 1; }
-/* Touch / no-hover: always show the chat entry (no hover to reveal it). */
-@media (hover: none) { .seo-content a.symposium-chat-link { opacity: 0.9; } }
+.seo-content a.symposium-chat-link:hover { opacity: 0.8; }
+/* Compact share button inside a turn (override the default seo-action sizing). */
+.symposium-turn-actions .seo-action { font-size: 12px; padding: 2px 4px; }
+.symposium-hero-actions { margin-top: 16px; }
 
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */

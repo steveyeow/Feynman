@@ -460,6 +460,95 @@ export function AggCard({ title, sub, glyph, name, label }: { title: string; sub
   );
 }
 
+// Whole-symposium card: the question as the headline + the roster of minds in
+// the room (overlapping avatars, like MindsCue but named). The multi-voice
+// roster IS the unique thing — no single book/mind, a conversation between many.
+export function SymposiumCard({
+  question,
+  topic,
+  participants,
+  rosterLabel,
+}: {
+  question: string;
+  topic?: string;
+  participants: { accent: string; initials: string }[];
+  rosterLabel: string;
+}) {
+  return (
+    <Frame
+      body={
+        <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
+          <div style={{ display: "flex", fontSize: 17, letterSpacing: 2, color: INK_MUTE, marginBottom: 18, fontFamily: FONT }}>
+            {topic ? `SYMPOSIUM · ${clip(topic.toUpperCase(), 28)}` : "SYMPOSIUM"}
+          </div>
+          <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: INK, lineHeight: 1.16, marginBottom: 30 }}>
+            {clip(question, 108)}
+          </div>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ display: "flex" }}>
+              {participants.slice(0, 5).map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 56, background: p.accent, color: "#fff", fontSize: 19, fontWeight: 700, fontFamily: FONT, border: "3px solid #faf8f4", marginLeft: i === 0 ? 0 : -14 }}>
+                  {p.initials}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", fontSize: 24, color: INK_SOFT, marginLeft: 20, fontFamily: FONT, maxWidth: 760 }}>
+              {clip(rosterLabel, 64)}
+            </div>
+          </div>
+          <ChatPill label="Read the symposium" />
+        </div>
+      }
+      footer={<FooterSimple />}
+    />
+  );
+}
+
+// Single-turn card: one mind's contribution within a symposium. The question is
+// the context strip; the remark is the bubble; the CTA chats with that mind.
+export function SymposiumTurnCard({
+  question,
+  speakerName,
+  snippet,
+  portrait,
+  accent,
+  initials,
+}: {
+  question: string;
+  speakerName: string;
+  snippet: string;
+  portrait: string | null;
+  accent: string;
+  initials: string;
+}) {
+  return (
+    <Frame
+      body={
+        <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", marginBottom: 26 }}>
+            <div style={{ display: "flex", fontSize: 16, letterSpacing: 2, color: INK_MUTE, fontFamily: FONT }}>IN A SYMPOSIUM ON</div>
+            <div style={{ display: "flex", fontSize: 30, fontWeight: 700, color: INK, lineHeight: 1.2, marginTop: 8, maxWidth: 980 }}>
+              {clip(question, 88)}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            <Avatar src={portrait} initials={initials} accent={accent} size={90} />
+            <div style={{ display: "flex", flexDirection: "column", marginLeft: 24, flexGrow: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", marginBottom: 12 }}>
+                <div style={{ display: "flex", fontSize: 28, fontWeight: 700, color: INK, fontFamily: FONT }}>{clip(speakerName, 26)}</div>
+                <div style={{ display: "flex", fontSize: 19, color: INK_MUTE, marginLeft: 13, fontFamily: FONT, fontStyle: "italic" }}>argued</div>
+              </div>
+              <Bubble text={`“${clip(snippet, 200)}”`} accent={accent} fontSize={28} />
+            </div>
+          </div>
+          <ChatPill label={`Chat with ${clip(speakerName, 20)}`} />
+        </div>
+      }
+      footer={<FooterSimple />}
+    />
+  );
+}
+
 export function HomeCard() {
   return (
     <Frame

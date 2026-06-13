@@ -38,9 +38,12 @@ import {
   FallbackCard,
   OgAvatar,
   OgMiniCover,
+  SymposiumCard,
+  SymposiumTurnCard,
 } from "@/lib/og/cards";
 import {
   fetchMind,
+  fetchDebate,
   fetchPublicAnswer,
   fetchPublicDiscussion,
   fetchMindOnTopic,
@@ -301,6 +304,51 @@ async function build(type: string, id: string, slug: string, kind: string) {
           glyph={<OgMiniCover bg={bookAccent(data.title, isAi)} initials={bookInitials(data.title)} />}
           name={data.title}
           label={data.author ? clip(data.author, 44) : isInsights ? "Reader insights" : "Reader discussions"}
+        />
+      );
+    }
+
+    case "symposium": {
+      const d = await fetchDebate(slug);
+      if (!d) return <HomeCard />;
+      const seen = new Set<string>();
+      const parts: { accent: string; initials: string }[] = [];
+      const names: string[] = [];
+      for (const t of d.turns) {
+        if (seen.has(t.mind_id)) continue;
+        seen.add(t.mind_id);
+        parts.push({ accent: mindAccent(t.mind_name), initials: mindInitials(t.mind_name) });
+        names.push(t.mind_name);
+      }
+      const rosterLabel =
+        names.length <= 1
+          ? names[0] || ""
+          : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+      return (
+        <SymposiumCard
+          question={d.question}
+          topic={d.topic}
+          participants={parts}
+          rosterLabel={rosterLabel}
+        />
+      );
+    }
+
+    case "symposium-turn": {
+      const d = await fetchDebate(slug);
+      if (!d) return <HomeCard />;
+      const i = Math.max(0, parseInt(kind || "0", 10) || 0);
+      const turn = d.turns[i] || d.turns[0];
+      if (!turn) return <HomeCard />;
+      const portrait = await mindPortraitDataUri({ name: turn.mind_name });
+      return (
+        <SymposiumTurnCard
+          question={d.question}
+          speakerName={turn.mind_name}
+          snippet={(turn.content || "").replace(/\s+/g, " ").trim()}
+          portrait={portrait}
+          accent={mindAccent(turn.mind_name)}
+          initials={mindInitials(turn.mind_name)}
         />
       );
     }
