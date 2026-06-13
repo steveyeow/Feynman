@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
 import JsonLd from "@/components/seo/JsonLd";
 import {
   SITE_URL,
@@ -9,6 +9,7 @@ import {
   breadcrumbJsonLd,
   debateJsonLd,
   fetchDebate,
+  fetchDebatesList,
   metaDescription,
 } from "@/lib/seo-mind";
 import { mindColor, mindInitials } from "@/lib/minds";
@@ -67,7 +68,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function DebatePage({
+export default async function SymposiumPage({
   params,
 }: {
   params: { slug: string };
@@ -76,10 +77,9 @@ export default async function DebatePage({
   if (!d) notFound();
 
   const canonical = abs(`/symposium/${d.slug}`);
-  const names = uniqueNames(d.turns);
   const ref = (mindId: string) => d.mind_slugs?.[mindId] || mindId;
-  // Distinct participants in first-appearance order — the group-chat header row
-  // (and the footer chat funnel). One entry per mind even though they speak twice.
+  // Distinct participants in first-appearance order — the header strip + the
+  // rail's chat funnel. One entry per mind even though they speak twice.
   const participants: typeof d.turns = [];
   const seenP = new Set<string>();
   for (const t of d.turns) {
@@ -94,6 +94,11 @@ export default async function DebatePage({
     pNames.length <= 1
       ? pNames[0] || ""
       : pNames.slice(0, -1).join(", ") + " and " + pNames[pNames.length - 1];
+
+  // Right-rail discovery: other symposiums (internal links + fills the column).
+  const more = (await fetchDebatesList())
+    .filter((x) => x.slug !== d.slug)
+    .slice(0, 6);
 
   const ld = debateJsonLd({
     question: d.question,
@@ -111,16 +116,12 @@ export default async function DebatePage({
     [d.question, canonical],
   ]);
 
-  return (
-    <SeoColumn>
-      <JsonLd data={ld} />
-      <JsonLd data={breadcrumbLd} />
-
+  const hero = (
+    <>
       <p className="seo-meta">{d.topic ? `${d.topic} · Symposium` : "Symposium"}</p>
       <h1>{d.question}</h1>
-
-      {/* Participants — the SAME join-notice treatment as the live chat ("X, Y
-          and Z joined the discussion"), so the symposium reads as a chat room. */}
+      {/* Participant strip — the chat's join-notice treatment, so it reads as
+          a room of minds in conversation. */}
       <div className="chat-system-notice mind-join-notice symposium-join">
         <div className="join-notice-inner">
           {participants.map((t) => (
@@ -135,9 +136,53 @@ export default async function DebatePage({
           <span>{joinLabel} in conversation</span>
         </div>
       </div>
+      {/* Lede — tells a cold visitor exactly what this page is + why it's unique. */}
+      <p className="symposium-lede">
+        A <strong>symposium</strong>: {participants.length} great minds take up one
+        question — each argues in their own voice and answers the others. It&apos;s
+        a living exchange you won&apos;t find anywhere else — read it, then chat with
+        any of them yourself.
+      </p>
+    </>
+  );
+
+  const rail = (
+    <>
+      <div className="seo-rail-card">
+        <h3>Chat with a participant</h3>
+        <ul>
+          {participants.map((t) => (
+            <li key={t.mind_id}>
+              <Link href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}>
+                {t.mind_name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {more.length ? (
+        <div className="seo-rail-card">
+          <h3>More symposiums</h3>
+          <ul>
+            {more.map((x) => (
+              <li key={x.slug}>
+                <Link href={`/symposium/${x.slug}`}>{x.question}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <EntityLayout hero={hero} rail={rail}>
+      <JsonLd data={ld} />
+      <JsonLd data={breadcrumbLd} />
 
       {/* The conversation — each turn is the SAME mind-message row as the live
-          chat UI (32px avatar + name + content), reused verbatim for consistency. */}
+          chat UI (32px avatar + name + content), with a per-turn chat entry on
+          the name line (right) instead of a footer link list. */}
       <div className="symposium-thread">
         {d.turns.map((t, i) => (
           <div key={i} className="chat-message mind-message">
@@ -148,7 +193,15 @@ export default async function DebatePage({
               {mindInitials(t.mind_name)}
             </div>
             <div className="mind-msg-body">
-              <div className="mind-msg-name">{t.mind_name}</div>
+              <div className="mind-msg-name symposium-turn-head">
+                <span>{t.mind_name}</span>
+                <Link
+                  href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}
+                  className="symposium-chat-link"
+                >
+                  Chat →
+                </Link>
+              </div>
               <div className="mind-msg-content">
                 {t.content
                   .split(/\n\n+/)
@@ -162,19 +215,6 @@ export default async function DebatePage({
           </div>
         ))}
       </div>
-
-      {/* Footer funnel: continue with any voice in the room (no single pick). */}
-      <p className="symposium-footer seo-meta">
-        Continue the conversation —{" "}
-        {participants.map((t, i) => (
-          <span key={t.mind_id}>
-            {i > 0 ? " · " : ""}
-            <Link href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}>
-              chat with {t.mind_name}
-            </Link>
-          </span>
-        ))}
-      </p>
-    </SeoColumn>
+    </EntityLayout>
   );
 }

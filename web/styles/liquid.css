@@ -591,11 +591,22 @@ body { background-color: var(--bg-home); }
    participants strip + .mind-message rows (32px avatar + name + content) for the
    thread, so it reads identically to a real chat room. Only layout tweaks here:
    left-align the notice and add paragraph spacing for multi-para remarks. ── */
-.symposium-join { justify-content: flex-start; margin: 16px 0 4px; }
-.symposium-thread { margin-top: 18px; max-width: 700px; }
+.symposium-join { justify-content: flex-start; margin: 14px 0 12px; }
+.symposium-lede { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 620px; margin: 0; }
+.symposium-lede strong { color: var(--text); font-weight: 650; }
+.symposium-thread { margin-top: 4px; }
 .symposium-thread .mind-msg-content p { margin: 0 0 10px; }
 .symposium-thread .mind-msg-content p:last-child { margin-bottom: 0; }
-.symposium-footer { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
+/* Per-turn chat entry on the name line (right) — replaces the footer link row. */
+.symposium-turn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.seo-content a.symposium-chat-link {
+  font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: none;
+  white-space: nowrap; flex-shrink: 0; opacity: 0; transition: opacity 0.15s ease;
+}
+.mind-message:hover .symposium-chat-link { opacity: 0.9; }
+.seo-content a.symposium-chat-link:hover { opacity: 1; }
+/* Touch / no-hover: always show the chat entry (no hover to reveal it). */
+@media (hover: none) { .seo-content a.symposium-chat-link { opacity: 0.9; } }
 
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */
