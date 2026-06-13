@@ -634,7 +634,7 @@ body { background-color: var(--bg-home); }
   transition: opacity 0.12s ease;
 }
 .seo-content a.symposium-row:hover .symposium-row-q { color: var(--accent); }
-.symposium-row-q { font-size: 18px; font-weight: 500; line-height: 1.4; color: var(--text); transition: color 0.12s ease; }
+.symposium-row-q { font-size: 20px; font-weight: 500; line-height: 1.38; color: var(--text); transition: color 0.12s ease; }
 .symposium-row-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .symposium-row-avatars { display: flex; flex-shrink: 0; }
 .symposium-row-avatar {
