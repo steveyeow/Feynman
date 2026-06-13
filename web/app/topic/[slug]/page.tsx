@@ -4,6 +4,7 @@ import Link from "next/link";
 import EntityLayout from "@/components/seo/EntityLayout";
 import EntityActions from "@/components/seo/EntityActions";
 import JsonLd from "@/components/seo/JsonLd";
+import SymposiumLinks from "@/components/seo/SymposiumLinks";
 import { ExploreFooter } from "@/components/seo/mind/MindSections";
 import {
   SITE_URL,
@@ -15,6 +16,7 @@ import {
   fetchMinds,
   fetchTopics,
   fetchTopicOverview,
+  fetchDebatesList,
   filterBooksByTopic,
   filterMindsByTopic,
   metaDescription,
@@ -84,15 +86,19 @@ export default async function TopicPage({
   const topic = await resolveTopicSlug(params.slug);
   if (!topic) notFound();
 
-  const [agents, minds, topics, overview] = await Promise.all([
+  const [agents, minds, topics, overview, allDebates] = await Promise.all([
     fetchAgents(),
     fetchMinds(),
     fetchTopics(),
     fetchTopicOverview(params.slug),
+    fetchDebatesList(),
   ]);
 
   const books = filterBooksByTopic(agents, topic, 30);
   const topicMinds = filterMindsByTopic(minds, topic, 12);
+  // Symposiums belonging to this topic — a natural fit (the symposium's topic
+  // IS this hub), unlike the weaker book-page tie-in.
+  const topicDebates = allDebates.filter((d) => d.topic === topic);
 
   const canonical = abs(`/topic/${params.slug}`);
 
@@ -194,6 +200,13 @@ export default async function TopicPage({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {topicDebates.length ? (
+        <section className="seo-section">
+          <h2>Great minds debate {topic}</h2>
+          <SymposiumLinks debates={topicDebates} limit={8} />
         </section>
       ) : null}
 

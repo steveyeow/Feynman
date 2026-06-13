@@ -653,6 +653,25 @@ body { background-color: var(--bg-home); }
   padding: 3px 10px; border-radius: 999px; background: var(--bg-sidebar);
 }
 
+/* ── Compact symposium list embedded in topic / book pages. ── */
+.symposium-links { list-style: none; padding: 0; margin: 8px 0 0; }
+.seo-content a.symposium-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 13px 4px; border-bottom: 1px solid var(--border);
+  text-decoration: none; color: var(--text);
+}
+.symposium-links li:last-child .symposium-link { border-bottom: none; }
+.symposium-link-q { font-size: 15px; font-weight: 500; line-height: 1.35; }
+.seo-content a.symposium-link:hover .symposium-link-q { color: var(--accent); }
+.symposium-link-avatars { display: flex; flex-shrink: 0; }
+.symposium-link-avatar {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 9px; font-weight: 700; user-select: none;
+  border: 2px solid var(--bg-chat); margin-left: -6px;
+}
+.symposium-link-avatar:first-child { margin-left: 0; }
+
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */
 .notable-quotes { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 18px; }
