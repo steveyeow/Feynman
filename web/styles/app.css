@@ -691,6 +691,11 @@ body {
   border-color: var(--accent); color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
+/* "Start a debate" — surfaces the multi-mind path from the empty state. Accent
+   outline so it reads as the lead suggestion; fills in on hover. Opens the
+   invite-minds popover (not a prefilled prompt). */
+.starter-pill-debate { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.starter-pill-debate:hover { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
 
 .home-hint {
   margin-top: 16px; font-size: 13px; color: var(--text-muted);
