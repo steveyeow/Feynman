@@ -134,6 +134,23 @@ export default function MindsGraph() {
     let W = container.clientWidth || 900;
     let H = container.clientHeight || 600;
 
+    // Play the top-left "flow" entrance only on the FIRST visit; afterwards drop
+    // the visitor straight into a settled graph and restore their last pan/zoom.
+    const SEEN_KEY = "feynman:minds-graph-seen";
+    const VIEW_KEY = "feynman:minds-graph-view";
+    let seenIntro = false;
+    let savedView: { x: number; y: number; k: number } | null = null;
+    try {
+      seenIntro = localStorage.getItem(SEEN_KEY) === "1";
+      const raw = localStorage.getItem(VIEW_KEY);
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (v && typeof v.k === "number") savedView = v;
+      }
+    } catch {
+      /* private mode / disabled storage — just play the default entrance */
+    }
+
     const canvas = document.createElement("canvas");
     canvas.className = styles.canvas;
     canvas.width = W * dpr;
@@ -217,6 +234,17 @@ export default function MindsGraph() {
       const built = buildGraphData(minds, simLinks, layout);
       nodes = built.nodes;
       links = built.links;
+      // Returning visitor: seat nodes AT their PCA targets so the graph appears
+      // already settled (no flow-in from the origin). First-timer: leave x/y
+      // unset so the embedding force does its one-time top-left entrance.
+      if (seenIntro) {
+        for (const n of nodes) {
+          if (n.layoutPos) {
+            n.x = n.layoutPos.rx * W;
+            n.y = n.layoutPos.ry * H;
+          }
+        }
+      }
       // Seed flowing particles along the links (port of app.js: cap 1-2 per link).
       particles = [];
       for (const l of links) {
@@ -232,10 +260,24 @@ export default function MindsGraph() {
         }
       }
       sim = buildSimulation(); // auto-starts at alpha 1, like production
+      if (seenIntro) {
+        // Already seated at targets — run a low-alpha pass so collision/charge
+        // gently de-overlap without a visible flow, instead of a full entrance.
+        sim.alpha(0.25);
+      } else {
+        // First visit: let the entrance play, then remember it so we never
+        // replay it on this device.
+        try {
+          localStorage.setItem(SEEN_KEY, "1");
+        } catch {
+          /* ignore */
+        }
+      }
     })();
 
     // ── Zoom / pan ─────────────────────────────────────────────────────────
     let transform = d3.zoomIdentity;
+    let saveViewTimer: number | undefined;
     let isOnNode = false;
     let draggedNode: GraphNode | null = null;
     let suppressClick = false;
@@ -252,8 +294,27 @@ export default function MindsGraph() {
       })
       .on("zoom", (e) => {
         transform = e.transform;
+        // Remember pan/zoom (debounced) so a return visit restores the view.
+        if (saveViewTimer) clearTimeout(saveViewTimer);
+        saveViewTimer = window.setTimeout(() => {
+          try {
+            localStorage.setItem(
+              VIEW_KEY,
+              JSON.stringify({ x: transform.x, y: transform.y, k: transform.k }),
+            );
+          } catch {
+            /* ignore */
+          }
+        }, 300);
       });
     d3.select(canvas).call(zoomBehavior);
+    // Restore the last view (sets `transform` via the zoom handler above).
+    if (savedView) {
+      d3.select(canvas).call(
+        zoomBehavior.transform,
+        d3.zoomIdentity.translate(savedView.x, savedView.y).scale(savedView.k),
+      );
+    }
 
     // ── Hit testing (matches legacy proximity-grown hit radius) ────────────
     function nodeAt(cx: number, cy: number, mouseWorld: [number, number] | null): GraphNode | null {
@@ -556,6 +617,7 @@ export default function MindsGraph() {
       themeObserver.disconnect();
       abort.abort(); // removes all canvas + window listeners
       d3.select(canvas).on(".zoom", null);
+      if (saveViewTimer) clearTimeout(saveViewTimer);
       canvas.remove();
       cancelHide();
       setTooltip(null);
