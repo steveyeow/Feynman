@@ -286,33 +286,41 @@ def _topic_questions(topic: str, n: int) -> list[str]:
     return _json_list(res.content or "")[:n]
 
 
-# Cross-domain false matches from is_mind_topic_relevant's substring matching:
-# 'Art' (in 'Art & Design') matches 'Artificial Intelligence', dragging every AI
-# researcher into the Art pool. Keep the loose match's recall (painter/sculptor/
-# etc. lack a literal 'art' token), but exclude these specific collisions.
-_TOPIC_EXCLUDE_DOMAINS: dict[str, tuple[str, ...]] = {
-    "art & design": ("artificial", "computer", "machine learning", "neural"),
+# Casting must use WHOLE-WORD topic↔domain matching: the substring match in
+# is_mind_topic_relevant let 'art' (from 'Art & Design') hit 'artificial',
+# 'startup', 'wartime' — flooding the Art pool with AI/VC/politics people.
+# Artists' domains rarely contain the literal word 'art', so Art & Design gets a
+# curated synonym set on top of whole-word matching.
+_TOPIC_EXTRA_WORDS: dict[str, set[str]] = {
+    "art & design": {
+        "art", "arts", "artist", "artistic", "painting", "painter", "sculpture",
+        "sculptor", "aesthetics", "aesthetic", "visual", "architecture", "architect",
+    },
 }
+
+
+def _topic_match(domain: str, topic: str) -> bool:
+    dwords = set(re.split(r"[,\s&/;()\-]+", (domain or "").lower()))
+    if not dwords:
+        return False
+    words = {w for w in re.split(r"[,\s&]+", topic.lower()) if len(w) >= 4 and w != "design"}
+    words |= _TOPIC_EXTRA_WORDS.get(topic.lower(), set())
+    for tw in words:
+        if tw in dwords or (tw + "s") in dwords or tw.rstrip("s") in dwords:
+            return True
+    return False
 
 
 def _candidates_for_topic(topic: str, limit: int = 24) -> list[dict[str, Any]]:
     """Famous, topic-relevant minds as the casting pool (name + domain suffice;
-    persona is fetched per-pick later). Loose topic match for recall, minus the
-    sensitive list and known cross-domain substring collisions."""
+    persona is fetched per-pick later). Whole-word match (no substring
+    collisions) + sensitive filter."""
     from .db import list_minds
-    from .qa import is_mind_topic_relevant
     minds = list_minds(limit=5000, lite=True)
-    bad = _TOPIC_EXCLUDE_DOMAINS.get(topic.lower(), ())
-
-    def ok(m: dict[str, Any]) -> bool:
-        if _is_sensitive(m.get("name", "")):
-            return False
-        if not is_mind_topic_relevant(m, topic):
-            return False
-        dom = (m.get("domain") or "").lower()
-        return not (bad and any(b in dom for b in bad))
-
-    rel = [m for m in minds if ok(m)]
+    rel = [
+        m for m in minds
+        if _topic_match(m.get("domain", ""), topic) and not _is_sensitive(m.get("name", ""))
+    ]
     rel.sort(key=lambda m: -(m.get("chat_count") or 0))
     return rel[:limit]
 
