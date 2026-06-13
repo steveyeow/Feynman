@@ -232,10 +232,31 @@ def _qgen_prompt(topic: str, n: int) -> str:
     )
 
 
+# Never cast as a debater — figures known mainly for political power or for
+# atrocities make "what would X argue" read as apologia, not philosophy (cf. the
+# mind /q guard). Matched case-insensitively as a substring of the name.
+_SENSITIVE_DEBATERS = {
+    "mao zedong", "adolf hitler", "joseph stalin", "vladimir lenin",
+    "benito mussolini", "pol pot", "kim il-sung", "kim jong", "saddam hussein",
+    "muammar gaddafi", "ruhollah khomeini", "yasser arafat", "francisco franco",
+    "augusto pinochet", "idi amin", "hirohito", "hideki tojo", "che guevara",
+    "fidel castro", "slobodan milosevic",
+}
+
+
+def _is_sensitive(name: str) -> bool:
+    low = (name or "").lower()
+    return any(s in low for s in _SENSITIVE_DEBATERS)
+
+
 _CAST_SYSTEM = (
     "You cast participants for a symposium. You pick the thinkers who will produce a "
     "genuine intellectual CLASH — opposing schools or positions, each with a real "
-    "stake — never four who'd just nod along."
+    "stake — never four who'd just nod along. Two hard rules: (1) every pick's OWN "
+    "field must genuinely cover the question — exclude anyone whose tie is tangential "
+    "(e.g. a scientist on an art question, a politician on a metaphysics question); "
+    "(2) never pick a figure known mainly for wielding political power or for "
+    "historical atrocities."
 )
 
 
@@ -243,8 +264,10 @@ def _cast_prompt(question: str, roster: str, n: int) -> str:
     return (
         f'Question: "{question}"\n\n'
         f"Candidate thinkers (name — domain):\n{roster}\n\n"
-        f"Pick the {n} who would produce the deepest, most genuine disagreement on "
-        "THIS question — opposing positions, not allies. Use names EXACTLY as listed.\n"
+        f"Pick the {n} whose OWN expertise genuinely covers this question and who "
+        "would produce the deepest, most genuine disagreement — opposing positions, "
+        "not allies. Drop anyone whose connection is tangential. Use names EXACTLY as "
+        "listed.\n"
         'Return STRICT JSON only: ["Name", ...]'
     )
 
@@ -269,7 +292,7 @@ def _candidates_for_topic(topic: str, limit: int = 24) -> list[dict[str, Any]]:
     from .db import list_minds
     from .qa import is_mind_topic_relevant
     minds = list_minds(limit=5000, lite=True)
-    rel = [m for m in minds if is_mind_topic_relevant(m, topic)]
+    rel = [m for m in minds if is_mind_topic_relevant(m, topic) and not _is_sensitive(m.get("name", ""))]
     rel.sort(key=lambda m: -(m.get("chat_count") or 0))
     return rel[:limit]
 
@@ -277,7 +300,37 @@ def _candidates_for_topic(topic: str, limit: int = 24) -> list[dict[str, Any]]:
 def _pick_debaters(question: str, candidates: list[dict[str, Any]], n: int = 4) -> list[str]:
     roster = "\n".join(f"- {m['name']} — {(m.get('domain') or '')[:48]}" for m in candidates)
     res, _ = bulk_chat(system=_CAST_SYSTEM, user=_cast_prompt(question, roster, n))
-    return _json_list(res.content or "")[:n]
+    # Belt-and-suspenders: drop any sensitive figure the model still returned.
+    return [p for p in _json_list(res.content or "") if not _is_sensitive(p)][:n]
+
+
+def regenerate_debate(slug: str, rounds: int = 2) -> str | None:
+    """Re-cast + re-generate one existing symposium in place (same question +
+    topic + slug), e.g. to replace a tangential or sensitive debater. Deletes the
+    old turns only after the new ones generate. Returns the slug or None."""
+    from .db import get_debate_by_slug
+    d = get_debate_by_slug(slug)
+    if not d:
+        return None
+    q, topic = d["question"], d.get("topic") or ""
+    cands = _candidates_for_topic(topic)
+    minds, seen = [], set()
+    for nm in _pick_debaters(q, cands, 4):
+        m = get_mind_by_name(nm)
+        if m and m.get("persona") and m["id"] not in seen:
+            minds.append(m)
+            seen.add(m["id"])
+    if len(minds) < 2:
+        return None
+    turns = generate_debate(q, minds, rounds=rounds)
+    if len(turns) < 2:
+        return None
+    delete_debate_by_question(q)
+    nd = create_debate(q, topic, [t["mind"]["id"] for t in turns])
+    for t in turns:
+        add_debate_turn(nd["id"], t["mind"]["id"], t["mind"]["name"], t["turn_index"], t["content"])
+    log.info("regenerated symposium %r → %s (%d turns)", q, nd["slug"], len(turns))
+    return nd["slug"]
 
 
 def expand_symposiums(
