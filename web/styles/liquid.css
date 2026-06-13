@@ -587,42 +587,15 @@ body { background-color: var(--bg-home); }
 .insight-card-who { display: block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 5px; }
 .insight-card p { margin: 0; line-height: 1.6; color: var(--text); }
 
-/* ── Symposium — a multi-mind conversation, deliberately light: a quiet
-   participants row (no pills/boxes) + a clean message thread. .seo-content
-   overrides kill the inherited SEO-prose link underline/blue so avatars and
-   names read as chat, not hyperlinks. ── */
-.symposium-participants { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0 8px; }
-.seo-content a.symposium-participant {
-  display: inline-flex; align-items: center; gap: 7px;
-  text-decoration: none; color: var(--text-secondary);
-  transition: color 0.15s ease;
-}
-.seo-content a.symposium-participant:hover { color: var(--accent); }
-.symposium-pill-avatar {
-  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 600; font-size: 9px; user-select: none; opacity: 0.9;
-}
-.symposium-pill-name { font-size: 13px; font-weight: 500; }
-.symposium-intro { margin-bottom: 2px; }
-
-.symposium-thread { display: flex; flex-direction: column; margin-top: 22px; max-width: 700px; }
-.symposium-turn { display: flex; gap: 12px; padding: 16px 0; }
-.symposium-turn + .symposium-turn { border-top: 1px solid var(--border); }
-.symposium-avatar {
-  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; margin-top: 2px;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 600; font-size: 11px; user-select: none; opacity: 0.92;
-}
-.symposium-turn-body { flex: 1; min-width: 0; }
-.seo-content a.symposium-turn-author {
-  display: inline-block; font-size: 14px; font-weight: 600;
-  color: var(--text); text-decoration: none; margin-bottom: 2px;
-}
-.seo-content a.symposium-turn-author:hover { color: var(--accent); }
-.symposium-turn-body p { margin: 4px 0 0; line-height: 1.7; color: var(--text); }
-
-.symposium-footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border); }
+/* ── Symposium — reuses the live chat UI verbatim: the chat join-notice for the
+   participants strip + .mind-message rows (32px avatar + name + content) for the
+   thread, so it reads identically to a real chat room. Only layout tweaks here:
+   left-align the notice and add paragraph spacing for multi-para remarks. ── */
+.symposium-join { justify-content: flex-start; margin: 16px 0 4px; }
+.symposium-thread { margin-top: 18px; max-width: 700px; }
+.symposium-thread .mind-msg-content p { margin: 0 0 10px; }
+.symposium-thread .mind-msg-content p:last-child { margin-bottom: 0; }
+.symposium-footer { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--border); }
 
 /* ── Notable quotes — anchored, indexable quote blocks; each one can be asked
    about directly (quote → prefilled chat), the living-entry differentiator. ── */

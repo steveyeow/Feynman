@@ -88,6 +88,12 @@ export default async function DebatePage({
       participants.push(t);
     }
   }
+  // "X, Y and Z" — same phrasing as the chat JoinNotice.
+  const pNames = participants.map((t) => t.mind_name);
+  const joinLabel =
+    pNames.length <= 1
+      ? pNames[0] || ""
+      : pNames.slice(0, -1).join(", ") + " and " + pNames[pNames.length - 1];
 
   const ld = debateJsonLd({
     question: d.question,
@@ -113,56 +119,47 @@ export default async function DebatePage({
       <p className="seo-meta">{d.topic ? `${d.topic} · Symposium` : "Symposium"}</p>
       <h1>{d.question}</h1>
 
-      {/* Group-chat header: the minds in the room, each a chat entry point. */}
-      <div className="symposium-participants">
-        {participants.map((t) => (
-          <Link
-            key={t.mind_id}
-            href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}
-            className="symposium-participant"
-          >
+      {/* Participants — the SAME join-notice treatment as the live chat ("X, Y
+          and Z joined the discussion"), so the symposium reads as a chat room. */}
+      <div className="chat-system-notice mind-join-notice symposium-join">
+        <div className="join-notice-inner">
+          {participants.map((t) => (
             <span
-              className="symposium-pill-avatar"
+              key={t.mind_id}
+              className="join-avatar"
               style={{ background: mindColor(t.mind_name) }}
             >
               {mindInitials(t.mind_name)}
             </span>
-            <span className="symposium-pill-name">{t.mind_name}</span>
-          </Link>
-        ))}
+          ))}
+          <span>{joinLabel} in conversation</span>
+        </div>
       </div>
-      <p className="seo-meta symposium-intro">
-        {names.length} great minds on this question — each in their own voice,
-        engaging the others. Tap anyone to chat.
-      </p>
 
-      {/* The conversation, read as a thread (one bubble per turn). */}
+      {/* The conversation — each turn is the SAME mind-message row as the live
+          chat UI (32px avatar + name + content), reused verbatim for consistency. */}
       <div className="symposium-thread">
         {d.turns.map((t, i) => (
-          <article key={i} className="symposium-turn">
-            <span
-              className="symposium-avatar"
+          <div key={i} className="chat-message mind-message">
+            <div
+              className="mind-msg-avatar"
               style={{ background: mindColor(t.mind_name) }}
-              aria-hidden="true"
             >
               {mindInitials(t.mind_name)}
-            </span>
-            <div className="symposium-turn-body">
-              <Link
-                href={`/mind/${encodeURIComponent(ref(t.mind_id))}`}
-                className="symposium-turn-author"
-              >
-                {t.mind_name}
-              </Link>
-              {t.content
-                .split(/\n\n+/)
-                .map((p) => p.trim())
-                .filter(Boolean)
-                .map((p, j) => (
-                  <p key={j}>{p}</p>
-                ))}
             </div>
-          </article>
+            <div className="mind-msg-body">
+              <div className="mind-msg-name">{t.mind_name}</div>
+              <div className="mind-msg-content">
+                {t.content
+                  .split(/\n\n+/)
+                  .map((p) => p.trim())
+                  .filter(Boolean)
+                  .map((p, j) => (
+                    <p key={j}>{p}</p>
+                  ))}
+              </div>
+            </div>
+          </div>
         ))}
       </div>
 
