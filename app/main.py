@@ -4755,7 +4755,28 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         raw_msgs = list_messages_for_public_session(session_id)
     except Exception:
         raw_msgs = []
+    # Resolve each distinct mind's id+slug from its name (meta stores only the
+    # name). Lets the UNIFIED symposium detail page offer "Join this discussion"
+    # (chips need ids) + a per-participant chat rail (links need slugs), exactly
+    # like a curated /symposium. Cached per name (a mind speaks 2+ turns).
+    from .core.db import get_mind_by_name as _get_mind_by_name
+    _mind_cache: dict[str, dict[str, str]] = {}
+
+    def _resolve_mind(name: str) -> dict[str, str]:
+        if name not in _mind_cache:
+            try:
+                mm = _get_mind_by_name(name)
+            except Exception:
+                mm = None
+            _mind_cache[name] = {
+                "mind_id": (mm or {}).get("id") or "",
+                "mind_slug": (mm or {}).get("slug") or "",
+            }
+        return _mind_cache[name]
+
     messages = []
+    participants: list[dict[str, str]] = []
+    _seen_minds: set[str] = set()
     for m in raw_msgs:
         role = m.get("role") or ""
         # Drop the "minds joined" system notices (they're empty → blank bubbles).
@@ -4768,13 +4789,21 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         # default answerer is Feynman; a 'user' turn is the asker (rendered as
         # "Question" client-side). Without this every reply showed as "Feynman".
         meta = m.get("meta") or {}
+        msg: dict[str, Any] = {"role": role, "content": content, "speaker": ""}
         if role == "mind":
-            speaker = meta.get("mindName") or "A great mind"
+            name = meta.get("mindName") or "A great mind"
+            ref = _resolve_mind(name)
+            msg["speaker"] = name
+            msg["mind_id"] = ref["mind_id"]
+            msg["mind_slug"] = ref["mind_slug"]
+            if name not in _seen_minds:
+                _seen_minds.add(name)
+                participants.append(
+                    {"mind_id": ref["mind_id"], "mind_name": name, "mind_slug": ref["mind_slug"]}
+                )
         elif role == "assistant":
-            speaker = "Feynman"
-        else:
-            speaker = ""
-        messages.append({"role": role, "content": content, "speaker": speaker})
+            msg["speaker"] = "Feynman"
+        messages.append(msg)
     # Resolve the entity's slug so the discussion's backlink to its book/mind
     # skips the 301 hop (entity_id is a uuid). One lookup, cached with the page;
     # book sessions point at an agent, mind sessions at a mind.
@@ -4803,6 +4832,7 @@ def api_public_discussion(session_id: str) -> JSONResponse:
             "entity_slug": entity_slug,
             "approved_at": session.get("approved_at") or session.get("consent_at") or "",
             "messages": messages,
+            "participants": participants,
         }),
         headers={"Cache-Control": "public, max-age=600, s-maxage=600"},
     )

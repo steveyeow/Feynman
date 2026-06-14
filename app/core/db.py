@@ -3656,6 +3656,37 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
             if name not in s:
                 s.add(name)
                 by_session.setdefault(sid, []).append(name)
+        # Infer a topic (community symposiums have none of their own) so the
+        # /symposiums feed shows a CONSISTENT label dimension — a topic tag, like
+        # the curated rows — rather than a "Community" source badge sitting where a
+        # topic should be (Steve, 2026-06-14: community should also carry a topic,
+        # drop the "Community" word). Match a participant's domain against
+        # TOPIC_TAGS; first hit wins, else None.
+        from .catalog import TOPIC_TAGS
+        # Reuse the casting matcher: whole-word, EXCLUDES the ambiguous "design"
+        # (a product founder's "design" domain must not read as Art & Design) and
+        # carries the Art&Design synonym set. Far less noisy than naive substring.
+        from .debates import _topic_match
+        all_names = {n for names in by_session.values() for n in names}
+        domain_by_name: dict[str, str] = {}
+        if all_names:
+            nph = ",".join(["?"] * len(all_names))
+            nrows = _fetchall(conn, _q(
+                f"SELECT name, domain FROM minds WHERE name IN ({nph})"  # noqa: S608 — ph is ?-placeholders
+            ), tuple(all_names))
+            for r in nrows:
+                domain_by_name[r["name"]] = r.get("domain") or ""
+
+        def _infer_topic(names: list[str]) -> str | None:
+            for n in names:
+                dom = domain_by_name.get(n, "")
+                if not dom:
+                    continue
+                for tag in TOPIC_TAGS:
+                    if _topic_match(dom, tag):
+                        return tag
+            return None
+
         out: list[dict[str, Any]] = []
         for s in sessions:
             names = by_session.get(s["id"], [])
@@ -3664,7 +3695,7 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
             out.append({
                 "slug": s["id"],  # session id — the card links to /discussions/{id}
                 "question": (s.get("public_title") or s.get("title") or "Shared discussion").strip(),
-                "topic": None,
+                "topic": _infer_topic(names),
                 "created_at": s.get("created_at"),
                 "participants": names,
                 "source": "community",
