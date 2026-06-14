@@ -44,30 +44,40 @@ export default function SymposiumsFeed({ debates }: { debates: DebateListItem[] 
       ) : null}
 
       <div className="symposium-feed">
-        {shown.map((d) => (
-          <Link key={d.slug} href={`/symposium/${d.slug}`} className="symposium-row">
-            <div className="symposium-row-q">{d.question}</div>
-            <div className="symposium-row-meta">
-              {d.participants && d.participants.length ? (
-                <>
-                  <span className="symposium-row-avatars">
-                    {d.participants.slice(0, 5).map((name, i) => (
-                      <span
-                        key={i}
-                        className="symposium-row-avatar"
-                        style={{ background: mindColor(name) }}
-                      >
-                        {mindInitials(name)}
-                      </span>
-                    ))}
-                  </span>
-                  <span className="symposium-row-names">{d.participants.join(", ")}</span>
-                </>
-              ) : null}
-              {d.topic ? <span className="symposium-row-topic">{d.topic}</span> : null}
-            </div>
-          </Link>
-        ))}
+        {shown.map((d) => {
+          // Community symposiums are user-shared multi-mind discussions — they
+          // live at /discussions/{id}, not /symposium/{slug}, and carry a badge.
+          const community = d.source === "community";
+          const href = community ? `/discussions/${d.slug}` : `/symposium/${d.slug}`;
+          return (
+            <Link key={d.slug} href={href} className="symposium-row">
+              <div className="symposium-row-q">{d.question}</div>
+              <div className="symposium-row-meta">
+                {d.participants && d.participants.length ? (
+                  <>
+                    <span className="symposium-row-avatars">
+                      {d.participants.slice(0, 5).map((name, i) => (
+                        <span
+                          key={i}
+                          className="symposium-row-avatar"
+                          style={{ background: mindColor(name) }}
+                        >
+                          {mindInitials(name)}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="symposium-row-names">{d.participants.join(", ")}</span>
+                  </>
+                ) : null}
+                {community ? (
+                  <span className="symposium-row-badge">Community</span>
+                ) : d.topic ? (
+                  <span className="symposium-row-topic">{d.topic}</span>
+                ) : null}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </>
   );

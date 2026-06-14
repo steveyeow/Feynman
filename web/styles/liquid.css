@@ -692,6 +692,13 @@ body { background-color: var(--bg-home); }
   flex-shrink: 0; margin-left: auto; font-size: 11px; color: var(--text-muted);
   padding: 3px 10px; border-radius: 999px; background: var(--bg-sidebar);
 }
+/* Community symposium = a user-shared multi-mind discussion (vs a curated debate).
+   Accent-tinted so it reads as a distinct, member-made source in the feed. */
+.symposium-row-badge {
+  flex-shrink: 0; margin-left: auto; font-size: 11px; font-weight: 600;
+  color: var(--accent); padding: 3px 10px; border-radius: 999px;
+  background: var(--bg-hover); letter-spacing: 0.01em;
+}
 
 /* ── Compact symposium list embedded in topic / book pages. ── */
 .symposium-links { list-style: none; padding: 0; margin: 8px 0 0; }
