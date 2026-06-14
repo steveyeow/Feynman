@@ -45,7 +45,8 @@ _DEBATE_SYSTEM = (
     "a reference where the argument doesn't need one. Sometimes you build on a "
     "point, sometimes you cut against it, sometimes you simply take the question "
     "somewhere new. This is a debate of ideas, never a personal attack. Write "
-    "tight, substantive prose — no greetings, no sign-offs, no stage directions."
+    "tight, substantive prose worth quoting — your own unmistakable angle, never "
+    "a generic take and never filler. No greetings, no sign-offs, no stage directions."
 )
 
 
@@ -73,8 +74,9 @@ def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: 
     )
     if is_first:
         body = (
-            f"You open the symposium. State your position as {m['name']} — the core "
-            "claim and the reasoning that makes it unmistakably yours."
+            f"You open the symposium. State your position as {m['name']} in 2-4 punchy "
+            "sentences — one sharp claim and the reasoning that makes it unmistakably "
+            "yours. An opening salvo, not a lecture; you get a later turn to go deeper."
         )
     elif is_later_round:
         # Second pass: the discussion exists, so push it forward instead of
@@ -96,7 +98,12 @@ def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: 
             "someone raised only where it genuinely sharpens your case (name them when "
             "you do); not every turn needs to open by responding. Vary how you enter."
         )
-    return head + body + "\n\nFirst person, 110-170 words, concrete and specific. No greetings or sign-offs."
+    return head + body + (
+        "\n\nFirst person, worth quoting — a sharp claim, a concrete distinction, or a "
+        "real example. Keep it to 3-5 sentences; expand only when the point genuinely "
+        "needs it, never into an essay (hard ceiling ~150 words). No filler, no "
+        "throat-clearing — cut any sentence not earning its place. No greetings or sign-offs."
+    )
 
 
 def _clean(text: str) -> str:
@@ -128,7 +135,9 @@ def generate_debate(question: str, minds: list[dict[str, Any]], rounds: int = 2)
                 log.warning("debate turn failed for %s: %s", m.get("name"), exc)
                 continue
             content = _clean(res.content or "")
-            if len(content.split()) < 40:
+            # Allow intentionally short, punchy turns (the prompt asks for varied
+            # length); only drop a turn that's basically empty / a failed generation.
+            if len(content.split()) < 22:
                 continue
             turns.append({"mind": m, "turn_index": idx, "content": content})
             transcript += f"\n\n— {m['name']}:\n{content}"
