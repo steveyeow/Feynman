@@ -419,13 +419,23 @@ export default function ChatView({
     // for this session: the handoff effect renders the user bubble + streams
     // the reply optimistically, and a fast loadMessages() resolving mid-send
     // would otherwise overwrite (clobber) that live transcript.
-    if (!hasPending(sessionId)) {
+    //
+    // hasPending() alone suffices in production (single mount — the pending
+    // entry is still present when this runs). But React StrictMode (dev)
+    // double-mounts, and by the 2nd mount the handoff effect has already
+    // consumed (removed) the entry, so hasPending() is false and loadMessages()
+    // clobbers the just-seeded transcript — most visibly a symposium "Join"
+    // transcript, before its turns finish persisting (only the join notice
+    // survived). sentPendingRef (set the instant the handoff seeds) is the
+    // stable guard that survives the remount. It's always false on the first
+    // mount, so production behavior is unchanged.
+    if (!hasPending(sessionId) && !sentPendingRef.current) {
       // Paint the cached transcript instantly on switch (stale-while-revalidate);
       // clear if none so the previous chat isn't shown during the load.
       setMessages(getCachedMessages(sessionId) ?? []);
       loadMessages(sessionId)
         .then((msgs) => {
-          if (alive) setMessages(msgs);
+          if (alive && !sentPendingRef.current) setMessages(msgs);
         })
         .catch((e) => {
           console.warn("Failed to load session messages:", e);

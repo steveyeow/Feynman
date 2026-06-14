@@ -601,20 +601,23 @@ body { background-color: var(--bg-home); }
 /* #turn-{i} anchor on the detail page: a per-turn share redirects here and
    scrolls to the turn. Leave room under the sticky top. */
 .symposium-thread .mind-message { scroll-margin-top: 90px; }
-/* The linked turn (URL #turn-{i} → :target) gets a clean ChatGPT-citation-style
-   card — soft elevated bg + shadow + hairline ring, with a brief accent glow on
-   arrival so the eye lands on it. All theme vars (--bg-chat / --shadow-md /
-   --border-strong / --accent) so it adapts to dark mode automatically. */
+/* The linked turn (URL #turn-{i} → :target): a soft ChatGPT-citation-style
+   highlight that flashes on arrival, then fades fully away. CRITICAL: the
+   :target selector keeps matching for as long as #turn-{i} stays in the URL, so
+   it must carry NO persistent visible style — the earlier version left a bg +
+   hairline ring behind permanently (the "ugly box that never disappears"). All
+   visuals live in the animation, which settles (fill-mode forwards) on a fully
+   transparent 100% frame: no residue. And no layout shift — the box-shadow
+   spread paints the surrounding wash, so the box model never changes (the old
+   padding made the turn jump). --bg-hover is a neutral wash that adapts to dark
+   mode automatically. */
 .symposium-thread .mind-message:target {
-  background: var(--bg-chat);
-  border-radius: 14px;
-  padding: 16px 18px;
-  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--border-strong);
-  animation: turn-target-glow 1.2s ease-out;
+  border-radius: 10px;
+  animation: turn-target-glow 3s ease-out forwards;
 }
 @keyframes turn-target-glow {
-  0%, 55% { box-shadow: 0 0 0 2px var(--accent); }
-  100% { box-shadow: var(--shadow-md), inset 0 0 0 1px var(--border-strong); }
+  0%, 25% { background: var(--bg-hover); box-shadow: 0 0 0 8px var(--bg-hover); }
+  100%    { background: transparent; box-shadow: 0 0 0 8px transparent; }
 }
 /* Brief splash on the per-turn permalink before the client redirect fires. */
 .turn-redirect { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 80px 20px; text-align: center; }
