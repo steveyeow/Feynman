@@ -5,11 +5,11 @@
  *
  * Turns a read-only symposium into the core minds-join experience: creates a
  * chat session, pre-selects the symposium's participants as mind chips, and
- * replays the prior debate as panel-chat history (seedHistory) so the minds pick
- * up where the page left off. Reuses the home-composer handoff channel
- * (feynman:pendingChat) — ChatView reads it on mount, seeds the chips + history,
- * and sends the question. Gated by the signin→Pro double wall (useProGate), like
- * every minds chat.
+ * loads the prior debate AS the opening transcript (symposiumTurns → a join
+ * notice + each mind's remark). Reuses the home-composer handoff channel
+ * (feynman:pendingChat) — ChatView reads it on mount, seeds the chips, replays
+ * the transcript, and waits for the user's follow-up (no synthetic question
+ * message). Gated by the signin→Pro double wall (useProGate), like every minds chat.
  */
 
 import { useState } from "react";
@@ -24,6 +24,7 @@ interface Participant {
   mind_name: string;
 }
 interface Turn {
+  mind_id: string;
   mind_name: string;
   content: string;
 }
@@ -51,15 +52,17 @@ export default function JoinDiscussionButton({
       const minds = participants
         .filter((p) => p.mind_id)
         .map((p) => ({ id: p.mind_id, name: p.mind_name }));
-      // The prior debate, in the same "[Name]: …" shape buildPanelHistory emits,
-      // so the minds continue the symposium instead of starting cold.
-      const seedHistory = turns
+      // Load the prior debate AS the opening transcript (mind turns), so the chat
+      // continues with full context — not a synthetic user "question" message
+      // (which would render right-aligned). ChatView replays these as a join
+      // notice + mind messages and waits for the user's follow-up.
+      const symposiumTurns = turns
         .filter((t) => t.content)
-        .map((t) => ({ role: "assistant", content: `[${t.mind_name}]: ${t.content}` }));
+        .map((t) => ({ mindId: t.mind_id, mindName: t.mind_name, content: t.content }));
       const session = await createSession({ title: question, sessionType: "chat" });
       sessionStorage.setItem(
         PENDING_KEY,
-        JSON.stringify({ sessionId: session.id, message: question, minds, seedHistory }),
+        JSON.stringify({ sessionId: session.id, message: "", minds, symposiumTurns }),
       );
       router.push(`/chat/${session.id}`);
     } catch {
