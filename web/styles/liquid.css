@@ -598,24 +598,24 @@ body { background-color: var(--bg-home); }
   font-size: 28px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2;
   margin: 2px 0 4px; color: var(--text);
 }
-/* The shared turn on a /symposium/{slug}/t/{i} permalink — the whole symposium
-   renders, this one moment is highlighted + tagged so the linked turn stands out. */
-.symposium-thread .mind-message.symposium-turn-shared {
-  background: rgba(127, 127, 127, 0.07);
+/* #turn-{i} anchor on the detail page: a per-turn share redirects here and
+   scrolls to the turn. Leave room under the sticky top. */
+.symposium-thread .mind-message { scroll-margin-top: 90px; }
+/* The linked turn (URL #turn-{i} → :target) gets a clean ChatGPT-citation-style
+   card — soft elevated bg + shadow + hairline ring, with a brief accent glow on
+   arrival so the eye lands on it. All theme vars (--bg-chat / --shadow-md /
+   --border-strong / --accent) so it adapts to dark mode automatically. */
+.symposium-thread .mind-message:target {
+  background: var(--bg-chat);
   border-radius: 14px;
-  padding: 14px 16px;
-  box-shadow: inset 3px 0 0 0 var(--accent);
-  scroll-margin-top: 80px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--border-strong);
+  animation: turn-target-glow 1.2s ease-out;
 }
-.symposium-shared-tag {
-  margin-left: 10px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
-  color: var(--accent); border: 1px solid var(--accent);
-  padding: 1px 8px; border-radius: 999px; vertical-align: middle;
+@keyframes turn-target-glow {
+  0%, 55% { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: var(--shadow-md), inset 0 0 0 1px var(--border-strong); }
 }
-/* #turn-{i} anchor target on the detail page — a per-turn share permalink
-   redirects here and scrolls to the turn; leave room under the sticky top. */
-.symposium-thread .mind-message { scroll-margin-top: 84px; }
 /* Brief splash on the per-turn permalink before the client redirect fires. */
 .turn-redirect { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 80px 20px; text-align: center; }
 .turn-redirect-note { color: var(--text-muted); font-size: 15px; margin: 0; }
