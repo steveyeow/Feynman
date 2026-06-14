@@ -3722,6 +3722,27 @@ def api_cron_prestore_overviews(request: Request) -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)}
 
 
+@app.get("/api/cron/generate-symposiums")
+def api_cron_generate_symposiums(request: Request) -> dict[str, Any]:
+    """Daily: distill Hacker News front-page headlines into 1-2 fresh symposiums
+    (timeless questions great minds debate), so /symposiums self-updates without
+    manual seeding. HN Algolia API is open; the LLM distills + casts + generates
+    via DeepSeek (bulk_chat, not geoblocked). Idempotent (skips existing
+    questions). `limit` (1-3) caps generation per run for cost + the 60s timeout."""
+    _verify_cron(request)
+    try:
+        limit = max(1, min(3, int(request.query_params.get("limit", "2"))))
+    except ValueError:
+        limit = 2
+    try:
+        from .core.debates import expand_from_trending
+        created, attempted = expand_from_trending(limit=limit)
+        return {"status": "ok", "created": created, "attempted": attempted}
+    except Exception as exc:
+        log.error("generate-symposiums cron failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
 @app.get("/api/cron/reset-embeddings")
 def api_cron_reset_embeddings() -> dict[str, Any]:
     """Clear all corrupted embeddings so backfill can regenerate them."""

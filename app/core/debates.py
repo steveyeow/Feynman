@@ -453,3 +453,117 @@ def expand_symposiums(
             created += 1
             log.info("symposium: %r [%s] (%d turns) → /symposium/%s", q, topic, len(turns), d["slug"])
     return created, attempted
+
+
+# ─── Trending source (daily cron): HN headlines → timeless questions ───
+# Same cast/generate pipeline as expand_symposiums; only the question SOURCE
+# differs — real front-page headlines distilled into enduring tensions, so
+# /symposiums self-updates daily without a human walking the static topic list.
+
+_TREND_QGEN_SYSTEM = (
+    "You read today's headlines and surface the TIMELESS human tension hiding under "
+    "each one — the kind of question Socrates, Confucius, Kant, or Nietzsche could "
+    "each stake out a real position on, centuries before the headline existed. You "
+    "are NOT writing technology questions. Always LIFT the specific news to an "
+    "enduring tension about knowledge, power, human nature, progress, freedom, "
+    "meaning, justice, or creativity. Reject anything only a domain specialist could "
+    "argue, anything naming a product/company/person, anything needing this week's "
+    "context. If a headline hides no timeless tension, skip it — fewer, deeper "
+    "questions beat filling a quota."
+)
+
+
+def _trend_qgen_prompt(titles: list[str], n: int, topics: list[str]) -> str:
+    feed = "\n".join(f"- {t}" for t in titles)
+    return (
+        f"Today's headlines:\n{feed}\n\n"
+        "Surface the enduring human tensions underneath. Examples of the LIFT we want:\n"
+        '  "AI model gets a bigger memory" -> "Does more information bring us closer to truth?"\n'
+        '  "Startup raises a huge round" -> "Does chasing growth corrupt an original vision?"\n'
+        '  "New tool writes code by itself" -> "Can genuine creativity ever be automated?"\n\n'
+        f"Give up to {n} such questions — each a tension great thinkers ACROSS ERAS "
+        "(not just modern experts) would genuinely, deeply disagree on, the kind a "
+        "thoughtful person actually searches. Phrase as a searcher types it (40-90 "
+        "chars), NO product/company/person names, no dates, no tech jargon. Tag each "
+        f"with the single best-fitting topic (exact string) from: {', '.join(topics)}.\n"
+        "Skip any headline with no real timeless tension — quality over quantity.\n"
+        'Return STRICT JSON only: [{"question": "...", "topic": "..."}, ...]'
+    )
+
+
+def _trend_questions(titles: list[str], n: int, topics: list[str]) -> list[dict[str, str]]:
+    """LLM-distilled {question, topic} pairs from headlines. Topic is validated
+    against the allowed list (so _candidates_for_topic can field a real cast)."""
+    res, _ = bulk_chat(system=_TREND_QGEN_SYSTEM, user=_trend_qgen_prompt(titles, n, topics))
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", (res.content or "").strip(), flags=re.M).strip()
+    try:
+        out = json.loads(raw)
+    except Exception:
+        return []
+    allowed = {t.lower(): t for t in topics}
+    items: list[dict[str, str]] = []
+    for it in out if isinstance(out, list) else []:
+        if not isinstance(it, dict):
+            continue
+        q = str(it.get("question") or "").strip()
+        topic = allowed.get(str(it.get("topic") or "").strip().lower())
+        if q and topic:
+            items.append({"question": q, "topic": topic})
+    return items[:n]
+
+
+def expand_from_trending(limit: int = 2, pool: int = 8) -> tuple[int, int]:
+    """Daily-cron path: HN front page → LLM timeless questions → LLM cast →
+    generate. Reuses the expand_symposiums cast/generate pipeline verbatim; only
+    the question SOURCE differs (real headlines vs. a static topic walk). `pool` =
+    how many distilled questions to consider; `limit` caps how many actually get
+    generated this run (cost guard). Idempotent (skips existing questions).
+    Returns (created, attempted)."""
+    from .catalog import TOPIC_TAGS
+    from .trending import fetch_hn_titles
+
+    titles = fetch_hn_titles(30)
+    if not titles:
+        log.warning("expand_from_trending: no HN titles, skipping run")
+        return 0, 0
+    try:
+        items = _trend_questions(titles, pool, TOPIC_TAGS)
+    except Exception as exc:
+        log.warning("trend qgen failed: %s", exc)
+        return 0, 0
+
+    created = attempted = 0
+    for it in items:
+        if created >= limit:
+            break
+        q, topic = it["question"], it["topic"]
+        if debate_question_exists(q):
+            continue
+        attempted += 1
+        cands = _candidates_for_topic(topic)
+        if len(cands) < 3:
+            log.warning("trending %r: topic %s has only %d candidates, skipping", q, topic, len(cands))
+            continue
+        try:
+            names = _pick_debaters(q, cands, 4)
+        except Exception as exc:
+            log.warning("cast failed for %r: %s", q, exc)
+            continue
+        minds, seen = [], set()
+        for nm in names:
+            m = get_mind_by_name(nm)
+            if m and m.get("persona") and m["id"] not in seen:
+                minds.append(m)
+                seen.add(m["id"])
+        if len(minds) < 2:
+            log.warning("trending %r: only %d cast minds resolved, skipping", q, len(minds))
+            continue
+        turns = generate_debate(q, minds, rounds=2)
+        if len(turns) < 2:
+            continue
+        d = create_debate(q, topic, [t["mind"]["id"] for t in turns])
+        for t in turns:
+            add_debate_turn(d["id"], t["mind"]["id"], t["mind"]["name"], t["turn_index"], t["content"])
+        created += 1
+        log.info("trending symposium: %r [%s] (%d turns) → /symposium/%s", q, topic, len(turns), d["slug"])
+    return created, attempted
