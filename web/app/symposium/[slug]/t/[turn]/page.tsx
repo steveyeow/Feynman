@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareButton from "@/components/share/ShareButton";
 import {
@@ -9,17 +9,18 @@ import {
   abs,
   breadcrumbJsonLd,
   fetchDebate,
+  fetchDebatesList,
   metaDescription,
 } from "@/lib/seo-mind";
 import { mindColor, mindInitials } from "@/lib/minds";
 
-// Per-turn share permalink: one mind's remark within a symposium. Exists ONLY so
-// a social scrape resolves to THAT turn's OG card (the in-page per-turn Share
-// used a `#turn-{i}` fragment, which a crawler never sees — it'd fetch the whole
-// /symposium page and get the whole-symposium card). The canonical still points
-// to the full symposium and the page is noindex'd — it's a share entry, not a
-// separate indexable surface. ISR by params (slug + turn), so it does NOT touch
-// the /symposium/[slug] cache.
+// Per-turn share permalink: a visitor arrives from a tweet of ONE turn. The page
+// renders the WHOLE symposium (identical to /symposium/[slug] — EntityLayout +
+// hero + rail + thread) with the shared turn highlighted, so it's instantly a
+// full multi-mind debate, not an orphan quote. Exists so a social scrape resolves
+// to THAT turn's OG card (the in-page `#turn-{i}` fragment a crawler never sees).
+// canonical → the full symposium, noindex (a share entry, not a separate page).
+// ISR by params (slug + turn) — does NOT touch the /symposium/[slug] cache.
 
 export const revalidate = 86400;
 export const dynamicParams = true;
@@ -27,10 +28,17 @@ export function generateStaticParams() {
   return [];
 }
 
-function turnOf(d: { turns: { mind_id: string; mind_name: string; content: string }[] }, turnStr: string) {
+function turnOf(
+  d: { turns: { mind_id: string; mind_name: string; content: string }[] },
+  turnStr: string,
+) {
   const i = parseInt(turnStr, 10);
   const turn = Number.isInteger(i) && i >= 0 ? d.turns[i] : undefined;
   return { i, turn };
+}
+
+function ogImageFor(slug: string, i: number) {
+  return abs(`/og?type=symposium-turn&slug=${encodeURIComponent(slug)}&kind=${i}`);
 }
 
 export async function generateMetadata({
@@ -48,14 +56,10 @@ export async function generateMetadata({
   const desc = metaDescription(
     `${turn.mind_name} in a symposium on "${d.question}": ${turn.content}`,
   );
-  const ogImage = abs(
-    `/og?type=symposium-turn&slug=${encodeURIComponent(d.slug)}&kind=${i}`,
-  );
+  const ogImage = ogImageFor(d.slug, i);
   return {
     title,
     description: desc,
-    // Canonical = the full symposium; this turn permalink is a share entry, not a
-    // separate indexable page (noindex so it doesn't compete with the symposium).
     alternates: { canonical: base },
     robots: { index: false, follow: true },
     openGraph: {
@@ -86,8 +90,10 @@ export default async function SymposiumTurnPage({
   const { i, turn } = turnOf(d, params.turn);
   if (!turn) notFound();
   const base = `/symposium/${d.slug}`;
+  const canonical = abs(base);
   const ref = (mindId: string) => d.mind_slugs?.[mindId] || mindId;
-  // Distinct participants (roster strip) in first-appearance order.
+
+  // Distinct participants (roster strip + rail) in first-appearance order.
   const participants: typeof d.turns = [];
   const seenP = new Set<string>();
   for (const t of d.turns) {
@@ -101,24 +107,20 @@ export default async function SymposiumTurnPage({
     pNames.length <= 1
       ? pNames[0] || ""
       : pNames.slice(0, -1).join(", ") + " and " + pNames[pNames.length - 1];
+
+  const more = (await fetchDebatesList()).filter((x) => x.slug !== d.slug).slice(0, 6);
+
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
     ["Symposiums", abs("/symposiums")],
-    [d.question, abs(base)],
+    [d.question, canonical],
     [turn.mind_name, abs(`${base}/t/${i}`)],
   ]);
 
-  // Share-landing view: the visitor arrives from a tweet of ONE turn, but we
-  // render the WHOLE symposium with that turn highlighted — so it's instantly
-  // clear this is one moment in a multi-mind debate, and the full thing is right
-  // here (no easy-to-miss "read more" link needed).
-  return (
-    <SeoColumn>
-      <JsonLd data={breadcrumbLd} />
+  const hero = (
+    <>
       <p className="seo-meta">{d.topic ? `${d.topic} · Symposium` : "Symposium"}</p>
-      <h1 className="discussion-symposium-h1">
-        <Link href={base}>{d.question}</Link>
-      </h1>
+      <h1>{d.question}</h1>
       <div className="chat-system-notice mind-join-notice symposium-join">
         <div className="join-notice-inner">
           {participants.map((t) => (
@@ -138,10 +140,60 @@ export default async function SymposiumTurnPage({
         full {participants.length}-mind symposium it belongs to, their turn
         highlighted below.
       </p>
+      <div className="symposium-hero-actions">
+        <Link
+          className="symposium-join-cta"
+          href={`/mind/${encodeURIComponent(ref(turn.mind_id))}/chat`}
+        >
+          Chat with {turn.mind_name}
+        </Link>
+        <ShareButton
+          url={abs(`${base}/t/${i}`)}
+          title={`${turn.mind_name} on “${d.question}”`}
+          subject="From a symposium"
+          previewImage={ogImageFor(d.slug, i)}
+          label="Share"
+          variant="secondary"
+        />
+      </div>
+    </>
+  );
 
+  const rail = (
+    <>
+      <div className="seo-rail-card">
+        <h3>Chat with a participant</h3>
+        <ul>
+          {participants.map((t) => (
+            <li key={t.mind_id}>
+              <Link href={`/mind/${encodeURIComponent(ref(t.mind_id))}/chat`}>
+                {t.mind_name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {more.length ? (
+        <div className="seo-rail-card">
+          <h3>More symposiums</h3>
+          <ul>
+            {more.map((x) => (
+              <li key={x.slug}>
+                <Link href={`/symposium/${x.slug}`}>{x.question}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <EntityLayout hero={hero} rail={rail}>
+      <JsonLd data={breadcrumbLd} />
       {/* Full thread — same mind-message rows as the live chat; the shared turn
           is highlighted + tagged so it's obvious which moment was linked. */}
-      <div className="symposium-thread" style={{ marginTop: 18 }}>
+      <div className="symposium-thread">
         {d.turns.map((t, j) => (
           <div
             key={j}
@@ -169,27 +221,6 @@ export default async function SymposiumTurnPage({
           </div>
         ))}
       </div>
-
-      <div className="symposium-hero-actions" style={{ marginTop: 22 }}>
-        <Link
-          className="symposium-join-cta"
-          href={`/mind/${encodeURIComponent(ref(turn.mind_id))}/chat`}
-        >
-          Chat with {turn.mind_name}
-        </Link>
-        <ShareButton
-          url={abs(`${base}/t/${i}`)}
-          title={`${turn.mind_name} on “${d.question}”`}
-          subject="From a symposium"
-          previewImage={ogImageFor(d.slug, i)}
-          label="Share"
-          variant="secondary"
-        />
-      </div>
-    </SeoColumn>
+    </EntityLayout>
   );
-}
-
-function ogImageFor(slug: string, i: number) {
-  return abs(`/og?type=symposium-turn&slug=${encodeURIComponent(slug)}&kind=${i}`);
 }
