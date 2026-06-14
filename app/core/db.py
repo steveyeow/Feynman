@@ -3639,13 +3639,18 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
         ids = [s["id"] for s in sessions]
         ph = ",".join(["?"] * len(ids))
         mrows = _fetchall(conn, _q(
-            f"SELECT session_id, meta_json, created_at FROM session_messages "  # noqa: S608 — ph is ?-placeholders
-            f"WHERE session_id IN ({ph}) AND role = 'mind' ORDER BY created_at ASC"
+            f"SELECT session_id, role, content, meta_json, created_at FROM session_messages "  # noqa: S608 — ph is ?-placeholders
+            f"WHERE session_id IN ({ph}) AND role IN ('mind', 'user') ORDER BY created_at ASC"
         ), tuple(ids))
         by_session: dict[str, list[str]] = {}
         seen: dict[str, set[str]] = {}
+        first_user: dict[str, str] = {}  # first user question per session — title fallback
         for r in mrows:
             sid = r["session_id"]
+            if r.get("role") == "user":
+                if sid not in first_user:
+                    first_user[sid] = (r.get("content") or "").strip()
+                continue
             try:
                 name = (json.loads(r.get("meta_json") or "{}").get("mindName") or "").strip()
             except Exception:
@@ -3687,6 +3692,17 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
                         return tag
             return None
 
+        # Title: prefer a real public_title, but a session shared without one comes
+        # through as "New chat" — fall back to its first user question, matching the
+        # /discussions detail page's pickTitle so the feed + the page agree (they
+        # diverged: the page said "What makes …?" while the feed still said "New chat").
+        def _title(s: dict[str, Any]) -> str:
+            t = (s.get("public_title") or s.get("title") or "").strip()
+            if t and t.lower() != "new chat":
+                return t
+            fu = (first_user.get(s["id"], "") or "").strip()
+            return fu[:90] if fu else "Shared discussion"
+
         out: list[dict[str, Any]] = []
         for s in sessions:
             names = by_session.get(s["id"], [])
@@ -3694,7 +3710,7 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
                 continue
             out.append({
                 "slug": s["id"],  # session id — the card links to /discussions/{id}
-                "question": (s.get("public_title") or s.get("title") or "Shared discussion").strip(),
+                "question": _title(s),
                 "topic": _infer_topic(names),
                 "created_at": s.get("created_at"),
                 "participants": names,
