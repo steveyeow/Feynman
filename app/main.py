@@ -4783,6 +4783,10 @@ def api_public_discussion(session_id: str) -> JSONResponse:
         if role == "system-notice":
             continue
         content = ugc_module.scrub_pii_for_public_display(m.get("content", "") or "")
+        # Strip orphan citation markers: a shared discussion exposes no reference
+        # data (we don't return refs here), so [1] / [1, 2] would render as bare
+        # literal text instead of superscripts. Remove them so the reply reads clean.
+        content = re.sub(r"\s*\[\d+(?:\s*,\s*\d+)*\]", "", content)
         if not content.strip():
             continue
         # Speaker label: a 'mind' turn carries the mind's name in meta; the
