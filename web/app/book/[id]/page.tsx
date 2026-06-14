@@ -192,7 +192,8 @@ export default async function BookLandingPage({ params }: PageProps) {
   }
 
   const metaBits: string[] = [];
-  if (data.totalWords) metaBits.push(`${data.totalWords.toLocaleString()} words`);
+  // Word count intentionally NOT shown (Steve): a raw "250 words" reads as a thin
+  // stub and adds nothing for a reader. It stays in JSON-LD (wordCount) only.
   if (chapterCount) metaBits.push(`${chapterCount} chapter${chapterCount === 1 ? "" : "s"}`);
 
   // Chips only on indexed books — gate on meta.chunk_count >= 5, the SAME
