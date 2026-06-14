@@ -15,7 +15,7 @@
 
 import { useRef, useState } from "react";
 import type { Message, Reference, WebSource } from "@/lib/chat";
-import { renderMarkdown, esc, mindColor, mindInitials } from "./markdown";
+import { renderMarkdown, renderMarkdownBlocks, esc, mindColor, mindInitials } from "./markdown";
 import styles from "./MessageList.module.css";
 
 function FeynmanGlyph() {
@@ -204,8 +204,7 @@ function AssistantMessage({
   const cleaned = String(msg.content ?? "")
     .replace(/<div\b[^>]*>|<\/div>/gi, "")
     .trim();
-  const html = renderMarkdown(cleaned);
-  const tokens = tokenizeCitations(html, refsByIndex, webSrcs);
+  const blocks = renderMarkdownBlocks(cleaned);
 
   // Group references by book (port of the grouped-refs block in appendMsg).
   const grouped: { book: string; chunks: Reference[] }[] = [];
@@ -230,6 +229,24 @@ function AssistantMessage({
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
+  // Render one block's inline HTML, tokenizing citation [n] markers into real
+  // <Citation> nodes as CHILDREN of the block element — so block tags
+  // (ul/li/p/h) are never split across separate spans (the fragmentation bug).
+  const renderInline = (h: string) =>
+    tokenizeCitations(h, refsByIndex, webSrcs).map((t, i) =>
+      t.kind === "html" ? (
+        <span key={i} dangerouslySetInnerHTML={{ __html: t.html }} />
+      ) : (
+        <Citation
+          key={i}
+          num={t.num}
+          ref={refsByIndex.get(t.num)}
+          web={!refsByIndex.has(t.num) ? webSrcs[t.num - 1] : undefined}
+          onJump={jumpToRef}
+        />
+      ),
+    );
+
   return (
     <div className="chat-message assistant" dir="auto" ref={rootRef}>
       <div className="feynman-msg-avatar">
@@ -238,19 +255,22 @@ function AssistantMessage({
       <div className="feynman-msg-body">
         <div className="feynman-msg-name">Feynman</div>
         <div className="msg-content" dir="auto">
-          {tokens.map((t, i) =>
-            t.kind === "html" ? (
-              <span key={i} dangerouslySetInnerHTML={{ __html: t.html }} />
-            ) : (
-              <Citation
-                key={i}
-                num={t.num}
-                ref={refsByIndex.get(t.num)}
-                web={!refsByIndex.has(t.num) ? webSrcs[t.num - 1] : undefined}
-                onJump={jumpToRef}
-              />
-            ),
-          )}
+          {blocks.map((b, bi) => {
+            if (b.tag === "ul")
+              return (
+                <ul key={bi}>
+                  {b.items.map((it, ii) => (
+                    <li key={ii}>{renderInline(it)}</li>
+                  ))}
+                </ul>
+              );
+            if (b.tag === "raw")
+              return <div key={bi} dangerouslySetInnerHTML={{ __html: b.html }} />;
+            if (b.tag === "h2") return <h2 key={bi}>{renderInline(b.html)}</h2>;
+            if (b.tag === "h3") return <h3 key={bi}>{renderInline(b.html)}</h3>;
+            if (b.tag === "h4") return <h4 key={bi}>{renderInline(b.html)}</h4>;
+            return <p key={bi}>{renderInline(b.html)}</p>;
+          })}
         </div>
 
         {grouped.length > 0 && (

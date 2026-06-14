@@ -136,30 +136,41 @@ export default function HomeComposer() {
 
   // Starters mirror the book context: with a single selected book they become
   // title-specific (legacy generateStarters); with none, the default set.
-  const starters = (() => {
+  // Each starter is {label, value}: `label` truncates the (often long) title so
+  // the chip stays compact, but `value` keeps the FULL title so the question that
+  // actually gets sent — and shown in the transcript — isn't truncated. (Before,
+  // a single truncated string was both shown AND sent, so the chat asked about
+  // "…Coffee St…" instead of the whole book.)
+  const starters: { label: string; value: string }[] = (() => {
     const sel = [...books.values()];
     const short = (t: string, max = 30) =>
       t.length <= max ? t : t.slice(0, max - 1).trimEnd() + "…";
+    const mk = (label: string, value: string) => ({ label, value });
     if (sel.length === 1) {
-      const t = short(sel[0].title);
+      const full = sel[0].title;
+      const t = short(full);
       return [
-        `What are the key ideas in "${t}"?`,
-        `Summarize the core argument of "${t}"`,
-        `What makes "${t}" unique?`,
-        `Quiz me on "${t}"`,
+        mk(`What are the key ideas in "${t}"?`, `What are the key ideas in "${full}"?`),
+        mk(`Summarize the core argument of "${t}"`, `Summarize the core argument of "${full}"`),
+        mk(`What makes "${t}" unique?`, `What makes "${full}" unique?`),
+        mk(`Quiz me on "${t}"`, `Quiz me on "${full}"`),
       ];
     }
     if (sel.length >= 2) {
-      const a = short(sel[0].title);
-      const b = short(sel[1].title);
+      const fa = sel[0].title;
+      const fb = sel[1].title;
+      const a = short(fa);
+      const b = short(fb);
       return [
-        `Compare "${a}" and "${b}"`,
-        `What do "${a}" and "${b}" have in common?`,
-        `Key ideas in "${a}"?`,
-        sel.length > 2 ? `What do these ${sel.length} books cover together?` : `Key ideas in "${b}"?`,
+        mk(`Compare "${a}" and "${b}"`, `Compare "${fa}" and "${fb}"`),
+        mk(`What do "${a}" and "${b}" have in common?`, `What do "${fa}" and "${fb}" have in common?`),
+        mk(`Key ideas in "${a}"?`, `Key ideas in "${fa}"?`),
+        sel.length > 2
+          ? mk(`What do these ${sel.length} books cover together?`, `What do these ${sel.length} books cover together?`)
+          : mk(`Key ideas in "${b}"?`, `Key ideas in "${fb}"?`),
       ];
     }
-    return DEFAULT_STARTERS;
+    return DEFAULT_STARTERS.map((s) => mk(s, s));
   })();
 
   const pickStarter = (q: string) => {
@@ -516,9 +527,9 @@ export default function HomeComposer() {
             Start a debate between great minds
           </button>
         ) : null}
-        {starters.map((q) => (
-          <button key={q} type="button" className="starter-pill" onClick={() => pickStarter(q)}>
-            {q}
+        {starters.map((s) => (
+          <button key={s.value} type="button" className="starter-pill" onClick={() => pickStarter(s.value)}>
+            {s.label}
           </button>
         ))}
       </div>
