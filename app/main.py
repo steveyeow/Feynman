@@ -4548,14 +4548,29 @@ def api_debate(slug: str) -> JSONResponse:
 
 @app.get("/api/debates")
 def api_debates_list() -> JSONResponse:
-    """All published debates (slug + question + topic) — the /debates index."""
-    from .core.db import list_debates
+    """Curated debates + (when public discussions are on) user-initiated community
+    symposiums — the /symposiums index. Both carry a `source` field so the feed can
+    badge community items and link them to /discussions/{id} (not /symposium/{slug}).
+    Community items do NOT enter the sitemap here (the sitemap calls list_debates
+    directly; user discussions have their own gated sitemap path)."""
+    from .core.db import list_community_symposiums, list_debates
     try:
-        rows = list_debates(limit=500)
+        curated = list_debates(limit=500)
+        for d in curated:
+            d["source"] = "curated"
+        community: list[dict[str, Any]] = []
+        if ugc_module.is_enabled():
+            try:
+                community = list_community_symposiums(limit=200)
+            except Exception:
+                community = []
+        merged = curated + community
+        # Newest-first across both sources — the feed is a recency stream.
+        merged.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     except Exception:
-        rows = []
+        merged = []
     return JSONResponse(
-        content={"debates": rows},
+        content={"debates": merged},
         headers={"Cache-Control": "public, max-age=1800, s-maxage=3600"},
     )
 

@@ -43,7 +43,8 @@ export default function ContinueComposer({ id }: { id: string }) {
   return (
     <div className="shared-continue">
       <p className="shared-continue-hint">
-        Continue privately — your follow-ups create a copy only you can see.
+        This is a shared, read-only conversation. Ask a follow-up and we&rsquo;ll open
+        a private copy — only you can see it.
       </p>
       <div className="shared-continue-bar">
         <textarea

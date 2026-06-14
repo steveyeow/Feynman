@@ -422,6 +422,9 @@ export interface DebateListItem {
   topic?: string;
   created_at?: string;
   participants?: string[];
+  /** "curated" = a debate (/symposium/{slug}); "community" = a user-shared
+   *  multi-mind discussion (/discussions/{slug}). Absent ⇒ treat as curated. */
+  source?: "curated" | "community";
 }
 
 /** A debate + its ordered turns (GET /api/debates/{slug}); null if absent. */
