@@ -75,9 +75,10 @@ interface PendingChat {
   message: string;
   books?: SelectedBook[];
   minds?: SelectedMind[];
-  // Symposium "join": the prior debate, replayed into the first panel round's
-  // history so the invited minds continue it (consumed once; see seedHistoryRef).
-  seedHistory?: { role: string; content: string }[];
+  // Symposium "join": the prior debate turns, loaded into the chat as the opening
+  // transcript (a join notice + each mind's remark) so the conversation continues
+  // with full context — NOT a synthetic user "question" message.
+  symposiumTurns?: { mindId: string; mindName: string; content: string }[];
 }
 
 /** True if a first-message handoff for this session is waiting (without
@@ -225,9 +226,6 @@ export default function ChatView({
   // effect below. Pro / open-source users are unaffected (the gate only reads
   // it when !isProUser).
   const invitedOnceRef = useRef(false);
-  // Symposium "join" handoff: the prior debate, injected into the FIRST panel
-  // round's history (consumed once) so the minds pick up where it left off.
-  const seedHistoryRef = useRef<{ role: string; content: string }[] | null>(null);
   const [sending, setSending] = useState(false);
   const [mindsBusy, setMindsBusy] = useState(false);
   const [consent, setConsent] = useState<ConsentState>(null);
@@ -460,8 +458,15 @@ export default function ChatView({
   const buildHistory = useCallback(
     (msgs: Message[]) =>
       msgs
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => ({ role: m.role, content: m.content })),
+        // Include mind turns (as "[Name]: …" assistant lines) so Feynman/the model
+        // sees the full conversation — incl. a symposium loaded via "Join this
+        // discussion". Dropping them made Feynman think the chat just started.
+        .filter((m) => m.role !== "system-notice")
+        .map((m) =>
+          m.role === "mind"
+            ? { role: "assistant", content: `[${m.mindName}]: ${m.content}` }
+            : { role: m.role === "user" ? "user" : "assistant", content: m.content },
+        ),
     [],
   );
 
@@ -501,10 +506,6 @@ export default function ChatView({
         return m && joinedNames.includes(m.name);
       });
       let responses: MindResponse[] = [];
-      // Symposium "join" replays the prior debate into the FIRST round's history
-      // (consumed once); later rounds carry context via baseMsgs as usual.
-      const seed = seedHistoryRef.current;
-      if (seed) seedHistoryRef.current = null;
       try {
         responses = await panelChat({
           message,
@@ -512,7 +513,7 @@ export default function ChatView({
           invitedMindIds: invitedIds.length ? invitedIds : undefined,
           bookContext: bookCtx.length ? bookCtx : undefined,
           agentIds: agentIds.length ? agentIds : undefined,
-          history: seed ? [...seed, ...buildPanelHistory(baseMsgs)] : buildPanelHistory(baseMsgs),
+          history: buildPanelHistory(baseMsgs),
           targetMinds: targetMinds?.length ? targetMinds : undefined,
         });
       } catch (e) {
@@ -986,8 +987,23 @@ export default function ChatView({
     const seededMinds = new Map((pending.minds || []).map((m) => [m.id, m]));
     if (seededBooks.size) setBooks(seededBooks);
     if (seededMinds.size) setMinds(seededMinds);
-    // Symposium "join": stash the prior debate so the first panel round carries it.
-    if (pending.seedHistory?.length) seedHistoryRef.current = pending.seedHistory;
+    // Symposium "join": load the prior debate AS the opening transcript (a join
+    // notice + each mind's remark, left-aligned like the live chat), then WAIT for
+    // the user's follow-up. No synthetic user "question" message (which renders
+    // right-aligned), and the participants stay selected so a follow-up continues
+    // the debate — with full context (buildHistory/buildPanelHistory include these
+    // mind turns now).
+    if (pending.symposiumTurns?.length) {
+      const names = [...new Set(pending.symposiumTurns.map((t) => t.mindName))];
+      const seeded: Message[] = [{ role: "system-notice", content: "", mindNames: names }];
+      for (const t of pending.symposiumTurns)
+        seeded.push({ role: "mind", content: t.content, mindName: t.mindName });
+      setMessages(seeded);
+      queueSaveMessage(sessionId, "system-notice", "", { mindNames: names });
+      for (const t of pending.symposiumTurns)
+        queueSaveMessage(sessionId, "mind", t.content, { mindName: t.mindName });
+      return; // the transcript IS the opening — don't send a question
+    }
     // …and pass them as overrides so the send uses them without waiting for the
     // setBooks/setMinds state updates to commit.
     handleSend(pending.message, { books: seededBooks, minds: seededMinds });
