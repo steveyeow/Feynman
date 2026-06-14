@@ -1,29 +1,47 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import SeoColumn from "@/components/seo/SeoColumn";
+import EntityLayout from "@/components/seo/EntityLayout";
 import JsonLd from "@/components/seo/JsonLd";
 import {
   SITE_URL,
   abs,
   breadcrumbJsonLd,
   fetchPublicDiscussion,
+  fetchDebatesList,
   metaDescription,
+  type PublicDiscussion,
 } from "@/lib/seo-mind";
 import MessageList from "@/components/chat/MessageList";
 import ContinueComposer from "@/components/chat/ContinueComposer";
 import ShareButton from "@/components/share/ShareButton";
+import JoinDiscussionButton from "@/components/symposium/JoinDiscussionButton";
 import type { Message } from "@/lib/chat";
 import { mindColor, mindInitials } from "@/lib/minds";
 
 // A single approved, PII-scrubbed public discussion. Data comes from
-// GET /api/public-discussions/{id} (mirrors the legacy public_session_page:
-// gated on ENABLE_PUBLIC_DISCUSSIONS + public_status='approved'). When the
-// feature is off or the session isn't approved the endpoint 404s and we keep
-// a stable, friendly "not available" page (the URL is a shareable permalink,
-// so we avoid a hard 404) and noindex it.
+// GET /api/public-discussions/{id} (gated on ENABLE_PUBLIC_DISCUSSIONS +
+// public_status='approved'). When the feature is off or the session isn't
+// approved the endpoint 404s and we keep a stable, friendly "not available"
+// page (the URL is a shareable permalink, so we avoid a hard 404) + noindex.
+//
+// A MULTI-MIND discussion (>=2 minds spoke) renders as a FULL symposium —
+// identical experience to a curated /symposium (Join this discussion +
+// participant chat rail + More symposiums), so the two kinds the /symposiums
+// feed mixes together behave the same (Steve, 2026-06-14). A single-mind / book
+// chat keeps the plain read-only "shared conversation" page.
 
 export const revalidate = 600;
 export const dynamicParams = true;
+
+/** Display title: a session shared without a title comes through as "New chat";
+ *  fall back to the first user question (the actual topic), else a generic label. */
+function pickTitle(disc: PublicDiscussion): string {
+  const t = (disc.title || "").trim();
+  if (t && t.toLowerCase() !== "new chat") return t;
+  const firstQ = (disc.messages.find((m) => m.role === "user")?.content || "").trim();
+  return firstQ.slice(0, 90) || "Symposium";
+}
 
 export async function generateMetadata({
   params,
@@ -40,7 +58,7 @@ export async function generateMetadata({
       alternates: { canonical },
     };
   }
-  const title = disc.title || "Discussion on Feynman";
+  const title = pickTitle(disc);
   const desc = metaDescription(
     `A public discussion shared by ${disc.handle} on Feynman.`,
   );
@@ -115,10 +133,7 @@ export default async function PublicDiscussionPage({
     );
   }
 
-  const title = disc.title || "Discussion on Feynman";
-  // Footer is just the continue-composer now (Steve, 2026-06-14): no "Browse the
-  // library" / "More from this book" link — a shared chat should only offer to
-  // continue the conversation.
+  const title = pickTitle(disc);
   const forumLd = {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
@@ -136,7 +151,7 @@ export default async function PublicDiscussionPage({
 
   // Render the shared transcript with the SAME component the live chat uses, so
   // a shared conversation looks exactly like it does in-app (Feynman + mind
-  // avatars, names, markdown) — read-only (no composer, no per-message share).
+  // avatars, names, markdown), read-only.
   const transcript: Message[] = disc.messages.map((m): Message =>
     m.role === "mind"
       ? { role: "mind", content: m.content, mindName: m.speaker || "A great mind" }
@@ -149,64 +164,136 @@ export default async function PublicDiscussionPage({
       disc.messages.filter((m) => m.role === "mind").map((m) => m.speaker || ""),
     ),
   ].filter(Boolean) as string[];
-  // A multi-mind discussion (2+ minds spoke) is a user-made symposium — give it
-  // the same header as the curated /symposium pages (question title + a
-  // participant roster strip) instead of the generic "shared conversation"
-  // banner. Single-mind / book chats keep the plain banner.
   const isSymposium = knownMindNames.length >= 2;
-  const roster =
-    knownMindNames.length <= 1
-      ? knownMindNames[0] || ""
-      : knownMindNames.slice(0, -1).join(", ") +
-        " and " +
-        knownMindNames[knownMindNames.length - 1];
 
+  // ── Multi-mind discussion → a FULL symposium, identical to a curated
+  //    /symposium: Join this discussion (→ live multi-mind chat) + participant
+  //    chat rail + More symposiums. Unifies the experience the /symposiums feed
+  //    mixes together (Steve, 2026-06-14). ──
+  if (isSymposium) {
+    const participants = (disc.participants || []).filter((p) => p.mind_name);
+    // The minds' remarks replayed into the live chat on Join (same handoff as a
+    // curated symposium): each mind turn → {mind_id, mind_name, content}.
+    const turns = disc.messages
+      .filter((m) => m.role === "mind")
+      .map((m) => ({
+        mind_id: m.mind_id || "",
+        mind_name: m.speaker || "A great mind",
+        content: m.content,
+      }));
+    const pNames = participants.map((p) => p.mind_name);
+    const roster =
+      pNames.length <= 1
+        ? pNames[0] || ""
+        : pNames.slice(0, -1).join(", ") + " and " + pNames[pNames.length - 1];
+    const more = (await fetchDebatesList()).filter((x) => x.slug !== disc.id).slice(0, 6);
+
+    const hero = (
+      <>
+        <p className="seo-meta">Symposium · shared by {disc.handle || "Anonymous"}</p>
+        <h1>{title}</h1>
+        <div className="chat-system-notice mind-join-notice symposium-join">
+          <div className="join-notice-inner">
+            {participants.map((p) => (
+              <span
+                key={p.mind_id || p.mind_name}
+                className="join-avatar"
+                style={{ background: mindColor(p.mind_name) }}
+              >
+                {mindInitials(p.mind_name)}
+              </span>
+            ))}
+            <span>{roster} in conversation</span>
+          </div>
+        </div>
+        <p className="symposium-lede">
+          {participants.length} great minds took up one question — each in their own
+          voice, answering the others. Read the exchange, then join the conversation
+          yourself.
+        </p>
+        <div className="symposium-hero-actions">
+          <JoinDiscussionButton question={title} participants={participants} turns={turns} />
+          <ShareButton
+            url={canonical}
+            title={title}
+            subject="Symposium"
+            label="Share this symposium"
+            variant="secondary"
+          />
+        </div>
+      </>
+    );
+
+    const rail = (
+      <>
+        <div className="seo-rail-card">
+          <h3>Chat with a participant</h3>
+          <ul>
+            {participants.map((p) => {
+              const ref = p.mind_slug || p.mind_id;
+              return (
+                <li key={p.mind_id || p.mind_name}>
+                  {ref ? (
+                    <Link href={`/mind/${encodeURIComponent(ref)}/chat`}>{p.mind_name}</Link>
+                  ) : (
+                    <span>{p.mind_name}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        {more.length ? (
+          <div className="seo-rail-card">
+            <h3>More symposiums</h3>
+            <ul>
+              {more.map((x) => (
+                <li key={x.slug}>
+                  <Link
+                    href={
+                      x.source === "community"
+                        ? `/discussions/${x.slug}`
+                        : `/symposium/${x.slug}`
+                    }
+                  >
+                    {x.question}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </>
+    );
+
+    return (
+      <EntityLayout hero={hero} rail={rail}>
+        <JsonLd data={forumLd} />
+        <JsonLd data={breadcrumbLd} />
+        <div className="shared-transcript">
+          <MessageList messages={transcript} knownMindNames={knownMindNames} />
+        </div>
+      </EntityLayout>
+    );
+  }
+
+  // ── Single-mind / book chat → the plain read-only shared-conversation page
+  //    (banner + transcript + continue). Not a symposium. ──
   return (
     <SeoColumn>
       <JsonLd data={forumLd} />
       <JsonLd data={breadcrumbLd} />
-
-      {isSymposium ? (
-        // User-made symposium: question as the visible title + a participant
-        // roster strip (the same .mind-join-notice treatment as /symposium).
-        <>
-          <p className="seo-meta">Symposium · shared by {disc.handle || "Anonymous"}</p>
-          <h1 className="discussion-symposium-h1">{title}</h1>
-          <div className="chat-system-notice mind-join-notice symposium-join">
-            <div className="join-notice-inner">
-              {knownMindNames.map((name) => (
-                <span
-                  key={name}
-                  className="join-avatar"
-                  style={{ background: mindColor(name) }}
-                >
-                  {mindInitials(name)}
-                </span>
-              ))}
-              <span>{roster} in conversation</span>
-            </div>
-          </div>
-          <div className="symposium-hero-actions">
-            <ShareButton url={canonical} subject="Symposium" title={title} variant="secondary" />
-          </div>
-        </>
-      ) : (
-        <>
-          {/* h1 kept for SEO but visually hidden — the chat itself has no big
-              title; the question is the first turn of the transcript below. */}
-          <h1 className="sr-only">{title}</h1>
-          <div className="shared-banner">
-            <span className="shared-banner-label">Shared conversation on Feynman</span>
-            <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
-            <ShareButton url={canonical} subject="Shared conversation" title={title} variant="ghost" />
-          </div>
-        </>
-      )}
-
+      {/* h1 kept for SEO but visually hidden — the chat itself has no big title;
+          the question is the first turn of the transcript below. */}
+      <h1 className="sr-only">{title}</h1>
+      <div className="shared-banner">
+        <span className="shared-banner-label">Shared conversation on Feynman</span>
+        <span className="shared-banner-by">Shared by {disc.handle || "Anonymous"}</span>
+        <ShareButton url={canonical} subject="Shared conversation" title={title} variant="ghost" />
+      </div>
       <div className="shared-transcript">
         <MessageList messages={transcript} knownMindNames={knownMindNames} />
       </div>
-
       <ContinueComposer id={params.id} />
     </SeoColumn>
   );

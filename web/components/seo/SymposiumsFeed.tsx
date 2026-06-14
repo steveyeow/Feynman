@@ -45,8 +45,10 @@ export default function SymposiumsFeed({ debates }: { debates: DebateListItem[] 
 
       <div className="symposium-feed">
         {shown.map((d) => {
-          // Community symposiums are user-shared multi-mind discussions — they
-          // live at /discussions/{id}, not /symposium/{slug}, and carry a badge.
+          // Community symposiums (user-shared multi-mind discussions) live at
+          // /discussions/{id} — but render as a full symposium there now, so the
+          // experience is identical to a curated /symposium/{slug}. Same label
+          // dimension too: they carry an inferred topic (not a "Community" badge).
           const community = d.source === "community";
           const href = community ? `/discussions/${d.slug}` : `/symposium/${d.slug}`;
           return (
@@ -69,11 +71,7 @@ export default function SymposiumsFeed({ debates }: { debates: DebateListItem[] 
                     <span className="symposium-row-names">{d.participants.join(", ")}</span>
                   </>
                 ) : null}
-                {community ? (
-                  <span className="symposium-row-badge">Community</span>
-                ) : d.topic ? (
-                  <span className="symposium-row-topic">{d.topic}</span>
-                ) : null}
+                {d.topic ? <span className="symposium-row-topic">{d.topic}</span> : null}
               </div>
             </Link>
           );

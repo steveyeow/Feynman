@@ -908,8 +908,18 @@ export interface PublicDiscussion {
   /** Descriptive slug of the linked book/mind (uuid fallback). Avoids the 301. */
   entity_slug?: string;
   approved_at: string;
-  /** speaker: a mind answer's name (mind turns), "Feynman" (assistant), or "" (user). */
-  messages: Array<{ role: string; content: string; speaker?: string }>;
+  /** speaker: a mind answer's name (mind turns), "Feynman" (assistant), or "" (user).
+   *  mind_id/mind_slug: resolved per mind turn so a multi-mind discussion can render
+   *  as a full symposium (Join chips + per-participant chat links need ids/slugs). */
+  messages: Array<{
+    role: string;
+    content: string;
+    speaker?: string;
+    mind_id?: string;
+    mind_slug?: string;
+  }>;
+  /** Distinct minds that spoke (≥2 ⇒ rendered as a symposium) — drives Join + rail. */
+  participants?: Array<{ mind_id: string; mind_name: string; mind_slug?: string }>;
 }
 
 /**
