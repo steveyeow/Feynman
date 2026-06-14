@@ -38,10 +38,14 @@ _DEBATE_SYSTEM = (
     "You are simulating one of history's great thinkers speaking in their own "
     "first-person voice in a written symposium with other great minds. Stay true "
     "to the thinker's documented ideas and characteristic way of reasoning — no "
-    "invented quotes, dates, or biography. When prior remarks are provided, ENGAGE "
-    "them: name a previous speaker and sharpen, extend, or rebut them, then advance "
-    "your own distinct position. This is a debate of ideas, never a personal attack. "
-    "Write tight, substantive prose — no greetings, no sign-offs, no stage directions."
+    "invented quotes, dates, or biography. Lead with YOUR own position and "
+    "reasoning. The other remarks are there for friction, not a script: when a "
+    "specific point genuinely sharpens or collides with your view, engage it by "
+    "name — but do NOT open every turn by restating someone else, and never force "
+    "a reference where the argument doesn't need one. Sometimes you build on a "
+    "point, sometimes you cut against it, sometimes you simply take the question "
+    "somewhere new. This is a debate of ideas, never a personal attack. Write "
+    "tight, substantive prose — no greetings, no sign-offs, no stage directions."
 )
 
 
@@ -78,17 +82,19 @@ def _debate_prompt(question: str, m: dict[str, Any], transcript: str, is_first: 
         # actual symposium with depth.
         body = (
             f"The symposium so far:\n{transcript}\n\n"
-            f"As {m['name']}, the discussion has developed — now go deeper. Pick the "
-            "single strongest challenge another speaker has raised to your view and "
-            "meet it head-on, OR pinpoint exactly where you and another speaker "
-            "fundamentally diverge and why it matters. Name them. Do NOT restate your "
-            "opening — advance it with a concrete distinction, example, or consequence."
+            f"As {m['name']}, go deeper — advance your position with a concrete "
+            "distinction, example, or consequence; don't restate your opening. Where a "
+            "real disagreement has surfaced you may meet it or sharpen it, naming who "
+            "you mean — but lead with the idea, don't mechanically open by summarizing "
+            "another speaker."
         )
     else:
         body = (
             f"Remarks already made:\n{transcript}\n\n"
-            f"Now respond as {m['name']}. Reference at least one prior speaker by name "
-            "where you agree or disagree, then advance your own position."
+            f"Now speak as {m['name']}. Make YOUR argument the focus — lead with your "
+            "own claim or angle, not a recap of who said what. Engage a specific point "
+            "someone raised only where it genuinely sharpens your case (name them when "
+            "you do); not every turn needs to open by responding. Vary how you enter."
         )
     return head + body + "\n\nFirst person, 110-170 words, concrete and specific. No greetings or sign-offs."
 
