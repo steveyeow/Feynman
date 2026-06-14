@@ -30,6 +30,7 @@ export const PRO_FEATURES = [
   "Write the book you need — on-demand, on any topic",
   "Great minds continuously join chats",
   "Invite great minds into your chats",
+  "Join any symposium and continue the debate live",
   "Upload your own minds or from any source",
   "Discover & expand the minds network",
   "Higher daily usage limits",
