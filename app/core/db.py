@@ -3613,6 +3613,61 @@ def list_debates(limit: int = 200) -> list[dict[str, Any]]:
         return debates
 
 
+def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict[str, Any]]:
+    """User-initiated symposiums: approved public chat sessions where >= min_minds
+    distinct minds spoke. These join the curated /symposiums feed (Steve, 2026-06-14:
+    "multi-mind chats the user shared as public can enter symposiums"). Shaped like
+    list_debates items but with source='community' and the slug carrying the SESSION
+    id, since the card links to /discussions/{id} (not /symposium/{slug}). Minds are
+    derived from session_messages role='mind' meta.mindName (no session.minds field
+    exists). Idempotent/read-only."""
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(
+            "SELECT id, public_title, title, created_at, approved_at FROM chat_sessions "
+            "WHERE public_status = 'approved' AND session_type IN ('chat','mind','book') "
+            "ORDER BY COALESCE(approved_at, created_at) DESC LIMIT ?"
+        ), (limit * 4,))  # over-fetch; the >=min_minds filter below thins it
+        sessions = [dict(r) for r in rows]
+        if not sessions:
+            return []
+        ids = [s["id"] for s in sessions]
+        ph = ",".join(["?"] * len(ids))
+        mrows = _fetchall(conn, _q(
+            f"SELECT session_id, meta_json, created_at FROM session_messages "  # noqa: S608 — ph is ?-placeholders
+            f"WHERE session_id IN ({ph}) AND role = 'mind' ORDER BY created_at ASC"
+        ), tuple(ids))
+        by_session: dict[str, list[str]] = {}
+        seen: dict[str, set[str]] = {}
+        for r in mrows:
+            sid = r["session_id"]
+            try:
+                name = (json.loads(r.get("meta_json") or "{}").get("mindName") or "").strip()
+            except Exception:
+                name = ""
+            if not name:
+                continue
+            s = seen.setdefault(sid, set())
+            if name not in s:
+                s.add(name)
+                by_session.setdefault(sid, []).append(name)
+        out: list[dict[str, Any]] = []
+        for s in sessions:
+            names = by_session.get(s["id"], [])
+            if len(names) < min_minds:
+                continue
+            out.append({
+                "slug": s["id"],  # session id — the card links to /discussions/{id}
+                "question": (s.get("public_title") or s.get("title") or "Shared discussion").strip(),
+                "topic": None,
+                "created_at": s.get("created_at"),
+                "participants": names,
+                "source": "community",
+            })
+            if len(out) >= limit:
+                break
+        return out
+
+
 def list_debates_for_mind(mind_id: str, limit: int = 10) -> list[dict[str, Any]]:
     """Debates a given mind argued in — the 'Recent debates' rail on /mind/{id}
     and /mind/{id}/dialogues (the per-mind aggregation, philosophie.ai-style)."""

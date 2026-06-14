@@ -116,14 +116,9 @@ export default async function PublicDiscussionPage({
   }
 
   const title = disc.title || "Discussion on Feynman";
-  // Cross-link back to the entity (book or mind) this discussion is about.
-  const entityRef = disc.entity_slug || disc.entity_id; // prefer slug, uuid fallback
-  const entityHref =
-    entityRef && disc.session_type === "book"
-      ? `/book/${entityRef}`
-      : entityRef
-        ? `/mind/${entityRef}`
-        : null;
+  // Footer is just the continue-composer now (Steve, 2026-06-14): no "Browse the
+  // library" / "More from this book" link — a shared chat should only offer to
+  // continue the conversation.
   const forumLd = {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
@@ -213,13 +208,6 @@ export default async function PublicDiscussionPage({
       </div>
 
       <ContinueComposer id={params.id} />
-      <p className="shared-cta-foot">
-        <Link className="shared-cta-alt" href={entityHref || "/library"}>
-          {entityHref
-            ? `More from this ${disc.session_type === "book" ? "book" : "mind"}`
-            : "Browse the library"}
-        </Link>
-      </p>
     </SeoColumn>
   );
 }
