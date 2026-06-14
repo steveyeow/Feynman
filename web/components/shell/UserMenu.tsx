@@ -100,6 +100,19 @@ export default function UserMenu() {
           <span>Theme</span>
           <span style={{ marginLeft: "auto" }}><ThemeToggle /></span>
         </div>
+        {/* Join Community (Discord) — legacy app.js had it in both the signed-in
+            and signed-out menus; the Next rewrite dropped it. Plain text (no icon)
+            to match the icon-less Theme / Sign in rows — a lone Discord glyph left
+            the label misaligned. Same URL as the landing page + layout.tsx. */}
+        <a
+          className="user-menu-item"
+          href="https://discord.gg/bCShwbFnCd"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setOpen(false)}
+        >
+          Join Community
+        </a>
         {authEnabled && user && (
           <Link className="user-menu-item" href="/subscription" onClick={() => setOpen(false)}>
             Subscription
