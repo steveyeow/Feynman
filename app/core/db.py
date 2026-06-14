@@ -3623,9 +3623,15 @@ def list_community_symposiums(min_minds: int = 2, limit: int = 100) -> list[dict
     exists). Idempotent/read-only."""
     with get_conn() as conn:
         rows = _fetchall(conn, _q(
-            "SELECT id, public_title, title, created_at, approved_at FROM chat_sessions "
+            # ORDER BY created_at (TEXT, ISO-8601 → lexical == chronological), NOT
+            # COALESCE(approved_at, created_at): on Postgres approved_at is
+            # timestamptz and created_at is text, and COALESCE rejects the mixed
+            # types — which made this THROW (SQLite tolerated it locally, a
+            # SQLite≠PG miss), and /api/debates swallowed it so community was
+            # always empty in prod.
+            "SELECT id, public_title, title, created_at FROM chat_sessions "
             "WHERE public_status = 'approved' AND session_type IN ('chat','mind','book') "
-            "ORDER BY COALESCE(approved_at, created_at) DESC LIMIT ?"
+            "ORDER BY created_at DESC LIMIT ?"
         ), (limit * 4,))  # over-fetch; the >=min_minds filter below thins it
         sessions = [dict(r) for r in rows]
         if not sessions:
