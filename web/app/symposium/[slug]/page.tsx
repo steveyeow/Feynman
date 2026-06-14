@@ -203,7 +203,7 @@ export default async function SymposiumPage({
           the name line (right) instead of a footer link list. */}
       <div className="symposium-thread">
         {d.turns.map((t, i) => (
-          <div key={i} className="chat-message mind-message">
+          <div key={i} id={`turn-${i}`} className="chat-message mind-message">
             <div
               className="mind-msg-avatar"
               style={{ background: mindColor(t.mind_name) }}
