@@ -88,7 +88,11 @@ export interface WriteBookState {
 function describeError(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {
     if (e.status === 503)
-      return "The book writer is unavailable right now (no AI provider configured). Try again later.";
+      // 503 = all LLM providers were slow/unavailable for this call — a
+      // transient capacity/timeout issue, NOT a missing config. Keep the
+      // user-facing copy clean (no provider names or internals); the real
+      // detail is still in the 503 response body for debugging.
+      return "The book writer is busy right now. Please try again in a moment.";
     if (e.status === 401 || e.status === 403)
       return "You need to be signed in to write a book.";
     const detail =
