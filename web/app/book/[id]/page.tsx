@@ -44,6 +44,19 @@ interface PageProps {
   params: { id: string };
 }
 
+/**
+ * Cache-bust token for the OG card. The /og image URL is otherwise keyed only by
+ * id, so the CDN (s-maxage 24h) keeps serving a stale card after a title/subtitle
+ * edit. Folding a short content hash into the URL makes a rename re-render a fresh
+ * card image. Deterministic (no Date/random) so ISR output stays stable.
+ */
+function ogVersion(...parts: (string | undefined | null)[]): string {
+  const s = parts.filter(Boolean).join("|");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 /** Shared description logic for both generateMetadata and the page body. */
 function bookDescription(
   subtitle: string,
@@ -79,7 +92,7 @@ export async function generateMetadata({
     stubPassages.length === 0 && data.chapters.length === 0 && stubQuestions.length === 0;
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}`;
-  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}`;
+  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(params.id)}&v=${ogVersion(data.title, data.subtitle)}`;
   const desc = bookDescription(data.subtitle, data.author);
   return {
     // Type-0 title rule (seo-geo-master-plan §3.5): state the unique artifact
@@ -153,7 +166,7 @@ export default async function BookLandingPage({ params }: PageProps) {
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(id)}`;
   const desc = bookDescription(data.subtitle, data.author);
-  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(id)}`;
+  const ogImage = `${SITE_URL}/og?type=book&id=${encodeURIComponent(id)}&v=${ogVersion(data.title, data.subtitle)}`;
   const createdAt = data.agent.created_at || "";
 
   // ── JSON-LD ──────────────────────────────────────────────────────────

@@ -739,6 +739,32 @@ def privacy_page() -> HTMLResponse:
 
 _SITE_URL = os.getenv("APP_URL", "https://feynman.wiki").rstrip("/")
 
+# Token for the Next on-demand cache-bust route (web/app/revalidate/route.ts).
+# Same default as that file; override via env in BOTH projects if rotated.
+_REVALIDATE_TOKEN = os.getenv("REVALIDATE_TOKEN", "fey_rv_9f3a7c2e8b1d4056b7e21ad4c8")
+
+
+def _revalidate_book_share(agent_id: str) -> None:
+    """Best-effort: bust the Next ISR page + ssr data cache for a book's SEO
+    page after its title/subtitle changed, so the og:title + og:image on share
+    cards (Twitter/X, etc.) refresh without waiting out the 24h revalidate
+    window. The book page also content-versions its OG image URL, so the new
+    title re-renders a fresh card image rather than serving the CDN-cached PNG.
+    Runs as a background task — never blocks or fails the edit.
+    """
+    try:
+        import httpx
+
+        agent = get_agent(agent_id)
+        slug = (agent or {}).get("slug") or agent_id
+        httpx.post(
+            f"{_SITE_URL}/revalidate",
+            params={"token": _REVALIDATE_TOKEN, "path": f"/book/{slug}", "tag": "ssr"},
+            timeout=8,
+        )
+    except Exception as exc:  # cache refresh must never break a save
+        log.warning("book share revalidate failed for %s: %s", agent_id, exc)
+
 
 # ─── Phase 7.2 — IndexNow key verification file ───
 #
@@ -5058,7 +5084,7 @@ def api_ai_book_start(payload: AIBookStartRequest, request: Request) -> dict[str
 
 
 @app.post("/api/ai-books/{book_id}/chat")
-def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request) -> dict[str, Any]:
+def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     """Refine the book outline through conversation."""
     _check_quota(request, "chat")
     user_id = _get_user_id(request) or "anon"
@@ -5109,6 +5135,13 @@ def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request)
         rename_agent(book["agent_id"], new_title)
     else:
         update_agent_meta(book["agent_id"], {"title": new_title or book["title"]})
+
+    # A published book (completed/failed/cancelled) has live SEO + share pages,
+    # and its title/subtitle/category just changed — bust the Next ISR page + ssr
+    # data cache now so the Twitter/X card's og:title/og:image don't stay stale
+    # for up to 24h. Skipped for outlining drafts (not shared yet).
+    if book["status"] != "outlining":
+        background_tasks.add_task(_revalidate_book_share, book["agent_id"])
 
     _track_usage(request, "ai_book", usage.get("total_tokens", 0))
     return {
