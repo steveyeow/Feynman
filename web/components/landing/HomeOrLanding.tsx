@@ -31,12 +31,13 @@ export default function HomeOrLanding() {
 
   // Tracks the localStorage flag. `null` = not yet read (SSR / first paint).
   const [landed, setLanded] = useState<boolean | null>(null);
-  // A cross-surface chat link — /?book, /?q or /?mind — means the visitor came
-  // to chat about something specific (the SEO, Reader and library "Chat" CTAs
-  // all route through these params). Such a visitor must drop into the composer
-  // with the book preselected, NEVER the marketing landing page — otherwise an
-  // anonymous arrival from Google/an SEO page silently loses the book they came
-  // for. `null` = not yet read (SSR / first paint).
+  // A cross-surface chat link — /?book, /?q, /?mind or /?debate — means the
+  // visitor came to chat about something specific (the SEO, Reader and library
+  // "Chat" CTAs route through book/q/mind; the /symposiums "Convene a symposium"
+  // CTA routes through ?debate). Such a visitor must drop into the composer,
+  // NEVER the marketing landing page — otherwise an anonymous arrival from
+  // Google/an SEO page silently loses the intent they came for. `null` = not yet
+  // read (SSR / first paint).
   const [hasChatIntent, setHasChatIntent] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -47,7 +48,9 @@ export default function HomeOrLanding() {
     }
     try {
       const sp = new URLSearchParams(window.location.search);
-      setHasChatIntent(sp.has("book") || sp.has("q") || sp.has("mind"));
+      setHasChatIntent(
+        sp.has("book") || sp.has("q") || sp.has("mind") || sp.has("debate"),
+      );
     } catch {
       setHasChatIntent(false);
     }

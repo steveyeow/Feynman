@@ -661,6 +661,41 @@ body { background-color: var(--bg-home); }
 .symposium-join-cta:hover { opacity: 0.88; }
 .symposium-join-cta:disabled { opacity: 0.55; cursor: default; }
 
+/* "Convene your own symposium" — the create affordance atop the /symposiums
+   feed. One inviting panel: a label that teaches the mechanic + a primary
+   button. The whole panel is the link (a big, smooth target) into ?debate=1. */
+/* Scoped to .seo-content so `text-decoration: none` beats the prose-link rule
+   `.seo-content a { text-decoration: underline }` — otherwise the whole panel
+   (an anchor) gets an underline under its title/sub. */
+.seo-content a.symposium-create {
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  margin: 18px 0 6px; padding: 16px 18px;
+  border: 1px solid var(--border-strong); border-radius: 14px;
+  background: var(--bg-chat); color: var(--text); text-decoration: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+.symposium-create:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 12px rgba(10, 110, 230, 0.13);
+  transform: translateY(-1px);
+}
+.symposium-create-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.symposium-create-title { font-size: 15px; font-weight: 650; color: var(--text); }
+.symposium-create-sub { font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.symposium-create-cta {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; border-radius: var(--r-control);
+  background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(10, 110, 230, 0.22);
+  transition: filter 0.15s ease;
+}
+.symposium-create:hover .symposium-create-cta { filter: brightness(0.96); }
+@media (max-width: 560px) {
+  .symposium-create { flex-direction: column; align-items: stretch; gap: 12px; }
+  .symposium-create-cta { justify-content: center; }
+}
+
 /* ── /symposiums index — a single-column question stream (the question is the
    hook), with topic chips to filter. Not grouped, not a grid. ── */
 .symposium-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 6px; }
