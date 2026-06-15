@@ -17,6 +17,7 @@ import {
   getSamplePassages,
   getBookQa,
   findQuestionBySlug,
+  isGenericFallbackQuestion,
   clampDescription,
   qaPageJsonld,
   breadcrumbJsonld,
@@ -65,6 +66,10 @@ export async function generateMetadata({
   const qa = await getBookQa(params.id, resolved.question);
   const answer = (qa?.answer || "").trim();
   const hasGrounded = Boolean(answer || qa?.passages?.length);
+  // A generic fallback question (one of the 5 the backend inserts when
+  // book-specific generation failed) is byte-identical across ~400 books, so its
+  // /q page is a duplicate even WITH a grounded answer — never index it.
+  const generic = isGenericFallbackQuestion(resolved.question);
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}/q/${params.slug}`;
   const ogImage = `${SITE_URL}/og?type=qa&id=${encodeURIComponent(params.id)}&slug=${encodeURIComponent(params.slug)}`;
@@ -81,11 +86,15 @@ export async function generateMetadata({
     title: pageTitle,
     description: desc,
     alternates: { canonical },
-    // No grounded answer or cited passage yet → keep this thin question page out
-    // of the index (its only on-page content would be generic fallback passages,
-    // not an answer to THIS question). It indexes once the answer is generated +
-    // cached on a later crawl; `follow` keeps link equity flowing meanwhile.
-    ...(hasGrounded ? {} : { robots: { index: false, follow: true } }),
+    // Keep this question page OUT of the index when EITHER:
+    //  (a) no grounded answer/passage yet — its only content would be generic
+    //      fallback passages, not an answer to THIS question (it indexes later
+    //      once the answer is generated + cached on a crawl), OR
+    //  (b) it's one of the 5 generic fallback questions — byte-identical across
+    //      ~400 books, so a duplicate even WITH a grounded answer ("Duplicate
+    //      without user-selected canonical" in GSC).
+    // `follow` keeps link equity flowing to the book either way.
+    ...(hasGrounded && !generic ? {} : { robots: { index: false, follow: true } }),
     openGraph: {
       type: "article",
       title: resolved.question,

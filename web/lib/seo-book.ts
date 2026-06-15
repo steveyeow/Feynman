@@ -67,6 +67,27 @@ export function findQuestionBySlug(
 }
 
 /**
+ * The 5 generic fallback questions the backend inserts when book-specific
+ * question generation fails. They are byte-identical across ~400 books, so
+ * their /q pages duplicate one another ("Duplicate without user-selected
+ * canonical" in GSC) and aren't real search queries — keep them OUT of the
+ * index regardless of whether a grounded answer exists. (Regenerating
+ * book-specific questions is the eventual fix; until then, noindex.) Keep in
+ * sync with GENERIC_FALLBACK_QUESTIONS in app/core/seo.py.
+ */
+export const GENERIC_FALLBACK_QUESTIONS: ReadonlySet<string> = new Set([
+  "What is the central thesis of this text?",
+  "What evidence does the author provide?",
+  "How would you explain the key concepts in your own words?",
+  "What are the practical implications?",
+  "What questions remain unanswered?",
+]);
+
+export function isGenericFallbackQuestion(q: string): boolean {
+  return GENERIC_FALLBACK_QUESTIONS.has((q || "").trim());
+}
+
+/**
  * Map a book's free-form `meta.category` to one of the 15 canonical topic
  * hubs, so the "More on …" link resolves to a real /topic/{slug} (200) instead
  * of 404'ing. Books carry 46+ ad-hoc categories ("Business" vs the canonical

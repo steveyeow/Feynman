@@ -928,6 +928,12 @@ def sitemap_xml():
             if _editorial_frozen(agent):
                 continue
             for q in questions_by_agent.get(agent_id, []):
+                # Generic fallback questions are byte-identical across ~400 books
+                # (duplicate /q pages); the frontend noindexes them, so don't
+                # advertise them here either (avoids "submitted URL marked
+                # noindex" sitemap warnings).
+                if seo_render.is_generic_fallback_question(q):
+                    continue
                 qslug = seo_render.slugify(q)
                 if not qslug:
                     continue
