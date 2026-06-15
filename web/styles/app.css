@@ -691,11 +691,12 @@ body {
   border-color: var(--accent); color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
-/* "Start a debate" — surfaces the multi-mind path from the empty state. Accent
-   outline so it reads as the lead suggestion; fills in on hover. Opens the
+/* "Start a debate" — surfaces the multi-mind path from the empty state. Styled
+   IDENTICALLY to the other starter pills AT REST: the earlier static accent
+   outline read as a "default-selected" first chip (Steve, 2026-06-15). Only its
+   hover fills with accent to mark the special multi-mind entry. Opens the
    invite-minds popover (not a prefilled prompt). */
-.starter-pill-debate { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.starter-pill-debate:hover { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+.starter-pill-debate:hover { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--shadow-sm); }
 
 .home-hint {
   margin-top: 16px; font-size: 13px; color: var(--text-muted);
