@@ -55,6 +55,25 @@ def slugify(text: str, max_len: int = 80) -> str:
     return s
 
 
+# The 5 generic fallback questions inserted when book-specific question
+# generation fails. Byte-identical across ~400 books, so their /q pages
+# duplicate one another in GSC ("Duplicate without user-selected canonical")
+# and aren't real search queries. Excluded from the sitemap (below) + noindexed
+# on the frontend (web/lib/seo-book.ts GENERIC_FALLBACK_QUESTIONS — keep in sync).
+GENERIC_FALLBACK_QUESTIONS = frozenset({
+    "What is the central thesis of this text?",
+    "What evidence does the author provide?",
+    "How would you explain the key concepts in your own words?",
+    "What are the practical implications?",
+    "What questions remain unanswered?",
+})
+
+
+def is_generic_fallback_question(q: str) -> bool:
+    """A question that is one of the templated fallbacks (duplicate across books)."""
+    return (q or "").strip() in GENERIC_FALLBACK_QUESTIONS
+
+
 # ─── JSON-LD schema builders ──────────────────────────────────────────
 
 def breadcrumb_jsonld(items: list[tuple[str, str]]) -> dict[str, Any]:
