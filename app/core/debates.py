@@ -209,6 +209,16 @@ SEED_DEBATES: list[dict[str, Any]] = [
      "minds": ["Steve Jobs", "Jeff Bezos", "Clayton Christensen", "Bret Victor"]},
     {"q": "Do more features make a product better or worse?", "topic": "Business & Strategy",
      "minds": ["Steve Jobs", "Fred Brooks", "Donald Knuth", "Paul Graham"]},
+
+    # ── Investing greats (2026-06-15, Steve-requested) — value-investing tensions
+    # cast from the in-library greats (Buffett/Munger/Graham/Dalio) + the built
+    # Duan Yongping / Li Lu (Chinese value investing). topic "Investing".
+    {"q": "Should you concentrate your portfolio or diversify?", "topic": "Investing",
+     "minds": ["Warren Buffett", "Charlie Munger", "Benjamin Graham", "Ray Dalio"]},
+    {"q": "Cheap and safe, or a wonderful company at a fair price?", "topic": "Investing",
+     "minds": ["Benjamin Graham", "Warren Buffett", "Charlie Munger", "Duan Yongping"]},
+    {"q": "Can a patient investor reliably beat the market?", "topic": "Investing",
+     "minds": ["Warren Buffett", "Ray Dalio", "Li Lu", "Duan Yongping"]},
 ]
 
 

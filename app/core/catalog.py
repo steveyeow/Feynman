@@ -25,6 +25,10 @@ TOPIC_TAGS = [
     # AI also tracks verified GSC demand (lecun/hinton/hassabis queries) and
     # grows with every tech-minds batch.
     "Artificial Intelligence", "Ethics",
+    # 2026-06-15 — Investing hub (Steve-requested). In-library greats
+    # Buffett/Munger/Graham/Dalio (domain contains "investing"), plus the built
+    # Duan Yongping / Li Lu for the Chinese value-investing side.
+    "Investing",
 ]
 
 # Number of books to discover per topic
