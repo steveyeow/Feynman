@@ -668,31 +668,31 @@ body { background-color: var(--bg-home); }
    `.seo-content a { text-decoration: underline }` — otherwise the whole panel
    (an anchor) gets an underline under its title/sub. */
 .seo-content a.symposium-create {
-  display: flex; align-items: center; justify-content: space-between; gap: 18px;
-  margin: 18px 0 6px; padding: 16px 18px;
-  border: 1px solid var(--border-strong); border-radius: 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  margin: 20px 0 4px; padding: 15px 18px;
+  border: 1px solid var(--border); border-radius: 14px;
   background: var(--bg-chat); color: var(--text); text-decoration: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  transition: border-color 0.18s ease;
 }
-.symposium-create:hover {
-  border-color: var(--accent);
-  box-shadow: 0 2px 12px rgba(10, 110, 230, 0.13);
-  transform: translateY(-1px);
+.seo-content a.symposium-create:hover { border-color: var(--border-strong); }
+.symposium-create-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.symposium-create-title {
+  font-size: 14.5px; font-weight: 600; color: var(--text); letter-spacing: -0.01em;
 }
-.symposium-create-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.symposium-create-title { font-size: 15px; font-weight: 650; color: var(--text); }
-.symposium-create-sub { font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.symposium-create-sub { font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+/* Button matches the page's real primary: BLACK pill, like .topic-tag.active and
+   .symposium-join-cta — NOT --accent blue (the lone saturated swatch read loud on
+   this restrained editorial feed). */
 .symposium-create-cta {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 16px; border-radius: var(--r-control);
-  background: var(--accent); color: #fff; font-size: 14px; font-weight: 600;
-  white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(10, 110, 230, 0.22);
-  transition: filter 0.15s ease;
+  padding: 9px 17px; border-radius: 999px;
+  background: var(--btn-solid-bg); color: var(--btn-solid-color);
+  font-size: 13.5px; font-weight: 600; white-space: nowrap;
+  transition: opacity 0.15s ease;
 }
-.symposium-create:hover .symposium-create-cta { filter: brightness(0.96); }
+.seo-content a.symposium-create:hover .symposium-create-cta { opacity: 0.88; }
 @media (max-width: 560px) {
-  .symposium-create { flex-direction: column; align-items: stretch; gap: 12px; }
+  .seo-content a.symposium-create { flex-direction: column; align-items: stretch; gap: 12px; }
   .symposium-create-cta { justify-content: center; }
 }
 
