@@ -136,8 +136,16 @@ def refine_outline(
     outline_str = json.dumps(current_outline, ensure_ascii=False, indent=2)
     system = f"{_REFINE_SYSTEM}\n\nCurrent outline:\n{outline_str}"
 
+    # No grounding here: restructuring an existing outline needs no fresh web
+    # research, and the Gemini google_search round-trips were the main cause of
+    # refine timing out (→ all-providers-failed → 503). thinking_budget=0 keeps
+    # this structural transform cheap + fast. A wider budget (45s × up to ~3
+    # providers, vs the default 30/50 that only reaches ~2) routes around a slow
+    # or hung first provider instead of dying before the healthy ones are tried.
     result, _ = chat_with_fallback(
-        system=system, user=user_message, history=history, use_grounding=True,
+        system=system, user=user_message, history=history,
+        use_grounding=False, thinking_budget=0,
+        timeout=45, max_total_seconds=120,
     )
 
     updated = _parse_json_from_text(result.content)
