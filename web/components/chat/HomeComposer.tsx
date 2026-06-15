@@ -199,6 +199,18 @@ export default function HomeComposer() {
       return;
     }
 
+    // ?debate=1 — the "convene a symposium" deep link (the /symposiums "Start a
+    // symposium" CTA, and any future cross-surface link to the multi-mind path).
+    // Open the invite popover so the visitor assembles a 2+ mind panel; the
+    // placeholder then nudges "pose a question — they'll debate it". Identical
+    // behaviour to the home "Start a debate" pill (onClick setMindsOpen), just
+    // reachable by URL so other surfaces can route into the SAME flow.
+    if (params.get("debate")) {
+      setMindsOpen(true);
+      track("chat_cta_clicked", { surface: "symposiums", label: "convene_symposium" });
+      return;
+    }
+
     // No query params → try a pending intent (read+validate TTL+clear).
     const intent = restorePendingBookIntent();
     if (intent) {

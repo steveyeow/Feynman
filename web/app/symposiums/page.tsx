@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import SeoColumn from "@/components/seo/SeoColumn";
 import JsonLd from "@/components/seo/JsonLd";
 import SymposiumsFeed from "@/components/seo/SymposiumsFeed";
@@ -73,6 +74,38 @@ export default async function SymposiumsIndexPage() {
         question, each in their own voice, engaging the others. Read the
         symposium, then join the conversation.
       </p>
+
+      {/* Create affordance. Most visitors never discover that a symposium is
+          just a chat with 2+ minds invited — this panel teaches the mechanic and
+          routes into the SAME home debate composer (?debate=1) the "Start a
+          debate" pill uses, so convening one is identical to that flow and
+          inherits its sign-in → Pro gate. Shown even with zero debates so the
+          first symposium can be convened. */}
+      <Link href="/?debate=1" prefetch={false} className="symposium-create">
+        <span className="symposium-create-text">
+          <span className="symposium-create-title">Convene your own symposium</span>
+          <span className="symposium-create-sub">
+            Pick 2-4 great minds, pose a question, and watch them debate it — each
+            in their own voice.
+          </span>
+        </span>
+        <span className="symposium-create-cta">
+          Start a symposium
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </span>
+      </Link>
 
       {debates.length ? (
         <SymposiumsFeed debates={debates} />
