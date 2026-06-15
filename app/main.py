@@ -5068,8 +5068,12 @@ def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request)
         raise HTTPException(status_code=404, detail="AI book not found")
     if book["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    if book["status"] not in ("outlining",):
-        raise HTTPException(status_code=409, detail=f"Book is in '{book['status']}' state, cannot edit outline")
+    # In-flight states (about to write / actively writing) can't be edited — the
+    # background writer reads the outline mid-run. Any other state is editable;
+    # for an already-written book the edit is constrained to title/metadata below
+    # so it can't desync from the chapters already on disk.
+    if book["status"] in ("confirmed", "writing"):
+        raise HTTPException(status_code=409, detail="The book is being written right now — wait until it finishes, then you can edit it.")
 
     history = None
     if payload.history:
@@ -5084,9 +5088,27 @@ def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Refinement failed: {exc}")
 
+    # An already-written book keeps its chapter structure (content is on disk and
+    # isn't rewritten here) — only title/subtitle/category may change. An
+    # outlining book can still be restructured freely.
+    if book["status"] != "outlining":
+        preserved = dict(book["outline"] or {})
+        for key in ("title", "subtitle", "category"):
+            if updated_outline.get(key):
+                preserved[key] = updated_outline[key]
+        updated_outline = preserved
+
     update_ai_book_outline(book_id, updated_outline)
-    # Sync title to agent
-    update_agent_meta(book["agent_id"], {"title": updated_outline.get("title", book["title"])})
+    # update_ai_book_outline syncs ai_books.title; also push the new title to the
+    # agent (agents.name + meta.title) so the library, reader, and a finished
+    # book's canvas reflect it. rename_agent keeps all three in sync — the old
+    # meta-only bump left agents.name/ai_books.title stale, so a finished book's
+    # displayed title never changed.
+    new_title = (updated_outline.get("title") or book["title"] or "").strip()
+    if new_title and new_title != (book["title"] or ""):
+        rename_agent(book["agent_id"], new_title)
+    else:
+        update_agent_meta(book["agent_id"], {"title": new_title or book["title"]})
 
     _track_usage(request, "ai_book", usage.get("total_tokens", 0))
     return {

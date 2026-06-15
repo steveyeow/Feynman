@@ -128,6 +128,10 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
   // Latest bookId for the poll guard (avoids stale closure when session changes).
   const bookIdRef = useRef<string | null>(null);
   bookIdRef.current = bookId;
+  // Latest status for the post-refine refresh: a finished book's canvas title
+  // reads `status`, not `outline`, so editing its title must refetch the book.
+  const statusRef = useRef<BookStatus | null>(null);
+  statusRef.current = status;
 
   // ── Polling lifecycle ──────────────────────────────────────────────────
   const stopPolling = useCallback(() => {
@@ -295,6 +299,22 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
         if (genRef.current !== gen) return;
         setOutline(res.outline);
         cbRef.current.onAssistant(res.response);
+        // A finished book's canvas shows `status.title` (not `outline.title`) and
+        // polling is stopped — so after editing it (e.g. a title fix) refetch once
+        // to surface the new title/metadata.
+        const refetchId = bookIdRef.current;
+        if (statusRef.current && refetchId) {
+          try {
+            const fresh = await getBook(refetchId);
+            if (genRef.current === gen) {
+              setStatus(fresh);
+              setOutline(fresh.outline);
+              setBookContent(fresh.content || null);
+            }
+          } catch {
+            /* keep the refine result we already applied */
+          }
+        }
       } catch (err) {
         if (genRef.current !== gen) return;
         const msg = describeError(err, "Couldn't update the outline. Try again.");
