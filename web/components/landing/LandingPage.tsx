@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import * as d3 from "d3";
 import styles from "./LandingPage.module.css";
 
@@ -278,6 +279,71 @@ type GParticle = {
   size: number;
   opacity: number;
 };
+
+/* ════════════════════════════════════════════════════════════════════
+   BELOW-THE-HERO FEATURE SECTIONS — static helpers + data.
+   These render NON-animated feature mocks that reuse the demo message
+   classes (.msg*, .mnAvatar, .joinInner …) so they look native. The hero
+   above is untouched.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* One mind message — same DOM shape as the animated demo's mind row. */
+function MockMind({ name, text }: { name: string; text: string }) {
+  return (
+    <div className={`${styles.msg} ${styles.msgMind}`}>
+      <span className={styles.mnAvatar} style={{ background: lpColor(name) }}>
+        {initials(name)}
+      </span>
+      <div className={styles.mindBodyWrap}>
+        <div className={styles.mindHeader}>
+          <span className={styles.mnName}>{name}</span>
+        </div>
+        <div className={styles.mindBody}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+/* A "minds joined" / "in conversation" notice — ports the demo's join row. */
+function MockJoin({ names, verb }: { names: string[]; verb: string }) {
+  const label =
+    names.length === 1
+      ? names[0]
+      : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  return (
+    <div className={styles.systemNotice}>
+      <div className={styles.joinInner}>
+        {names.map((n) => (
+          <span key={n} className={styles.mnAvatar} style={{ background: lpColor(n) }}>
+            {initials(n)}
+          </span>
+        ))}
+        <span>
+          {label} {verb}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* §3 constellation — node placements (left/top = CSS %, cx/cy = SVG viewBox
+   coords in a 420×264 box, kept in sync so the links land on the avatars). */
+const NETWORK_NODES: { name: string; left: string; top: string; cx: number; cy: number }[] = [
+  { name: "Richard Feynman", left: "20%", top: "26%", cx: 84, cy: 68.6 },
+  { name: "Socrates", left: "52%", top: "16%", cx: 218.4, cy: 42.2 },
+  { name: "Adam Smith", left: "82%", top: "33%", cx: 344.4, cy: 87.1 },
+  { name: "Ada Lovelace", left: "26%", top: "74%", cx: 109.2, cy: 195.4 },
+];
+const NETWORK_UPLOAD = { left: "72%", top: "78%", cx: 302.4, cy: 205.9 };
+/* Links as [x1,y1,x2,y2] in the same viewBox. */
+const NETWORK_LINKS: [number, number, number, number][] = [
+  [84, 68.6, 218.4, 42.2],
+  [218.4, 42.2, 344.4, 87.1],
+  [84, 68.6, 109.2, 195.4],
+  [109.2, 195.4, 302.4, 205.9],
+  [302.4, 205.9, 344.4, 87.1],
+  [218.4, 42.2, 302.4, 205.9],
+];
 
 export function LandingPage({
   ctaLabel,
@@ -961,6 +1027,27 @@ export function LandingPage({
     };
   }, [renderChatStatic, startChatDemo, startSearchDemo, startMindsGraph]);
 
+  /* ---- Scroll-reveal for the below-hero sections (motion users only;
+         reduced-motion keeps them statically visible via the CSS gate). ---- */
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add(styles.isVisible);
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
   /* ---- Theme toggle (ports the inline lp-theme-toggle handler) ---- */
   const toggleTheme = useCallback(() => {
     const root = document.documentElement;
@@ -1381,6 +1468,268 @@ export function LandingPage({
           </div>
         </div>
       </section>
+
+      {/* ═══════════ BELOW-THE-HERO FEATURE SECTIONS (appended) ═══════════
+          The hero <section> above is 100% untouched. These editorial sections
+          introduce the five core capabilities as two pairs — Books, then Minds —
+          reusing the demo classes for native-looking static mocks. */}
+      <div className={styles.sections}>
+        {/* §0 — Positioning band */}
+        <section className={`${styles.section} ${styles.positioning} ${styles.reveal}`} data-reveal>
+          <div className={styles.sectionInner}>
+            <p className={styles.eyebrow}>An interactive knowledge network</p>
+            <h2 className={styles.positioningTitle}>Knowledge you can talk to.</h2>
+            <p className={styles.bodyText}>
+              The world&apos;s most important books and greatest minds — now people you can
+              actually talk to.
+            </p>
+            <div className={styles.pillars}>
+              <span className={styles.pillar}>
+                <span className={styles.pillarDot} />
+                Books that talk back
+              </span>
+              <span className={styles.pillar}>
+                <span className={styles.pillarDot} />
+                Minds that join in
+              </span>
+              <span className={styles.pillar}>
+                <span className={styles.pillarDot} />
+                Debates across centuries
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* §1 — Chat with books (visual left / text right) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={`${styles.msg} ${styles.msgUser}`}>
+                    What are System 1 and System 2?
+                  </div>
+                  <div className={`${styles.msg} ${styles.msgAssistant}`}>
+                    <span>
+                      System 1 is fast, automatic intuition. System 2 is slow, deliberate
+                      thinking.
+                    </span>
+                    <div className={styles.msgSources}>
+                      <span className={styles.sourceTag}>Ch.1 Two Systems</span>
+                    </div>
+                  </div>
+                  <MockJoin names={["Richard Feynman"]} verb="joined the discussion" />
+                  <MockMind
+                    name="Richard Feynman"
+                    text="The first principle is that you must not fool yourself — and you are the easiest person to fool."
+                  />
+                </div>
+              </div>
+            </div>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Chat with books</p>
+              <h2 className={styles.sectionTitle}>Every book becomes a conversation.</h2>
+              <p className={styles.bodyText}>
+                Ask any book anything — get answers cited to the exact page, with great minds
+                joining in to weigh in.
+              </p>
+              <div className={styles.chips}>
+                <span className={styles.chip}>Cited to the page</span>
+                <span className={styles.chip}>Minds join in automatically</span>
+                <span className={styles.chip}>@mention anyone</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* §2 — Create the book you need (text left / visual right) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow} ${styles.featureRowReverse}`}>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.bookMock}>
+                  <div className={styles.bookCover}>
+                    <div className={styles.bookCoverTitle}>The History of Coffee</div>
+                    <div className={styles.bookCoverAuthor}>Compiled on demand</div>
+                  </div>
+                  <div className={styles.bookPage}>
+                    <div className={styles.bookLine} style={{ width: "92%" }} />
+                    <div className={styles.bookLine} style={{ width: "100%" }} />
+                    <div className={styles.bookLine} style={{ width: "96%" }} />
+                    <div className={styles.bookLine} style={{ width: "68%" }} />
+                    <span className={styles.bookChip}>
+                      <span>Ready to chat</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>On-demand books</p>
+              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
+              <p className={styles.bodyText}>
+                Describe what you want to learn and Feynman composes a book for it — ready to
+                chat with on the spot.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* §3 — The minds network + bring your own (visual left / text right) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.constellation}>
+                <svg viewBox="0 0 420 264" preserveAspectRatio="xMidYMid meet">
+                  {NETWORK_LINKS.map(([x1, y1, x2, y2], i) => (
+                    <line
+                      key={i}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="rgba(150,160,180,0.35)"
+                      strokeWidth="1.2"
+                    />
+                  ))}
+                </svg>
+                {NETWORK_NODES.map((n) => (
+                  <div
+                    key={n.name}
+                    className={styles.cNode}
+                    style={{ left: n.left, top: n.top }}
+                  >
+                    <span className={styles.cAvatar} style={{ background: lpColor(n.name) }}>
+                      {initials(n.name)}
+                    </span>
+                    <span className={styles.cName}>{n.name}</span>
+                  </div>
+                ))}
+                <div
+                  className={`${styles.cNode} ${styles.cNodeUpload}`}
+                  style={{ left: NETWORK_UPLOAD.left, top: NETWORK_UPLOAD.top }}
+                >
+                  <span className={styles.cUpload}>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </span>
+                  <span className={styles.cName}>Upload a Mind</span>
+                </div>
+              </div>
+            </div>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Great minds</p>
+              <h2 className={styles.sectionTitle}>A living network of minds — and room for yours.</h2>
+              <p className={styles.bodyText}>
+                Chat one-on-one with history&apos;s greatest thinkers — or upload your own mind
+                and add it to the network.
+              </p>
+              <Link className={styles.softLink} href="/minds">
+                Explore the network
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* §4 — Symposiums (text left / visual right) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow} ${styles.featureRowReverse}`}>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={styles.mockQuestion}>
+                    &ldquo;Is it better to be feared or loved?&rdquo;
+                  </div>
+                  <MockJoin
+                    names={["Machiavelli", "Sun Tzu", "Marcus Aurelius"]}
+                    verb="in conversation"
+                  />
+                  <MockMind
+                    name="Machiavelli"
+                    text="It is far safer to be feared than loved, if one cannot be both."
+                  />
+                  <MockMind
+                    name="Sun Tzu"
+                    text="Fear may win the battle, Niccolò — but the supreme art is to win without the fight."
+                  />
+                </div>
+              </div>
+            </div>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Symposiums</p>
+              <h2 className={styles.sectionTitle}>Convene a symposium of great minds.</h2>
+              <p className={styles.bodyText}>
+                Pose one question — a panel of minds debates it, each in their own voice. Then
+                jump in.
+              </p>
+              <Link className={styles.softLink} href="/symposiums">
+                Browse symposiums
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* §5 — Closing CTA band (reuses the gated hero CTA handler) */}
+        <section className={`${styles.ctaBand} ${styles.reveal}`} data-reveal>
+          <div className={styles.sectionInner}>
+            <h2 className={styles.ctaTitle}>Open a book. Invite a few great minds.</h2>
+            <p className={styles.ctaSub}>Your first conversation is one question away.</p>
+            <button className={styles.heroCta} onClick={onCta}>
+              {ctaLabel}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
