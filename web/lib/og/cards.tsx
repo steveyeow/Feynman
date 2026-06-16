@@ -471,7 +471,7 @@ export function SymposiumCard({
 }: {
   question: string;
   topic?: string;
-  participants: { accent: string; initials: string }[];
+  participants: { accent: string; initials: string; portrait?: string | null }[];
   rosterLabel: string;
 }) {
   return (
@@ -486,11 +486,17 @@ export function SymposiumCard({
           </div>
           <div style={{ display: "flex", alignItems: "center" }}>
             <div style={{ display: "flex" }}>
-              {participants.slice(0, 5).map((p, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 56, background: p.accent, color: "#fff", fontSize: 19, fontWeight: 700, fontFamily: FONT, border: "3px solid #faf8f4", marginLeft: i === 0 ? 0 : -14 }}>
-                  {p.initials}
-                </div>
-              ))}
+              {participants.slice(0, 5).map((p, i) =>
+                p.portrait ? (
+                  <div key={i} style={{ display: "flex", width: 56, height: 56, borderRadius: 56, overflow: "hidden", border: "3px solid #faf8f4", marginLeft: i === 0 ? 0 : -14 }}>
+                    <img src={p.portrait} width={56} height={56} style={{ width: 56, height: 56, objectFit: "cover" }} alt="" />
+                  </div>
+                ) : (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 56, background: p.accent, color: "#fff", fontSize: 19, fontWeight: 700, fontFamily: FONT, border: "3px solid #faf8f4", marginLeft: i === 0 ? 0 : -14 }}>
+                    {p.initials}
+                  </div>
+                ),
+              )}
             </div>
             <div style={{ display: "flex", fontSize: 24, color: INK_SOFT, marginLeft: 20, fontFamily: FONT, maxWidth: 760 }}>
               {clip(rosterLabel, 64)}

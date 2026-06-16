@@ -260,6 +260,11 @@ export default async function SharedAnswerPage({
           url={canonical}
           subject={isMind ? `Answer from ${who}` : "Shared answer"}
           title={headline}
+          defaultText={
+            isMind && who
+              ? `${who}: “${truncate(ans.answer.replace(/\s+/g, " ").trim(), 180)}”`
+              : `“${truncate(ans.answer.replace(/\s+/g, " ").trim(), 200)}”`
+          }
           variant="secondary"
         />
       </div>

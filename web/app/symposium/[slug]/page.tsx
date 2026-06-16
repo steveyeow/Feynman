@@ -118,6 +118,15 @@ export default async function SymposiumPage({
     [d.question, canonical],
   ]);
 
+  // Tweetable default share text — lead with the roster (the names ARE the hook)
+  // + the question, instead of the weak "{title} — on Feynman" fallback.
+  const rosterNames = participants.map((t) => t.mind_name);
+  const roster =
+    rosterNames.length <= 1
+      ? rosterNames[0] || "Great minds"
+      : rosterNames.slice(0, -1).join(", ") + " & " + rosterNames[rosterNames.length - 1];
+  const shareText = `${roster} debate: “${d.question}”`;
+
   const hero = (
     <>
       <p className="seo-meta">{d.topic ? `${d.topic} · Symposium` : "Symposium"}</p>
@@ -156,6 +165,7 @@ export default async function SymposiumPage({
           url={canonical}
           title={d.question}
           subject="Symposium"
+          defaultText={shareText}
           previewImage={abs(`/og?type=symposium&slug=${encodeURIComponent(d.slug)}`)}
           label="Share this symposium"
           variant="secondary"
@@ -218,6 +228,7 @@ export default async function SymposiumPage({
                     url={`${canonical}/t/${i}`}
                     title={`${t.mind_name} on “${d.question}”`}
                     subject="From a symposium"
+                    defaultText={`${t.mind_name}: “${t.content.replace(/\s+/g, " ").trim().slice(0, 148).trimEnd()}…”`}
                     previewImage={abs(
                       `/og?type=symposium-turn&slug=${encodeURIComponent(d.slug)}&kind=${i}`,
                     )}

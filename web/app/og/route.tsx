@@ -330,14 +330,34 @@ async function build(type: string, id: string, slug: string, kind: string) {
       const d = await fetchDebate(slug);
       if (!d) return <HomeCard />;
       const seen = new Set<string>();
-      const parts: { accent: string; initials: string }[] = [];
-      const names: string[] = [];
+      const uniq: { id: string; name: string }[] = [];
       for (const t of d.turns) {
         if (seen.has(t.mind_id)) continue;
         seen.add(t.mind_id);
-        parts.push({ accent: mindAccent(t.mind_name), initials: mindInitials(t.mind_name) });
-        names.push(t.mind_name);
+        uniq.push({ id: t.mind_id, name: t.mind_name });
       }
+      const top = uniq.slice(0, 5); // = the avatars the card shows
+      // Real Wikimedia portraits for the roster (a grid of faces is far more
+      // share-worthy than initial circles). Portrait resolution needs the mind's
+      // wikidata QID — name-only only works for the curated FAMOUS_MIND table —
+      // so resolve each mind for its wikidata_url first. All in parallel; initials
+      // fallback per-mind on any miss (never throws).
+      const portraits = await Promise.all(
+        top.map(async (u) => {
+          try {
+            const m = await fetchMind(u.id);
+            return await mindPortraitDataUri({ name: u.name, wikidata_url: m?.wikidata_url, width: 128, timeoutMs: 6000 });
+          } catch {
+            return null;
+          }
+        }),
+      );
+      const parts = top.map((u, i) => ({
+        accent: mindAccent(u.name),
+        initials: mindInitials(u.name),
+        portrait: portraits[i] || null,
+      }));
+      const names = uniq.map((u) => u.name);
       const rosterLabel =
         names.length <= 1
           ? names[0] || ""
