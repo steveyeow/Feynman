@@ -1755,12 +1755,8 @@ export function LandingPage({
               Feynman
             </span>
             <p className={styles.footerTagline}>Chat with books. Great minds join in.</p>
+            <p className={styles.footerCopy}>© 2026 Feynman · MIT licensed</p>
           </div>
-          <nav className={styles.footerNav}>
-            <Link className={styles.footerLink} href="/minds">Great Minds</Link>
-            <Link className={styles.footerLink} href="/symposiums">Symposiums</Link>
-            <Link className={styles.footerLink} href="/library">Library</Link>
-          </nav>
           <div className={styles.footerSocials}>
             <a
               className={styles.footerSocial}
@@ -1799,9 +1795,6 @@ export function LandingPage({
               </svg>
             </a>
           </div>
-        </div>
-        <div className={styles.footerBottom}>
-          <span>© 2026 Feynman · MIT licensed</span>
         </div>
       </footer>
     </div>

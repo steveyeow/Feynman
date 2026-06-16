@@ -1123,20 +1123,20 @@
   background: var(--landing-bg);
   border-top: 1px solid var(--border);
 }
+/* Full-bleed with the SAME 32px side padding as the topbar, so the footer's
+   left/right edges line up with the top menu's edges (no centered max-width box). */
 .footerInner {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 56px 32px 36px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 32px;
   flex-wrap: wrap;
+  padding: 40px 32px;
 }
 .footerBrand {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .footerLogo {
   display: inline-flex;
@@ -1149,21 +1149,12 @@
 .footerTagline {
   font-size: 13px;
   color: var(--text-muted);
-  margin: 0;
+  margin: 2px 0 0;
 }
-.footerNav {
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.footerLink {
-  font-size: 13px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-.footerLink:hover {
-  color: var(--text);
+.footerCopy {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
 }
 .footerSocials {
   display: flex;
@@ -1184,18 +1175,12 @@
   color: var(--text);
   background: var(--border);
 }
-.footerBottom {
-  border-top: 1px solid var(--border);
-  padding: 18px 32px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
-}
 
 @media (max-width: 960px) {
   .footerInner {
     flex-direction: column;
-    gap: 24px;
-    padding: 40px 20px 28px;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 32px;
   }
 }
