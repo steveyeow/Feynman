@@ -1697,19 +1697,24 @@ export function LandingPage({
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
-                <div className={styles.bookMock}>
-                  <div className={styles.bookCover}>
-                    <div className={styles.bookCoverTitle}>The History of Coffee</div>
-                    <div className={styles.bookCoverAuthor}>Written on demand</div>
-                  </div>
-                  <div className={styles.bookPage}>
-                    <div className={styles.bookLine} style={{ width: "92%" }} />
-                    <div className={styles.bookLine} style={{ width: "100%" }} />
+                <div className={styles.bookCanvas}>
+                  <div className={styles.bookCanvasPage}>
+                    <div className={styles.bookCanvasTitle}>The History of Coffee</div>
                     <div className={styles.bookLine} style={{ width: "96%" }} />
-                    <div className={styles.bookLine} style={{ width: "68%" }} />
-                    <span className={styles.bookChip}>
-                      <span>Ready to chat</span>
-                    </span>
+                    <div className={styles.bookLine} style={{ width: "100%" }} />
+                    <div className={styles.bookLine} style={{ width: "92%" }} />
+                    <div className={styles.bookLine} style={{ width: "98%" }} />
+                    <div className={styles.bookLine} style={{ width: "58%" }} />
+                  </div>
+                  <div className={styles.bookCanvasOutline}>
+                    <div className={styles.bookOutlineLabel}>Outline</div>
+                    <div className={styles.bookOutlineItem}>1 · Origins in Ethiopia</div>
+                    <div className={`${styles.bookOutlineItem} ${styles.bookOutlineActive}`}>
+                      2 · The Spread of Coffee
+                    </div>
+                    <div className={styles.bookOutlineItem}>3 · Coffeehouse Culture</div>
+                    <div className={styles.bookOutlineItem}>4 · Coffee &amp; Commerce</div>
+                    <div className={styles.bookOutlineItem}>5 · The Modern Cup</div>
                   </div>
                 </div>
               </div>

@@ -1184,3 +1184,51 @@
     padding: 32px;
   }
 }
+
+/* §5 on-demand book — book-writing canvas mock: composed pages + right-side
+   outline (mirrors the real write-book BookCanvas; no chat UI). */
+.bookCanvas {
+  display: flex;
+  gap: 18px;
+  align-items: stretch;
+  width: 100%;
+}
+.bookCanvasPage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bookCanvasTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.bookCanvasOutline {
+  flex-shrink: 0;
+  width: 134px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bookOutlineLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bookOutlineItem {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+.bookOutlineActive {
+  color: var(--accent);
+  font-weight: 600;
+}
