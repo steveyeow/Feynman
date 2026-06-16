@@ -345,6 +345,17 @@ const NETWORK_LINKS: [number, number, number, number][] = [
   [218.4, 42.2, 302.4, 205.9],
 ];
 
+/* §2 Library cards — colored gradient cover + faded initials + title (mirrors
+   the real /library cards). */
+const LIB_BOOKS: { title: string; initials: string; grad: string }[] = [
+  { title: "Thinking, Fast and Slow", initials: "TF", grad: "linear-gradient(135deg,#6d597a,#355070)" },
+  { title: "The Wealth of Nations", initials: "WN", grad: "linear-gradient(135deg,#2a9d8f,#264653)" },
+  { title: "Meditations", initials: "Md", grad: "linear-gradient(135deg,#e76f51,#9b2226)" },
+  { title: "The Art of War", initials: "AW", grad: "linear-gradient(135deg,#457b9d,#264653)" },
+  { title: "Gödel, Escher, Bach", initials: "GE", grad: "linear-gradient(135deg,#b56576,#6d597a)" },
+  { title: "Sapiens", initials: "Sp", grad: "linear-gradient(135deg,#588157,#2a9d8f)" },
+];
+
 export function LandingPage({
   ctaLabel,
   onCta,
@@ -1474,6 +1485,22 @@ export function LandingPage({
               <p className={styles.bodyText}>
                 Start from a book or a topic — every answer cited to the exact page.
               </p>
+              <button type="button" className={styles.softLink} onClick={onCta}>
+                Start a chat
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
@@ -1540,24 +1567,14 @@ export function LandingPage({
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
                 <div className={styles.libraryGrid}>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>Thinking, Fast and Slow</span>
-                  </div>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>The Wealth of Nations</span>
-                  </div>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>Meditations</span>
-                  </div>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>The Art of War</span>
-                  </div>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>Gödel, Escher, Bach</span>
-                  </div>
-                  <div className={styles.libCover}>
-                    <span className={styles.libCoverTitle}>Sapiens</span>
-                  </div>
+                  {LIB_BOOKS.map((b) => (
+                    <div key={b.title} className={styles.libCard}>
+                      <div className={styles.libArt} style={{ background: b.grad }}>
+                        <span className={styles.libArtInitials}>{b.initials}</span>
+                      </div>
+                      <span className={styles.libTitle}>{b.title}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1573,27 +1590,57 @@ export function LandingPage({
               <p className={styles.bodyText}>
                 Describe what you want to learn, and Feynman writes the book for it.
               </p>
+              <button type="button" className={styles.softLink} onClick={onCta}>
+                Write a book
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
-                <div className={styles.bookCanvas}>
-                  <div className={styles.bookCanvasPage}>
-                    <div className={styles.bookCanvasTitle}>The History of Coffee</div>
-                    <div className={styles.bookLine} style={{ width: "96%" }} />
-                    <div className={styles.bookLine} style={{ width: "100%" }} />
-                    <div className={styles.bookLine} style={{ width: "92%" }} />
-                    <div className={styles.bookLine} style={{ width: "98%" }} />
-                    <div className={styles.bookLine} style={{ width: "58%" }} />
+                <div className={styles.bookBuild}>
+                  <div className={styles.bookBuildTitle}>The History of Coffee</div>
+                  <div className={styles.bookBuildStatus}>All chapters complete · 100%</div>
+                  <div className={styles.bookBuildBar}>
+                    <div className={styles.bookBuildBarFill} />
                   </div>
-                  <div className={styles.bookCanvasOutline}>
-                    <div className={styles.bookOutlineLabel}>Outline</div>
-                    <div className={styles.bookOutlineItem}>1 · Origins in Ethiopia</div>
-                    <div className={`${styles.bookOutlineItem} ${styles.bookOutlineActive}`}>
-                      2 · The Spread of Coffee
+                  <div className={styles.bookChapters}>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.1 · Origins in Ethiopia</span>
+                      <span className={styles.bookChapterWords}>1,240 words</span>
                     </div>
-                    <div className={styles.bookOutlineItem}>3 · Coffeehouse Culture</div>
-                    <div className={styles.bookOutlineItem}>4 · Coffee &amp; Commerce</div>
-                    <div className={styles.bookOutlineItem}>5 · The Modern Cup</div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.2 · The Spread of Coffee</span>
+                      <span className={styles.bookChapterWords}>1,610 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.3 · Coffeehouse Culture</span>
+                      <span className={styles.bookChapterWords}>1,090 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.4 · Coffee &amp; Commerce</span>
+                      <span className={styles.bookChapterWords}>1,375 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.5 · The Modern Cup</span>
+                      <span className={styles.bookChapterWords}>980 words</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1608,7 +1655,8 @@ export function LandingPage({
               <p className={styles.eyebrow}>Great minds</p>
               <h2 className={styles.sectionTitle}>An ever-evolving network of simulated great minds.</h2>
               <p className={styles.bodyText}>
-                Chat any of them one-on-one, or add your own to the network.
+                A living map where minds connect by the ideas they share — move between
+                them, and chat anyone.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1661,12 +1709,12 @@ export function LandingPage({
                   >
                     <span className={styles.cUpload}>
                       <svg
-                        width="18"
-                        height="18"
+                        width="13"
+                        height="13"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2"
+                        strokeWidth="1.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       >
@@ -1711,9 +1759,7 @@ export function LandingPage({
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
                 <div className={styles.mockStack}>
-                  <div className={styles.mockQuestion}>
-                    &ldquo;Is it better to be feared or loved?&rdquo;
-                  </div>
+                  <div className={styles.symQuestion}>Is it better to be feared or loved?</div>
                   <MockJoin
                     names={["Machiavelli", "Sun Tzu", "Marcus Aurelius"]}
                     verb="in conversation"
@@ -1735,23 +1781,25 @@ export function LandingPage({
         {/* Closing CTA band (reuses the gated hero CTA handler) */}
         <section className={`${styles.ctaBand} ${styles.reveal}`} data-reveal>
           <div className={styles.sectionInner}>
-            <h2 className={styles.ctaTitle}>Open a book. Invite a few great minds.</h2>
-            <button className={styles.heroCta} onClick={onCta}>
-              {ctaLabel}
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </button>
+            <div className={styles.ctaCard}>
+              <h2 className={styles.ctaTitle}>Start your first conversation.</h2>
+              <button className={styles.heroCta} onClick={onCta}>
+                {ctaLabel}
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
           </div>
         </section>
       </div>
@@ -1759,18 +1807,15 @@ export function LandingPage({
       {/* Footer — social links live here (moved out of the topbar) */}
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
-          <div className={styles.footerBrand}>
-            <span className={styles.footerLogo}>
-              <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
-                <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="32" cy="30" r="3.5" fill="currentColor" />
-                <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Feynman
-            </span>
-            <p className={styles.footerCopy}>© 2026 Feynman · MIT licensed</p>
-          </div>
+          <span className={styles.footerLogo}>
+            <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
+              <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="32" cy="30" r="3.5" fill="currentColor" />
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Feynman
+          </span>
           <div className={styles.footerSocials}>
             <a
               className={styles.footerSocial}
@@ -1809,6 +1854,9 @@ export function LandingPage({
               </svg>
             </a>
           </div>
+        </div>
+        <div className={styles.footerBottom}>
+          <span>© 2026 Feynman. All rights reserved.</span>
         </div>
       </footer>
     </div>
