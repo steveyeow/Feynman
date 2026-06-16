@@ -1472,10 +1472,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Chat with books</p>
               <h2 className={styles.sectionTitle}>Chat with any book — and the most relevant minds join in.</h2>
               <p className={styles.bodyText}>
-                Ask a book anything and get answers grounded in its actual text, traced to the
-                passage they came from. As you go, the relevant great minds join on their own —
-                Adam Smith makes his case, Marx counters, Keynes reframes — turning a solo read into
-                a conversation with the people who shaped the field.
+                Every answer grounded in the book, cited to the exact page.
               </p>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
@@ -1521,9 +1518,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Start from a topic</p>
               <h2 className={styles.sectionTitle}>No book yet? Start from a topic.</h2>
               <p className={styles.bodyText}>
-                Name a field and Feynman finds the books worth reading, raises the questions you
-                should be asking, and teaches you through conversation — your library grows as you
-                explore.
+                Feynman finds the books worth reading and the questions to ask first.
               </p>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
@@ -1556,9 +1551,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Great minds</p>
               <h2 className={styles.sectionTitle}>An ever-evolving network of great minds.</h2>
               <p className={styles.bodyText}>
-                Chat one-on-one with any thinker — faithfully simulated from their own work — and
-                they grow richer as you talk, accumulating memory over time. Explore the network, or
-                expand it by uploading your own mind from a profile, a blog, or a page of text.
+                Chat any mind one-on-one — faithfully simulated, and growing as you talk.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1639,9 +1632,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Symposiums</p>
               <h2 className={styles.sectionTitle}>Put your question to a panel of great minds.</h2>
               <p className={styles.bodyText}>
-                Pose one big question and a handful of thinkers take it up, each in their own voice,
-                answering the others — so you see how history&apos;s sharpest minds would approach
-                what you care about. Read one, then step in and steer it.
+                See how each reasons it through — then step in yourself.
               </p>
               <Link className={styles.softLink} href="/symposiums">
                 Browse symposiums
@@ -1691,8 +1682,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>On-demand books</p>
               <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
               <p className={styles.bodyText}>
-                Can&apos;t find the right one? Describe what you want to learn and Feynman writes a
-                book for it — ready to chat with on the spot.
+                Can&apos;t find it? Describe it, and Feynman writes the book.
               </p>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
