@@ -1465,14 +1465,14 @@ export function LandingPage({
           row is text-left / visual-right; the CTA is a centered band. Visuals reuse
           the demo message classes. */}
       <div className={styles.sections}>
-        {/* 1 — Enter through a book: grounded book chat + great minds joining in (the core) */}
+        {/* 1 — Chat with a book or a topic; great minds join in (the core) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Chat with books</p>
               <h2 className={styles.sectionTitle}>Chat with any book — and the most relevant minds join in.</h2>
               <p className={styles.bodyText}>
-                Every answer grounded in the book, cited to the exact page.
+                Start from a book or a topic — every answer cited to the exact page.
               </p>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
@@ -1511,47 +1511,104 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* 2 — Enter through a topic */}
+        {/* 2 — Library (the growing collection of books) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Start from a topic</p>
-              <h2 className={styles.sectionTitle}>No book yet? Start from a topic.</h2>
+              <p className={styles.eyebrow}>Library</p>
+              <h2 className={styles.sectionTitle}>A library that grows as you explore.</h2>
               <p className={styles.bodyText}>
-                Feynman finds the books worth reading and the questions to ask first.
+                No fixed catalog — every book you chat, search, or mention joins it.
               </p>
+              <Link className={styles.softLink} href="/library">
+                Browse the library
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
-                <div className={styles.topicMock}>
-                  <span className={styles.topicChip}>Microeconomics</span>
-                  <span className={styles.topicLabel}>Feynman found the books to start with</span>
-                  <div className={styles.miniCovers}>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>Principles of Economics</span>
-                    </div>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>Thinking, Fast and Slow</span>
-                    </div>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>The Wealth of Nations</span>
-                    </div>
+                <div className={styles.libraryGrid}>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>Thinking, Fast and Slow</span>
                   </div>
-                  <span className={styles.topicLabel}>…and the questions to ask first</span>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>The Wealth of Nations</span>
+                  </div>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>Meditations</span>
+                  </div>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>The Art of War</span>
+                  </div>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>Gödel, Escher, Bach</span>
+                  </div>
+                  <div className={styles.libCover}>
+                    <span className={styles.libCoverTitle}>Sapiens</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Chat with great minds (the network + upload your own) */}
+        {/* 3 — On-demand books: write the book you need */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>On-demand books</p>
+              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
+              <p className={styles.bodyText}>
+                Describe what you want to learn, and Feynman writes the book for it.
+              </p>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.bookCanvas}>
+                  <div className={styles.bookCanvasPage}>
+                    <div className={styles.bookCanvasTitle}>The History of Coffee</div>
+                    <div className={styles.bookLine} style={{ width: "96%" }} />
+                    <div className={styles.bookLine} style={{ width: "100%" }} />
+                    <div className={styles.bookLine} style={{ width: "92%" }} />
+                    <div className={styles.bookLine} style={{ width: "98%" }} />
+                    <div className={styles.bookLine} style={{ width: "58%" }} />
+                  </div>
+                  <div className={styles.bookCanvasOutline}>
+                    <div className={styles.bookOutlineLabel}>Outline</div>
+                    <div className={styles.bookOutlineItem}>1 · Origins in Ethiopia</div>
+                    <div className={`${styles.bookOutlineItem} ${styles.bookOutlineActive}`}>
+                      2 · The Spread of Coffee
+                    </div>
+                    <div className={styles.bookOutlineItem}>3 · Coffeehouse Culture</div>
+                    <div className={styles.bookOutlineItem}>4 · Coffee &amp; Commerce</div>
+                    <div className={styles.bookOutlineItem}>5 · The Modern Cup</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4 — Great minds: an ever-evolving network of simulated minds (chat 1:1 + upload) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Great minds</p>
-              <h2 className={styles.sectionTitle}>An ever-evolving network of great minds.</h2>
+              <h2 className={styles.sectionTitle}>An ever-evolving network of simulated great minds.</h2>
               <p className={styles.bodyText}>
-                Chat any mind one-on-one — faithfully simulated, and growing as you talk.
+                Chat any of them one-on-one, or add your own to the network.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1625,7 +1682,7 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Symposiums */}
+        {/* 5 — Symposiums */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
@@ -1669,43 +1726,6 @@ export function LandingPage({
                     name="Marcus Aurelius"
                     text="Yet a ruler governed by fear governs nothing in himself, Niccolò. Virtue commands more than dread."
                   />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 5 — On-demand books: the book you need, written on demand */}
-        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
-          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
-            <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>On-demand books</p>
-              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
-              <p className={styles.bodyText}>
-                Can&apos;t find it? Describe it, and Feynman writes the book.
-              </p>
-            </div>
-            <div className={styles.featureVisual} aria-hidden="true">
-              <div className={styles.mockFrame}>
-                <div className={styles.bookCanvas}>
-                  <div className={styles.bookCanvasPage}>
-                    <div className={styles.bookCanvasTitle}>The History of Coffee</div>
-                    <div className={styles.bookLine} style={{ width: "96%" }} />
-                    <div className={styles.bookLine} style={{ width: "100%" }} />
-                    <div className={styles.bookLine} style={{ width: "92%" }} />
-                    <div className={styles.bookLine} style={{ width: "98%" }} />
-                    <div className={styles.bookLine} style={{ width: "58%" }} />
-                  </div>
-                  <div className={styles.bookCanvasOutline}>
-                    <div className={styles.bookOutlineLabel}>Outline</div>
-                    <div className={styles.bookOutlineItem}>1 · Origins in Ethiopia</div>
-                    <div className={`${styles.bookOutlineItem} ${styles.bookOutlineActive}`}>
-                      2 · The Spread of Coffee
-                    </div>
-                    <div className={styles.bookOutlineItem}>3 · Coffeehouse Culture</div>
-                    <div className={styles.bookOutlineItem}>4 · Coffee &amp; Commerce</div>
-                    <div className={styles.bookOutlineItem}>5 · The Modern Cup</div>
-                  </div>
                 </div>
               </div>
             </div>

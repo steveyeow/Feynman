@@ -1232,3 +1232,27 @@
   color: var(--accent);
   font-weight: 600;
 }
+
+/* §2 Library — a grid of book covers (mirrors the real library page) */
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+.libCover {
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  background: var(--cover-placeholder-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 10px 9px;
+  display: flex;
+  align-items: flex-end;
+}
+.libCoverTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--text);
+}
