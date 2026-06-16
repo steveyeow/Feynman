@@ -1107,17 +1107,6 @@ export function LandingPage({
           Feynman
         </span>
         <div className={styles.topbarActions}>
-          <a
-            href="https://discord.gg/bCShwbFnCd"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.discordLink}
-            title="Join our Discord"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-            </svg>
-          </a>
           <button className={styles.themeToggle} onClick={toggleTheme} title="Toggle dark mode">
             <svg
               className={styles.iconSun}
@@ -1469,171 +1458,133 @@ export function LandingPage({
         </div>
       </section>
 
-      {/* ═══════════ BELOW-THE-HERO FEATURE SECTIONS (appended) ═══════════
-          The hero <section> above is 100% untouched. These editorial sections
-          introduce the five core capabilities as two pairs — Books, then Minds —
-          reusing the demo classes for native-looking static mocks. */}
+      {/* ═══════════ BELOW-THE-HERO SECTIONS (appended) ═══════════
+          The hero <section> above is 100% untouched. Consistent layout: every
+          feature row is text-left / visual-right; the intro and CTA are centered
+          bands. Copy follows the README narrative — the knowledge network: chat a
+          book → great minds join in → sit with a mind → set them debating → a
+          network that builds itself. Visuals reuse the demo message classes. */}
       <div className={styles.sections}>
-        {/* §0 — Positioning band */}
+        {/* Intro band */}
         <section className={`${styles.section} ${styles.positioning} ${styles.reveal}`} data-reveal>
           <div className={styles.sectionInner}>
             <p className={styles.eyebrow}>An interactive knowledge network</p>
             <h2 className={styles.positioningTitle}>Knowledge you can talk to.</h2>
             <p className={styles.bodyText}>
-              The world&apos;s most important books and greatest minds — now people you can
-              actually talk to.
+              Feynman turns the world&apos;s most important books and the great minds behind them
+              into a living network you explore by talking to it. Chat with a book to understand it
+              fast, start from a topic to map a new field, and watch the right thinkers join in to
+              think alongside you — books, minds, and ideas as one navigable map of human thought.
             </p>
             <div className={styles.pillars}>
               <span className={styles.pillar}>
                 <span className={styles.pillarDot} />
-                Books that talk back
+                Grounded in the actual pages
               </span>
               <span className={styles.pillar}>
                 <span className={styles.pillarDot} />
-                Minds that join in
+                Great minds join in
               </span>
               <span className={styles.pillar}>
                 <span className={styles.pillarDot} />
-                Debates across centuries
+                A network that grows as you explore
               </span>
             </div>
           </div>
         </section>
 
-        {/* §1 — Chat with books (visual left / text right) */}
+        {/* Chat with books */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Chat with books</p>
+              <h2 className={styles.sectionTitle}>Understand any book without reading all 300 pages.</h2>
+              <p className={styles.bodyText}>
+                Ask anything and get a clear answer grounded in the book&apos;s actual text — every
+                claim linked to the exact passage it came from, so nothing is a black box. Feynman
+                reaches beyond the page too, drawing on the work, the web, and the world&apos;s
+                knowledge, so each conversation gives you the context of an afternoon with the author.
+              </p>
+              <div className={styles.chips}>
+                <span className={styles.chip}>Every claim cited [1][2]</span>
+                <span className={styles.chip}>Beyond the page, four ways</span>
+                <span className={styles.chip}>Chat across many books at once</span>
+              </div>
+            </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
                 <div className={styles.mockStack}>
+                  <div className={styles.bookChip}>
+                    <span>The Wealth of Nations</span>
+                  </div>
                   <div className={`${styles.msg} ${styles.msgUser}`}>
-                    What are System 1 and System 2?
+                    What really creates the wealth of a nation?
                   </div>
                   <div className={`${styles.msg} ${styles.msgAssistant}`}>
                     <span>
-                      System 1 is fast, automatic intuition. System 2 is slow, deliberate
-                      thinking.
+                      Smith&apos;s answer is the division of labour — productivity rises when work is
+                      specialized and freely exchanged, not from hoarding gold.
                     </span>
                     <div className={styles.msgSources}>
-                      <span className={styles.sourceTag}>Ch.1 Two Systems</span>
+                      <span className={styles.sourceTag}>Bk.1 Ch.1 — Of the Division of Labour</span>
                     </div>
                   </div>
-                  <MockJoin names={["Richard Feynman"]} verb="joined the discussion" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Great minds join in */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Great minds join in</p>
+              <h2 className={styles.sectionTitle}>You&apos;re never reading alone.</h2>
+              <p className={styles.bodyText}>
+                As you chat, the most relevant great minds join the conversation on their own — you
+                see &ldquo;Adam Smith joined the discussion,&rdquo; just like a group chat. Ask what
+                creates a nation&apos;s wealth and Smith lays out his reasoning while Marx pushes back
+                and Keynes offers another lens. They remember the thread and stay as it evolves — a
+                study group of history&apos;s most brilliant minds, always on call.
+              </p>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={styles.bookChip}>
+                    <span>The Wealth of Nations</span>
+                  </div>
+                  <MockJoin
+                    names={["Adam Smith", "Karl Marx", "John Maynard Keynes"]}
+                    verb="joined the discussion"
+                  />
                   <MockMind
-                    name="Richard Feynman"
-                    text="The first principle is that you must not fool yourself — and you are the easiest person to fool."
+                    name="Adam Smith"
+                    text="Wealth grows from the division of labour and free exchange — not from the gold in a treasury."
+                  />
+                  <MockMind
+                    name="Karl Marx"
+                    text="But who owns that labour, Adam? The value the workers create accrues to capital, not to them."
                   />
                 </div>
               </div>
             </div>
-            <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Chat with books</p>
-              <h2 className={styles.sectionTitle}>Every book becomes a conversation.</h2>
-              <p className={styles.bodyText}>
-                Ask any book anything — get answers cited to the exact page, with great minds
-                joining in to weigh in.
-              </p>
-              <div className={styles.chips}>
-                <span className={styles.chip}>Cited to the page</span>
-                <span className={styles.chip}>Minds join in automatically</span>
-                <span className={styles.chip}>@mention anyone</span>
-              </div>
-            </div>
           </div>
         </section>
 
-        {/* §2 — Create the book you need (text left / visual right) */}
-        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
-          <div className={`${styles.sectionInner} ${styles.featureRow} ${styles.featureRowReverse}`}>
-            <div className={styles.featureVisual} aria-hidden="true">
-              <div className={styles.mockFrame}>
-                <div className={styles.bookMock}>
-                  <div className={styles.bookCover}>
-                    <div className={styles.bookCoverTitle}>The History of Coffee</div>
-                    <div className={styles.bookCoverAuthor}>Compiled on demand</div>
-                  </div>
-                  <div className={styles.bookPage}>
-                    <div className={styles.bookLine} style={{ width: "92%" }} />
-                    <div className={styles.bookLine} style={{ width: "100%" }} />
-                    <div className={styles.bookLine} style={{ width: "96%" }} />
-                    <div className={styles.bookLine} style={{ width: "68%" }} />
-                    <span className={styles.bookChip}>
-                      <span>Ready to chat</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>On-demand books</p>
-              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
-              <p className={styles.bodyText}>
-                Describe what you want to learn and Feynman composes a book for it — ready to
-                chat with on the spot.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* §3 — The minds network + bring your own (visual left / text right) */}
+        {/* Chat with great minds (the network + upload your own) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
-            <div className={styles.featureVisual} aria-hidden="true">
-              <div className={styles.constellation}>
-                <svg viewBox="0 0 420 264" preserveAspectRatio="xMidYMid meet">
-                  {NETWORK_LINKS.map(([x1, y1, x2, y2], i) => (
-                    <line
-                      key={i}
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="rgba(150,160,180,0.35)"
-                      strokeWidth="1.2"
-                    />
-                  ))}
-                </svg>
-                {NETWORK_NODES.map((n) => (
-                  <div
-                    key={n.name}
-                    className={styles.cNode}
-                    style={{ left: n.left, top: n.top }}
-                  >
-                    <span className={styles.cAvatar} style={{ background: lpColor(n.name) }}>
-                      {initials(n.name)}
-                    </span>
-                    <span className={styles.cName}>{n.name}</span>
-                  </div>
-                ))}
-                <div
-                  className={`${styles.cNode} ${styles.cNodeUpload}`}
-                  style={{ left: NETWORK_UPLOAD.left, top: NETWORK_UPLOAD.top }}
-                >
-                  <span className={styles.cUpload}>
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </span>
-                  <span className={styles.cName}>Upload a Mind</span>
-                </div>
-              </div>
-            </div>
             <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Great minds</p>
-              <h2 className={styles.sectionTitle}>A living network of minds — and room for yours.</h2>
+              <p className={styles.eyebrow}>Chat with great minds</p>
+              <h2 className={styles.sectionTitle}>Ask Aristotle. Get an answer.</h2>
               <p className={styles.bodyText}>
-                Chat one-on-one with history&apos;s greatest thinkers — or upload your own mind
-                and add it to the network.
+                Every book is a window into a great mind — but a mind is far more than any one book.
+                Chat one-on-one with Feynman, Adam Smith, or Socrates and get their way of thinking
+                applied to your own questions. Explore the network as a living map where minds cluster
+                by the ideas they share — and upload your own, or anyone you admire, from a profile, a
+                blog, or a page of text.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1652,39 +1603,71 @@ export function LandingPage({
                 </svg>
               </Link>
             </div>
-          </div>
-        </section>
-
-        {/* §4 — Symposiums (text left / visual right) */}
-        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
-          <div className={`${styles.sectionInner} ${styles.featureRow} ${styles.featureRowReverse}`}>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
-                <div className={styles.mockStack}>
-                  <div className={styles.mockQuestion}>
-                    &ldquo;Is it better to be feared or loved?&rdquo;
+                <div className={styles.constellation}>
+                  <svg viewBox="0 0 420 264" preserveAspectRatio="xMidYMid meet">
+                    {NETWORK_LINKS.map(([x1, y1, x2, y2], i) => (
+                      <line
+                        key={i}
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke="rgba(150,160,180,0.35)"
+                        strokeWidth="1.2"
+                      />
+                    ))}
+                  </svg>
+                  {NETWORK_NODES.map((n) => (
+                    <div
+                      key={n.name}
+                      className={styles.cNode}
+                      style={{ left: n.left, top: n.top }}
+                    >
+                      <span className={styles.cAvatar} style={{ background: lpColor(n.name) }}>
+                        {initials(n.name)}
+                      </span>
+                      <span className={styles.cName}>{n.name}</span>
+                    </div>
+                  ))}
+                  <div
+                    className={`${styles.cNode} ${styles.cNodeUpload}`}
+                    style={{ left: NETWORK_UPLOAD.left, top: NETWORK_UPLOAD.top }}
+                  >
+                    <span className={styles.cUpload}>
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </span>
+                    <span className={styles.cName}>Upload a Mind</span>
                   </div>
-                  <MockJoin
-                    names={["Machiavelli", "Sun Tzu", "Marcus Aurelius"]}
-                    verb="in conversation"
-                  />
-                  <MockMind
-                    name="Machiavelli"
-                    text="It is far safer to be feared than loved, if one cannot be both."
-                  />
-                  <MockMind
-                    name="Sun Tzu"
-                    text="Fear may win the battle, Niccolò — but the supreme art is to win without the fight."
-                  />
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Symposiums */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Symposiums</p>
-              <h2 className={styles.sectionTitle}>Convene a symposium of great minds.</h2>
+              <h2 className={styles.sectionTitle}>Set great minds debating.</h2>
               <p className={styles.bodyText}>
-                Pose one question — a panel of minds debates it, each in their own voice. Then
-                jump in.
+                Pose one big question and a panel of thinkers takes it up — each arguing in their own
+                voice, each answering the others. Read the exchange like a transcript of a debate that
+                never happened, then step in and press them further yourself.
               </p>
               <Link className={styles.softLink} href="/symposiums">
                 Browse symposiums
@@ -1703,10 +1686,84 @@ export function LandingPage({
                 </svg>
               </Link>
             </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={styles.mockQuestion}>
+                    &ldquo;Is it better to be feared or loved?&rdquo;
+                  </div>
+                  <MockJoin
+                    names={["Machiavelli", "Sun Tzu", "Marcus Aurelius"]}
+                    verb="in conversation"
+                  />
+                  <MockMind
+                    name="Machiavelli"
+                    text="It is far safer to be feared than loved, if one cannot be both."
+                  />
+                  <MockMind
+                    name="Marcus Aurelius"
+                    text="Yet a ruler governed by fear governs nothing in himself, Niccolò. Virtue commands more than dread."
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* §5 — Closing CTA band (reuses the gated hero CTA handler) */}
+        {/* The network builds itself — topic entry + on-demand books */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Start from a topic</p>
+              <h2 className={styles.sectionTitle}>No book in mind? Start with a question.</h2>
+              <p className={styles.bodyText}>
+                Name a field you&apos;re curious about and Feynman finds the books worth reading,
+                proposes the questions you should be asking, and teaches you through conversation.
+                There&apos;s no fixed catalog — every search and mention grows your library, and if
+                the book you need doesn&apos;t exist yet, Feynman writes it on demand.
+              </p>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.topicMock}>
+                  <span className={styles.topicChip}>Microeconomics</span>
+                  <span className={styles.topicLabel}>Feynman found the books to start with</span>
+                  <div className={styles.miniCovers}>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>Principles of Economics</span>
+                    </div>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>Thinking, Fast and Slow</span>
+                    </div>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>The Wealth of Nations</span>
+                    </div>
+                    <div className={`${styles.miniCover} ${styles.miniCoverGen}`}>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </div>
+                  </div>
+                  <span className={styles.bookChip}>
+                    <span>…or written on demand</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Closing CTA band (reuses the gated hero CTA handler) */}
         <section className={`${styles.ctaBand} ${styles.reveal}`} data-reveal>
           <div className={styles.sectionInner}>
             <h2 className={styles.ctaTitle}>Open a book. Invite a few great minds.</h2>
@@ -1730,6 +1787,70 @@ export function LandingPage({
           </div>
         </section>
       </div>
+
+      {/* Footer — social links live here (moved out of the topbar) */}
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <div className={styles.footerBrand}>
+            <span className={styles.footerLogo}>
+              <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
+                <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <circle cx="32" cy="30" r="3.5" fill="currentColor" />
+                <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Feynman
+            </span>
+            <p className={styles.footerTagline}>Chat with books. Great minds join in.</p>
+          </div>
+          <nav className={styles.footerNav}>
+            <Link className={styles.footerLink} href="/minds">Great Minds</Link>
+            <Link className={styles.footerLink} href="/symposiums">Symposiums</Link>
+            <Link className={styles.footerLink} href="/library">Library</Link>
+          </nav>
+          <div className={styles.footerSocials}>
+            <a
+              className={styles.footerSocial}
+              href="https://github.com/steveyeow/feynman"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              title="GitHub"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.56 0-.28-.01-1.02-.02-2-3.34.71-4.04-1.58-4.04-1.58-.55-1.37-1.34-1.74-1.34-1.74-1.09-.73.08-.72.08-.72 1.2.08 1.84 1.21 1.84 1.21 1.07 1.79 2.81 1.27 3.49.97.11-.76.42-1.27.76-1.56-2.67-.3-5.47-1.31-5.47-5.81 0-1.28.47-2.33 1.24-3.15-.12-.3-.54-1.51.12-3.15 0 0 1.01-.32 3.3 1.2.96-.26 1.98-.39 3-.4 1.02.01 2.04.14 3 .4 2.28-1.52 3.29-1.2 3.29-1.2.66 1.64.24 2.85.12 3.15.77.82 1.24 1.87 1.24 3.15 0 4.51-2.81 5.5-5.49 5.79.43.36.81 1.08.81 2.18 0 1.58-.01 2.85-.01 3.24 0 .31.22.68.83.56C20.57 21.88 24 17.49 24 12.29 24 5.78 18.63.5 12 .5z" />
+              </svg>
+            </a>
+            <a
+              className={styles.footerSocial}
+              href="https://discord.gg/bCShwbFnCd"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Discord"
+              title="Discord"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+              </svg>
+            </a>
+            <a
+              className={styles.footerSocial}
+              href="https://x.com/steve_yeow"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="X (Twitter)"
+              title="X (Twitter)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </a>
+          </div>
+        </div>
+        <div className={styles.footerBottom}>
+          <span>© 2026 Feynman · MIT licensed</span>
+        </div>
+      </footer>
     </div>
   );
 }

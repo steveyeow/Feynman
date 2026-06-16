@@ -1055,3 +1055,147 @@
     padding: 80px 0;
   }
 }
+
+/* ── Mock tweaks ── */
+.mockStack > .bookChip {
+  align-self: flex-start;
+}
+
+/* "Network builds itself" topic mock (topic entry + on-demand books) */
+.topicMock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+}
+.topicChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.topicLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.miniCovers {
+  display: flex;
+  gap: 10px;
+}
+.miniCover {
+  width: 56px;
+  height: 78px;
+  border-radius: 5px;
+  background: var(--cover-placeholder-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 7px 6px;
+  display: flex;
+  align-items: flex-end;
+}
+.miniCoverTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 8px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.miniCoverGen {
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-light);
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+}
+.miniCoverGen svg {
+  stroke: currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FOOTER (social links moved here from the topbar)
+   ════════════════════════════════════════════════════════════════════ */
+.footer {
+  position: relative;
+  z-index: 1;
+  background: var(--landing-bg);
+  border-top: 1px solid var(--border);
+}
+.footerInner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 56px 32px 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.footerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.footerLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 16px;
+  color: var(--text);
+}
+.footerTagline {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.footerNav {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.footerLink {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footerLink:hover {
+  color: var(--text);
+}
+.footerSocials {
+  display: flex;
+  gap: 10px;
+}
+.footerSocial {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.footerSocial:hover {
+  color: var(--text);
+  background: var(--border);
+}
+.footerBottom {
+  border-top: 1px solid var(--border);
+  padding: 18px 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 960px) {
+  .footerInner {
+    flex-direction: column;
+    gap: 24px;
+    padding: 40px 20px 28px;
+  }
+}
