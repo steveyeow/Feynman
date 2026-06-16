@@ -217,6 +217,7 @@ export default async function PublicDiscussionPage({
             url={canonical}
             title={title}
             subject="Symposium"
+            defaultText={`${roster} debate: “${title}”`}
             label="Share this symposium"
             variant="secondary"
           />

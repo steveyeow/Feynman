@@ -20,9 +20,9 @@ import { lookupSameAs } from "@/lib/seo-mind";
 const TIMEOUT_MS = 2500;
 const UA = "FeynmanOG/1.0 (+https://feynman.wiki)";
 
-async function timed(url: string): Promise<Response | null> {
+async function timed(url: string, timeoutMs: number = TIMEOUT_MS): Promise<Response | null> {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     return await fetch(url, {
       signal: ctrl.signal,
@@ -77,6 +77,13 @@ function qidFrom(url?: string): string | null {
 export async function mindPortraitDataUri(opts: {
   name: string;
   wikidata_url?: string;
+  /** Commons render width. Default 480 (hero cards); pass small (e.g. 128) for
+   *  multi-portrait rosters so 5 parallel fetches stay inside the timeout. */
+  width?: number;
+  /** Per-fetch timeout. Default 2500ms; raise for multi-portrait rosters where
+   *  parallel fetches contend (the card is CDN-cached, so a slower cold render
+   *  is fine and beats a racy partial roster). */
+  timeoutMs?: number;
 }): Promise<string | null> {
   let qid = qidFrom(opts.wikidata_url);
   if (!qid) {
@@ -92,6 +99,7 @@ export async function mindPortraitDataUri(opts: {
 
   const meta = await timed(
     `https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`,
+    opts.timeoutMs,
   );
   if (!meta || !meta.ok) return null;
 
@@ -114,7 +122,8 @@ export async function mindPortraitDataUri(opts: {
   const img = await timed(
     `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(
       filename.replace(/ /g, "_"),
-    )}?width=480`,
+    )}?width=${opts.width || 480}`,
+    opts.timeoutMs,
   );
   if (!img || !img.ok) return null;
   return toDataUri(img);
