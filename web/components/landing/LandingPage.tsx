@@ -1588,7 +1588,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>On-demand books</p>
               <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
               <p className={styles.bodyText}>
-                Describe what you want to learn, and Feynman writes the book for it.
+                Describe what you want to know, and Feynman generates a book for you on the spot.
               </p>
               <button type="button" className={styles.softLink} onClick={onCta}>
                 Write a book
@@ -1737,7 +1737,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Symposiums</p>
               <h2 className={styles.sectionTitle}>Put your question to a panel of great minds.</h2>
               <p className={styles.bodyText}>
-                See how each reasons it through — then step in yourself.
+                See how history&apos;s greatest minds view the questions we care about today.
               </p>
               <Link className={styles.softLink} href="/symposiums">
                 Browse symposiums
