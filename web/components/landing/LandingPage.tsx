@@ -1459,57 +1459,24 @@ export function LandingPage({
       </section>
 
       {/* ═══════════ BELOW-THE-HERO SECTIONS (appended) ═══════════
-          The hero <section> above is 100% untouched. Consistent layout: every
-          feature row is text-left / visual-right; the intro and CTA are centered
-          bands. Copy follows the README narrative — the knowledge network: chat a
-          book → great minds join in → sit with a mind → set them debating → a
-          network that builds itself. Visuals reuse the demo message classes. */}
+          The hero <section> above is 100% untouched. Order follows the README's
+          narrative — three ways to enter (a book, a topic, a mind), then the two
+          extensions (symposiums, on-demand books). Consistent layout: every feature
+          row is text-left / visual-right; the CTA is a centered band. Visuals reuse
+          the demo message classes. */}
       <div className={styles.sections}>
-        {/* Intro band */}
-        <section className={`${styles.section} ${styles.positioning} ${styles.reveal}`} data-reveal>
-          <div className={styles.sectionInner}>
-            <p className={styles.eyebrow}>An interactive knowledge network</p>
-            <h2 className={styles.positioningTitle}>Knowledge you can talk to.</h2>
-            <p className={styles.bodyText}>
-              Feynman turns the world&apos;s most important books and the great minds behind them
-              into a living network you explore by talking to it. Chat with a book to understand it
-              fast, start from a topic to map a new field, and watch the right thinkers join in to
-              think alongside you — books, minds, and ideas as one navigable map of human thought.
-            </p>
-            <div className={styles.pillars}>
-              <span className={styles.pillar}>
-                <span className={styles.pillarDot} />
-                Grounded in the actual pages
-              </span>
-              <span className={styles.pillar}>
-                <span className={styles.pillarDot} />
-                Great minds join in
-              </span>
-              <span className={styles.pillar}>
-                <span className={styles.pillarDot} />
-                A network that grows as you explore
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* Chat with books */}
+        {/* 1 — Enter through a book: grounded book chat + great minds joining in (the core) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Chat with books</p>
-              <h2 className={styles.sectionTitle}>Understand any book without reading all 300 pages.</h2>
+              <h2 className={styles.sectionTitle}>Chat with a book — the great minds behind it join in.</h2>
               <p className={styles.bodyText}>
-                Ask anything and get a clear answer grounded in the book&apos;s actual text — every
-                claim linked to the exact passage it came from, so nothing is a black box. Feynman
-                reaches beyond the page too, drawing on the work, the web, and the world&apos;s
-                knowledge, so each conversation gives you the context of an afternoon with the author.
+                Ask a book anything and get answers grounded in its actual text, traced to the
+                passage they came from. As you go, the relevant great minds join on their own —
+                Adam Smith makes his case, Marx counters, Keynes reframes — turning a solo read into
+                a conversation with the people who shaped the field.
               </p>
-              <div className={styles.chips}>
-                <span className={styles.chip}>Every claim cited [1][2]</span>
-                <span className={styles.chip}>Beyond the page, four ways</span>
-                <span className={styles.chip}>Chat across many books at once</span>
-              </div>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
@@ -1522,38 +1489,12 @@ export function LandingPage({
                   </div>
                   <div className={`${styles.msg} ${styles.msgAssistant}`}>
                     <span>
-                      Smith&apos;s answer is the division of labour — productivity rises when work is
-                      specialized and freely exchanged, not from hoarding gold.
+                      The division of labour — productivity rises when work is specialized and
+                      freely exchanged, not from hoarding gold.
                     </span>
                     <div className={styles.msgSources}>
                       <span className={styles.sourceTag}>Bk.1 Ch.1 — Of the Division of Labour</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Great minds join in */}
-        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
-          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
-            <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Great minds join in</p>
-              <h2 className={styles.sectionTitle}>You&apos;re never reading alone.</h2>
-              <p className={styles.bodyText}>
-                As you chat, the most relevant great minds join the conversation on their own — you
-                see &ldquo;Adam Smith joined the discussion,&rdquo; just like a group chat. Ask what
-                creates a nation&apos;s wealth and Smith lays out his reasoning while Marx pushes back
-                and Keynes offers another lens. They remember the thread and stay as it evolves — a
-                study group of history&apos;s most brilliant minds, always on call.
-              </p>
-            </div>
-            <div className={styles.featureVisual} aria-hidden="true">
-              <div className={styles.mockFrame}>
-                <div className={styles.mockStack}>
-                  <div className={styles.bookChip}>
-                    <span>The Wealth of Nations</span>
                   </div>
                   <MockJoin
                     names={["Adam Smith", "Karl Marx", "John Maynard Keynes"]}
@@ -1561,7 +1502,7 @@ export function LandingPage({
                   />
                   <MockMind
                     name="Adam Smith"
-                    text="Wealth grows from the division of labour and free exchange — not from the gold in a treasury."
+                    text="Just so — and the wider the market, the further that division of labour can go."
                   />
                   <MockMind
                     name="Karl Marx"
@@ -1573,17 +1514,50 @@ export function LandingPage({
           </div>
         </section>
 
+        {/* 2 — Enter through a topic */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Start from a topic</p>
+              <h2 className={styles.sectionTitle}>No book yet? Start from a topic.</h2>
+              <p className={styles.bodyText}>
+                Name a field and Feynman finds the books worth reading, raises the questions you
+                should be asking, and teaches you through conversation — your library grows as you
+                explore.
+              </p>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.topicMock}>
+                  <span className={styles.topicChip}>Microeconomics</span>
+                  <span className={styles.topicLabel}>Feynman found the books to start with</span>
+                  <div className={styles.miniCovers}>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>Principles of Economics</span>
+                    </div>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>Thinking, Fast and Slow</span>
+                    </div>
+                    <div className={styles.miniCover}>
+                      <span className={styles.miniCoverTitle}>The Wealth of Nations</span>
+                    </div>
+                  </div>
+                  <span className={styles.topicLabel}>…and the questions to ask first</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Chat with great minds (the network + upload your own) */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Chat with great minds</p>
-              <h2 className={styles.sectionTitle}>Ask Aristotle. Get an answer.</h2>
+              <h2 className={styles.sectionTitle}>Ask Aristotle. Or anyone you admire.</h2>
               <p className={styles.bodyText}>
-                Every book is a window into a great mind — but a mind is far more than any one book.
-                Chat one-on-one with Feynman, Adam Smith, or Socrates and get their way of thinking
-                applied to your own questions. Explore the network as a living map where minds cluster
-                by the ideas they share — and upload your own, or anyone you admire, from a profile, a
+                Chat one-on-one with any thinker and get their reasoning applied to your questions.
+                Explore the network to find your next mind — or upload your own, from a profile, a
                 blog, or a page of text.
               </p>
               <Link className={styles.softLink} href="/minds">
@@ -1663,11 +1637,11 @@ export function LandingPage({
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Symposiums</p>
-              <h2 className={styles.sectionTitle}>Set great minds debating.</h2>
+              <h2 className={styles.sectionTitle}>Put your question to a panel of great minds.</h2>
               <p className={styles.bodyText}>
-                Pose one big question and a panel of thinkers takes it up — each arguing in their own
-                voice, each answering the others. Read the exchange like a transcript of a debate that
-                never happened, then step in and press them further yourself.
+                Pose one big question and a handful of thinkers take it up, each in their own voice,
+                answering the others — so you see how history&apos;s sharpest minds would approach
+                what you care about. Read one, then step in and steer it.
               </p>
               <Link className={styles.softLink} href="/symposiums">
                 Browse symposiums
@@ -1710,53 +1684,33 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* The network builds itself — topic entry + on-demand books */}
+        {/* 5 — On-demand books: the book you need, written on demand */}
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Start from a topic</p>
-              <h2 className={styles.sectionTitle}>No book in mind? Start with a question.</h2>
+              <p className={styles.eyebrow}>On-demand books</p>
+              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
               <p className={styles.bodyText}>
-                Name a field you&apos;re curious about and Feynman finds the books worth reading,
-                proposes the questions you should be asking, and teaches you through conversation.
-                There&apos;s no fixed catalog — every search and mention grows your library, and if
-                the book you need doesn&apos;t exist yet, Feynman writes it on demand.
+                Can&apos;t find the right one? Describe what you want to learn and Feynman writes a
+                book for it — ready to chat with on the spot.
               </p>
             </div>
             <div className={styles.featureVisual} aria-hidden="true">
               <div className={styles.mockFrame}>
-                <div className={styles.topicMock}>
-                  <span className={styles.topicChip}>Microeconomics</span>
-                  <span className={styles.topicLabel}>Feynman found the books to start with</span>
-                  <div className={styles.miniCovers}>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>Principles of Economics</span>
-                    </div>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>Thinking, Fast and Slow</span>
-                    </div>
-                    <div className={styles.miniCover}>
-                      <span className={styles.miniCoverTitle}>The Wealth of Nations</span>
-                    </div>
-                    <div className={`${styles.miniCover} ${styles.miniCoverGen}`}>
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                    </div>
+                <div className={styles.bookMock}>
+                  <div className={styles.bookCover}>
+                    <div className={styles.bookCoverTitle}>The History of Coffee</div>
+                    <div className={styles.bookCoverAuthor}>Written on demand</div>
                   </div>
-                  <span className={styles.bookChip}>
-                    <span>…or written on demand</span>
-                  </span>
+                  <div className={styles.bookPage}>
+                    <div className={styles.bookLine} style={{ width: "92%" }} />
+                    <div className={styles.bookLine} style={{ width: "100%" }} />
+                    <div className={styles.bookLine} style={{ width: "96%" }} />
+                    <div className={styles.bookLine} style={{ width: "68%" }} />
+                    <span className={styles.bookChip}>
+                      <span>Ready to chat</span>
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1767,7 +1721,6 @@ export function LandingPage({
         <section className={`${styles.ctaBand} ${styles.reveal}`} data-reveal>
           <div className={styles.sectionInner}>
             <h2 className={styles.ctaTitle}>Open a book. Invite a few great minds.</h2>
-            <p className={styles.ctaSub}>Your first conversation is one question away.</p>
             <button className={styles.heroCta} onClick={onCta}>
               {ctaLabel}
               <svg
