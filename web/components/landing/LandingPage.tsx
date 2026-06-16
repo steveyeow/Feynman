@@ -1470,7 +1470,7 @@ export function LandingPage({
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
               <p className={styles.eyebrow}>Chat with books</p>
-              <h2 className={styles.sectionTitle}>Chat with a book — the great minds behind it join in.</h2>
+              <h2 className={styles.sectionTitle}>Chat with any book — and the most relevant minds join in.</h2>
               <p className={styles.bodyText}>
                 Ask a book anything and get answers grounded in its actual text, traced to the
                 passage they came from. As you go, the relevant great minds join on their own —
@@ -1553,12 +1553,12 @@ export function LandingPage({
         <section className={`${styles.section} ${styles.reveal}`} data-reveal>
           <div className={`${styles.sectionInner} ${styles.featureRow}`}>
             <div className={styles.featureCopy}>
-              <p className={styles.eyebrow}>Chat with great minds</p>
-              <h2 className={styles.sectionTitle}>Ask Aristotle. Or anyone you admire.</h2>
+              <p className={styles.eyebrow}>Great minds</p>
+              <h2 className={styles.sectionTitle}>An ever-evolving network of great minds.</h2>
               <p className={styles.bodyText}>
-                Chat one-on-one with any thinker and get their reasoning applied to your questions.
-                Explore the network to find your next mind — or upload your own, from a profile, a
-                blog, or a page of text.
+                Chat one-on-one with any thinker — faithfully simulated from their own work — and
+                they grow richer as you talk, accumulating memory over time. Explore the network, or
+                expand it by uploading your own mind from a profile, a blog, or a page of text.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1759,7 +1759,6 @@ export function LandingPage({
               </svg>
               Feynman
             </span>
-            <p className={styles.footerTagline}>Chat with books. Great minds join in.</p>
             <p className={styles.footerCopy}>© 2026 Feynman · MIT licensed</p>
           </div>
           <div className={styles.footerSocials}>
