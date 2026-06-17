@@ -1483,7 +1483,8 @@ export function LandingPage({
               <p className={styles.eyebrow}>Chat with books</p>
               <h2 className={styles.sectionTitle}>Chat with any book — and the most relevant minds join in.</h2>
               <p className={styles.bodyText}>
-                Start from a book or a topic — every answer cited to the exact page.
+                Start from a book or a topic — every answer cited to the page, and great minds
+                share their perspectives.
               </p>
               <button type="button" className={styles.softLink} onClick={onCta}>
                 Start a chat
@@ -1588,7 +1589,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>On-demand books</p>
               <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
               <p className={styles.bodyText}>
-                Describe what you want to know, and Feynman generates a book for you on the spot.
+                Describe what you want to know, and Feynman generates a book for you in real time.
               </p>
               <button type="button" className={styles.softLink} onClick={onCta}>
                 Write a book
@@ -1655,8 +1656,8 @@ export function LandingPage({
               <p className={styles.eyebrow}>Great minds</p>
               <h2 className={styles.sectionTitle}>An ever-evolving network of simulated great minds.</h2>
               <p className={styles.bodyText}>
-                A living map where minds connect by the ideas they share — move between
-                them, and chat anyone.
+                A living map where minds connect by the ideas they share — chat with anyone,
+                or upload your own.
               </p>
               <Link className={styles.softLink} href="/minds">
                 Explore the network
@@ -1737,7 +1738,7 @@ export function LandingPage({
               <p className={styles.eyebrow}>Symposiums</p>
               <h2 className={styles.sectionTitle}>Put your question to a panel of great minds.</h2>
               <p className={styles.bodyText}>
-                See how history&apos;s greatest minds view the questions we care about today.
+                See how the sharpest minds view the questions we care about today.
               </p>
               <Link className={styles.softLink} href="/symposiums">
                 Browse symposiums
