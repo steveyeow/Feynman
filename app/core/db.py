@@ -1905,6 +1905,28 @@ def list_agents_missing_overview(limit: int = 50) -> tuple[list[str], int]:
     return [r["id"] for r in rows], int(total_row["n"] if total_row else 0)
 
 
+def count_landing_stats() -> dict[str, int]:
+    """Public landing-page counts: ready books, minds, and published symposiums
+    (debates). Mirrors the visibility filters of the /library, /minds and
+    /symposiums lists so the band matches what users actually see. Three cheap
+    COUNT(*)s (no fat-column reads); the caller caches the result."""
+    books_where = "is_deleted = false" if _USE_PG else "is_deleted = 0"
+    with get_conn() as conn:
+        books = _fetchone(
+            conn, f"SELECT count(*) AS n FROM agents WHERE {books_where} AND status = 'ready'"
+        )
+        minds = _fetchone(conn, "SELECT count(*) AS n FROM minds")
+        symp = _fetchone(
+            conn,
+            "SELECT count(*) AS n FROM debates WHERE status = 'published' AND slug IS NOT NULL",
+        )
+    return {
+        "books": int((books or {}).get("n") or 0),
+        "minds": int((minds or {}).get("n") or 0),
+        "symposiums": int((symp or {}).get("n") or 0),
+    }
+
+
 def find_agent_by_name(name: str) -> dict[str, Any] | None:
     """Find an agent by name (case-insensitive)."""
     with get_conn() as conn:

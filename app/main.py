@@ -54,6 +54,7 @@ from .core.db import (
     count_assistant_messages_batch,
     count_assistant_messages_for_minds_batch,
     count_chunks_batch,
+    count_landing_stats,
     count_llm_referrals,
     count_pending_public_sessions,
     get_chat_session_with_public_status,
@@ -378,6 +379,7 @@ _seo_cache: dict[str, tuple[float, Any]] = {}
 _seo_cache_lock = threading.Lock()
 _SEO_CACHE_TTL = 3600  # 1 hour — acceptable staleness for catalog listings
 _BOOK_CACHE_TTL = 1800  # 30 min for individual published book content
+_STATS_CACHE_TTL = 300  # 5 min — landing stat band; counts move slowly
 
 
 def _cache_get(key: str, ttl: float) -> Any | None:
@@ -3902,6 +3904,26 @@ def api_list_agents():
         # from this path by ~80%. Drove ~2 GB/month of preventable
         # egress prior to the 2026-05-28 quota overage.
         headers={"Cache-Control": "public, max-age=60, s-maxage=600"},
+    )
+
+
+@app.get("/api/stats")
+def api_stats():
+    """Public landing-page counts (books / minds / symposiums), cached ~5 min.
+    Three cheap COUNT(*)s behind an in-process TTL cache so the high-traffic,
+    signed-out landing band doesn't hit the DB on every view."""
+    from fastapi.responses import JSONResponse
+    cached = _cache_get("landing_stats", _STATS_CACHE_TTL)
+    if cached is None:
+        try:
+            cached = count_landing_stats()
+            _cache_set("landing_stats", cached)
+        except Exception as exc:
+            log.error("landing stats count failed: %s", exc)
+            return JSONResponse(content={"error": "unavailable"}, status_code=503)
+    return JSONResponse(
+        content=cached,
+        headers={"Cache-Control": "public, max-age=120, s-maxage=300"},
     )
 
 
