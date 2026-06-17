@@ -111,39 +111,62 @@ def fetch_google_books_info(title: str, author: str = "") -> str:
         return ""
 
 
+def _wrap_fulltext(title: str, author: str, body: str) -> str:
+    """Prepend a title/author header (so chunk[0] carries attribution) + an
+    Open Library metadata block (subjects/categories give RAG structured
+    context alongside the primary text)."""
+    header = f"Title: {title}" + (f" by {author}" if author else "") + "\n\n"
+    meta = fetch_open_library_text(title, author)
+    if meta:
+        header += "--- Metadata ---\n\n" + meta + "\n\n--- Text ---\n\n"
+    return header + body
+
+
 def fetch_book_content(title: str, author: str = "") -> str:
-    """Orchestrator: try Gutenberg (full text) → Open Library (metadata)
-    → Google Books (metadata) → Wikipedia (summary) → return best result.
+    """Orchestrator: try FULL-TEXT sources (Gutenberg + Wikisource, ordered by
+    the title's language) → METADATA sources (Open Library → Google Books →
+    Wikipedia). Full text means RAG has the actual book to retrieve from;
+    modern in-copyright books fall through to metadata (the best free APIs
+    allow).
 
-    Gutenberg comes FIRST because it's the only source that can return
-    full primary text. For any pre-1928 work in the public-domain canon
-    this means RAG actually has the book to retrieve from, instead of
-    just metadata. Modern in-copyright books fall through to the
-    existing metadata sources (which is the best we can legally get
-    via free APIs)."""
-    # Local import — sources_gutenberg pulls in httpx and we want this
-    # module to stay importable even in environments that have stripped
-    # the optional source.
-    try:
+    - **Gutenberg** — English public-domain canon, clean (boilerplate-stripped).
+    - **Wikisource** — ~70 languages incl. CJK + many works Gutenberg lacks, so
+      it LEADS for non-English titles and BACKS UP Gutenberg for English.
+
+    Adding a source = a new ``(name, fn)`` in the chain below (Internet Archive,
+    arXiv, … are the planned next entries). Each fn is `(title, author) -> text`
+    and must never raise (local import keeps the module importable if an
+    optional source is stripped)."""
+    def _gutenberg(t: str, a: str) -> str:
         from .sources_gutenberg import fetch_gutenberg_content
-        gb_text = fetch_gutenberg_content(title, author)
-    except Exception as exc:
-        log.warning("Gutenberg lookup failed for %r: %s", title, exc)
-        gb_text = ""
+        return fetch_gutenberg_content(t, a)
 
-    if gb_text and len(gb_text) > 2000:
-        # Got real full text. Prepend a small header so chunk[0] still
-        # carries the title/author for downstream attribution. Also
-        # supplement with the metadata block from Open Library so RAG
-        # has both primary content AND structured context (subjects,
-        # categories).
-        header = f"Title: {title}" + (f" by {author}" if author else "") + "\n\n"
-        meta = fetch_open_library_text(title, author)
-        if meta:
-            header += "--- Metadata ---\n\n" + meta + "\n\n--- Text ---\n\n"
-        return header + gb_text
+    def _wikisource(t: str, a: str) -> str:
+        from .sources_wikisource import fetch_wikisource_content
+        return fetch_wikisource_content(t, a)
 
-    # Fallback chain — metadata-only (modern books)
+    try:
+        from .sources_wikisource import _detect_lang
+        lang = _detect_lang(title)
+    except Exception:
+        lang = "en"
+
+    chain = (
+        [("gutenberg", _gutenberg), ("wikisource", _wikisource)]
+        if lang == "en"
+        else [("wikisource", _wikisource), ("gutenberg", _gutenberg)]
+    )
+    for name, fn in chain:
+        try:
+            body = fn(title, author)
+        except Exception as exc:
+            log.warning("%s lookup failed for %r: %s", name, title, exc)
+            continue
+        if body and len(body) > 2000:
+            log.info("Full text for %r from %s (%d chars, lang=%s)", title, name, len(body), lang)
+            return _wrap_fulltext(title, author, body)
+
+    # Fallback chain — metadata-only (modern / unmatched books)
     text = fetch_open_library_text(title, author)
     if text and len(text) > 100:
         gb = fetch_google_books_info(title, author)
