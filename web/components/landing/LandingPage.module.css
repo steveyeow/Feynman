@@ -1134,16 +1134,15 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   flex-wrap: wrap;
-  padding: 34px 32px 24px;
+  padding: 28px 32px;
 }
-.footerBottom {
-  border-top: 1px solid var(--border);
-  padding: 16px 32px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted);
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 .footerBrand {
   display: flex;

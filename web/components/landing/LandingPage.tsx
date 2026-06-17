@@ -1816,7 +1816,9 @@ export function LandingPage({
             </svg>
             Feynman
           </span>
-          <div className={styles.footerSocials}>
+          <div className={styles.footerRight}>
+            <span className={styles.footerCopy}>© 2026 Feynman. All rights reserved.</span>
+            <div className={styles.footerSocials}>
             <a
               className={styles.footerSocial}
               href="https://github.com/steveyeow/feynman"
@@ -1854,9 +1856,7 @@ export function LandingPage({
               </svg>
             </a>
           </div>
-        </div>
-        <div className={styles.footerBottom}>
-          <span>© 2026 Feynman. All rights reserved.</span>
+          </div>
         </div>
       </footer>
     </div>
