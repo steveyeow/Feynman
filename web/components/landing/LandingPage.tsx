@@ -1778,30 +1778,6 @@ export function LandingPage({
           </div>
         </section>
 
-        {/* Closing CTA band (reuses the gated hero CTA handler) */}
-        <section className={`${styles.ctaBand} ${styles.reveal}`} data-reveal>
-          <div className={styles.sectionInner}>
-            <div className={styles.ctaCard}>
-              <h2 className={styles.ctaTitle}>Start your first conversation.</h2>
-              <button className={styles.heroCta} onClick={onCta}>
-                {ctaLabel}
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* Footer — social links live here (moved out of the topbar) */}
