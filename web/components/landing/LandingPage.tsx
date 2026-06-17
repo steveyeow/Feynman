@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import * as d3 from "d3";
-import { getLandingStats, type LandingStats } from "@/lib/api";
 import styles from "./LandingPage.module.css";
 
 /* ════════════════════════════════════════════════════════════════════
@@ -327,57 +326,6 @@ function MockJoin({ names, verb }: { names: string[]; verb: string }) {
   );
 }
 
-/* Stats-band number that counts up from 0 the first time it scrolls into view.
-   Reduced-motion / no-IO → shows the final value immediately. */
-function StatNumber({ value }: { value: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const fmt = (n: number) => n.toLocaleString();
-    if (prefersReducedMotion() || typeof IntersectionObserver === "undefined") {
-      el.textContent = fmt(value);
-      return;
-    }
-    el.textContent = fmt(0);
-    let raf = 0;
-    let started = false;
-    const run = () => {
-      const start = performance.now();
-      const dur = 1100;
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - start) / dur);
-        const eased = 1 - Math.pow(1 - t, 3);
-        el.textContent = fmt(Math.round(eased * value));
-        if (t < 1) raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    };
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting && !started) {
-            started = true;
-            run();
-            io.disconnect();
-          }
-        }
-      },
-      { threshold: 0.4 }
-    );
-    io.observe(el);
-    return () => {
-      io.disconnect();
-      cancelAnimationFrame(raf);
-    };
-  }, [value]);
-  return (
-    <span ref={ref} className={styles.statNum}>
-      {value.toLocaleString()}
-    </span>
-  );
-}
-
 /* §3 constellation — node placements (left/top = CSS %, cx/cy = SVG viewBox
    coords in a 420×264 box, kept in sync so the links land on the avatars). */
 const NETWORK_NODES: { name: string; left: string; top: string; cx: number; cy: number }[] = [
@@ -433,9 +381,6 @@ export function LandingPage({
   const graphSim = useRef<d3.Simulation<GNode, GLink> | null>(null);
   const graphCleanup = useRef<(() => void) | null>(null);
   const aborted = useRef(false);
-
-  // Live counts for the stats band (null until loaded / on failure → band hidden).
-  const [stats, setStats] = useState<LandingStats | null>(null);
 
   /* ---- Chat demo: ports _startLandingChatDemo timing verbatim ---- */
   const startChatDemo = useCallback(() => {
@@ -1114,21 +1059,6 @@ export function LandingPage({
     return () => io.disconnect();
   }, []);
 
-  /* ---- Live stats band counts (public; band hides if this fails) ---- */
-  useEffect(() => {
-    let alive = true;
-    getLandingStats()
-      .then((s) => {
-        if (alive && s && typeof s.books === "number") setStats(s);
-      })
-      .catch(() => {
-        /* leave stats null → band stays hidden */
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   /* ---- Theme toggle (ports the inline lp-theme-toggle handler) ---- */
   const toggleTheme = useCallback(() => {
     const root = document.documentElement;
@@ -1538,28 +1468,6 @@ export function LandingPage({
           </div>
         </div>
       </section>
-
-      {/* Live stats band (real counts from /api/stats; hidden until loaded). */}
-      {stats && (
-        <section className={styles.statsBand}>
-          <div className={styles.statsInner}>
-            <div className={styles.stat}>
-              <StatNumber value={stats.books} />
-              <span className={styles.statLabel}>Books</span>
-            </div>
-            <span className={styles.statDivider} aria-hidden="true" />
-            <div className={styles.stat}>
-              <StatNumber value={stats.minds} />
-              <span className={styles.statLabel}>Great minds</span>
-            </div>
-            <span className={styles.statDivider} aria-hidden="true" />
-            <div className={styles.stat}>
-              <StatNumber value={stats.symposiums} />
-              <span className={styles.statLabel}>Symposiums</span>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* ═══════════ BELOW-THE-HERO SECTIONS (appended) ═══════════
           The hero <section> above is 100% untouched. Order follows the README's
