@@ -726,6 +726,7 @@
   letter-spacing: -0.01em;
   color: var(--text);
   margin: 0 0 14px;
+  text-wrap: balance;
 }
 .bodyText {
   font-size: 15px;
@@ -1000,6 +1001,7 @@
   letter-spacing: -0.01em;
   color: var(--text);
   margin: 0 0 14px;
+  text-wrap: balance;
 }
 .ctaSub {
   font-size: 16px;
