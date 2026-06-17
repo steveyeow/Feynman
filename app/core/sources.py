@@ -123,20 +123,26 @@ def _wrap_fulltext(title: str, author: str, body: str) -> str:
 
 
 def fetch_book_content(title: str, author: str = "") -> str:
+    """Text-only orchestrator — see ``fetch_book_content_sourced`` for the source
+    chain. Most callers want just the text."""
+    return fetch_book_content_sourced(title, author)[0]
+
+
+def fetch_book_content_sourced(title: str, author: str = "") -> tuple[str, str]:
     """Orchestrator: try FULL-TEXT sources (Gutenberg + Wikisource, ordered by
-    the title's language) → METADATA sources (Open Library → Google Books →
-    Wikipedia). Full text means RAG has the actual book to retrieve from;
-    modern in-copyright books fall through to metadata (the best free APIs
-    allow).
+    the title's language) → Internet Archive → arXiv → METADATA sources (Open
+    Library → Google Books → Wikipedia). Returns ``(text, source)`` — the source
+    label lets the backfill record ``meta.content_source`` provenance. Full text
+    means RAG has the actual book to retrieve from; modern in-copyright books
+    fall through to metadata (the best free APIs allow).
 
     - **Gutenberg** — English public-domain canon, clean (boilerplate-stripped).
     - **Wikisource** — ~70 languages incl. CJK + many works Gutenberg lacks, so
       it LEADS for non-English titles and BACKS UP Gutenberg for English.
 
-    Adding a source = a new ``(name, fn)`` in the chain below (Internet Archive,
-    arXiv, … are the planned next entries). Each fn is `(title, author) -> text`
-    and must never raise (local import keeps the module importable if an
-    optional source is stripped)."""
+    Adding a source = a new ``(name, fn)`` in the chain below. Each fn is
+    `(title, author) -> text` and must never raise (local import keeps the
+    module importable if an optional source is stripped)."""
     def _gutenberg(t: str, a: str) -> str:
         from .sources_gutenberg import fetch_gutenberg_content
         return fetch_gutenberg_content(t, a)
@@ -176,7 +182,7 @@ def fetch_book_content(title: str, author: str = "") -> str:
             continue
         if body and len(body) > 2000:
             log.info("Full text for %r from %s (%d chars, lang=%s)", title, name, len(body), lang)
-            return _wrap_fulltext(title, author, body)
+            return _wrap_fulltext(title, author, body), name
 
     # Fallback chain — metadata-only (modern / unmatched books)
     text = fetch_open_library_text(title, author)
@@ -184,14 +190,14 @@ def fetch_book_content(title: str, author: str = "") -> str:
         gb = fetch_google_books_info(title, author)
         if gb:
             text += "\n\n--- Google Books ---\n\n" + gb
-        return text
+        return text, "openlibrary"
 
     text = fetch_google_books_info(title, author)
     if text and len(text) > 50:
-        return text
+        return text, "google_books"
 
     wiki = fetch_wikipedia_summary(title, lang="en")
     if wiki:
-        return f"Title: {title}" + (f" by {author}" if author else "") + f"\n\nWikipedia: {wiki}"
+        return f"Title: {title}" + (f" by {author}" if author else "") + f"\n\nWikipedia: {wiki}", "wikipedia"
 
-    return ""
+    return "", ""

@@ -274,6 +274,76 @@ def _conflict_ignore(query: str) -> str:
     return query
 
 
+# ── Content backfill staging (pending_content) ──────────────────────────────
+# Approach-B transport: the LOCAL fetch (network OK locally) writes book text
+# here; the Vercel `/api/cron/index-pending-content` cron reads it, indexes +
+# embeds (Gemini works on Vercel, geoblocked from the dev box), then deletes the
+# row. A separate table — NOT agents.meta_json — so 1.5MB texts never bloat the
+# hot agents read. Created out-of-band (NOT in init_db) so it never touches the
+# cold-start boot path (cf. the init_db zombie-lock incident).
+def ensure_pending_content_table() -> None:
+    with get_conn() as conn:
+        _execute(conn, """
+            CREATE TABLE IF NOT EXISTS pending_content (
+                agent_id TEXT PRIMARY KEY,
+                source TEXT,
+                text TEXT NOT NULL,
+                created_at TEXT
+            )
+        """)
+
+
+def stage_pending_content(agent_id: str, text: str, source: str) -> None:
+    with get_conn() as conn:
+        if _USE_PG:
+            _execute(conn,
+                "INSERT INTO pending_content (agent_id, source, text, created_at) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (agent_id) DO UPDATE SET "
+                "text = EXCLUDED.text, source = EXCLUDED.source, created_at = EXCLUDED.created_at",
+                (agent_id, source, text, _utcnow()))
+        else:
+            _execute(conn,
+                "INSERT OR REPLACE INTO pending_content (agent_id, source, text, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (agent_id, source, text, _utcnow()))
+
+
+def pop_pending_content(limit: int = 5) -> list[dict[str, Any]]:
+    # random() order, not created_at — so a row that fails to index (and is left
+    # in place for retry) can't sit at the head and stall the whole drain.
+    with get_conn() as conn:
+        cur = _execute(conn, _q(
+            "SELECT agent_id, source, text FROM pending_content ORDER BY random() LIMIT ?"
+        ), (limit,))
+        rows = cur.fetchall()
+    return [{"agent_id": r[0], "source": r[1], "text": r[2]} for r in rows]
+
+
+def delete_pending_content(agent_id: str) -> None:
+    with get_conn() as conn:
+        _execute(conn, _q("DELETE FROM pending_content WHERE agent_id = ?"), (agent_id,))
+
+
+def count_pending_content() -> int:
+    with get_conn() as conn:
+        cur = _execute(conn, "SELECT COUNT(*) FROM pending_content")
+        return int(cur.fetchone()[0])
+
+
+def set_content_source(agent_id: str, source: str) -> None:
+    """Record meta.content_source provenance on a backfilled book (merge)."""
+    if not source:
+        return
+    agent = get_agent(agent_id)
+    if not agent:
+        return
+    meta = dict(agent.get("meta") or {})
+    meta["content_source"] = source
+    with get_conn() as conn:
+        _execute(conn, _q("UPDATE agents SET meta_json = ? WHERE id = ?"),
+                 (json.dumps(meta), agent_id))
+
+
 def init_db() -> None:
     with get_conn() as conn:
         if _USE_PG:

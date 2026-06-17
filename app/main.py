@@ -3710,6 +3710,42 @@ def api_cron_mind_qa(request: Request) -> dict[str, Any]:
         return {"status": "error", "detail": str(exc)}
 
 
+@app.get("/api/cron/index-pending-content")
+def api_cron_index_pending_content(request: Request) -> dict[str, Any]:
+    """Content-backfill drain. The LOCAL fetch (the sources chain) stages book
+    text in pending_content; this runs on Vercel — where the Gemini embedder
+    works (it's geoblocked from the dev box) — to index + embed it, keeping the
+    heavy fetch off Vercel. Per call: pop a few rows, index_text(replace_existing
+    =True) (stub chunks replaced only AFTER embeddings return), record
+    meta.content_source, drop the row. A failed row is left for retry (pop is
+    random-ordered so it can't stall the head). Loop with the CRON_SECRET bearer
+    to drain; bounded per call to stay inside the function limit."""
+    _verify_cron(request)
+    from .core.db import (
+        ensure_pending_content_table, pop_pending_content,
+        delete_pending_content, count_pending_content, set_content_source,
+    )
+    from .core.indexer import index_text
+    ensure_pending_content_table()
+    try:
+        batch = max(1, min(int(request.query_params.get("batch", "4")), 10))
+    except (TypeError, ValueError):
+        batch = 4
+    indexed = failed = 0
+    for row in pop_pending_content(limit=batch):
+        aid = row["agent_id"]
+        try:
+            index_text(aid, row["text"], replace_existing=True)
+            set_content_source(aid, row.get("source") or "")
+            delete_pending_content(aid)
+            indexed += 1
+        except Exception as exc:
+            log.error("index-pending-content %s: %s", aid, exc)
+            failed += 1
+    return {"status": "ok", "indexed": indexed, "failed": failed,
+            "remaining": count_pending_content()}
+
+
 @app.get("/api/minds/{mind_id}/questions")
 def api_mind_questions(mind_id: str) -> JSONResponse:
     """Stored Q&A list for a mind (slug + question). Powers the detail-page
