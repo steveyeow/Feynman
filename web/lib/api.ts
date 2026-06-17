@@ -284,3 +284,12 @@ export const listTopics = () =>
   get<{ topics?: string[] } | string[]>("/api/topics").then((r) =>
     Array.isArray(r) ? r : r.topics || [],
   );
+
+/** Live landing counts for the stats band. Public (auth:false). */
+export interface LandingStats {
+  books: number;
+  minds: number;
+  symposiums: number;
+}
+export const getLandingStats = () =>
+  apiFetch<LandingStats>("/api/stats", { method: "GET", auth: false });
