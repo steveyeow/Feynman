@@ -685,3 +685,701 @@
     width: 140px;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   BELOW-THE-HERO FEATURE SECTIONS (appended — the hero above is 100%
+   untouched). Editorial value sections that introduce the five core
+   capabilities, built on the same Liquid-Glass tokens and reusing the
+   demo message classes above (.msg*, .mnAvatar, .joinInner, .sourceTag,
+   .bookChip …) so the static feature mocks look native to the product.
+   ════════════════════════════════════════════════════════════════════ */
+
+.sections {
+  position: relative;
+  z-index: 1;
+  background: var(--landing-bg);
+  border-top: 1px solid var(--border);
+}
+.section {
+  padding: 104px 0;
+}
+.sectionInner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* Eyebrow / title / body — shared editorial type */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+.sectionTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+.bodyText {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 460px;
+}
+
+/* §0 Positioning band (centered) */
+.positioning {
+  text-align: center;
+}
+.positioning .sectionInner {
+  max-width: 760px;
+}
+.positioningTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+.positioning .bodyText {
+  max-width: 600px;
+  margin: 0 auto;
+  font-size: 16px;
+}
+.pillars {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin-top: 30px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.pillar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.pillarDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.65;
+}
+
+/* Feature row layout */
+.featureRow {
+  display: flex;
+  align-items: center;
+  gap: 64px;
+}
+.featureRowReverse {
+  flex-direction: row-reverse;
+}
+.featureCopy {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.featureVisual {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Micro proof chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-chat);
+}
+
+/* Low-emphasis exploration link */
+.softLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 22px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--accent);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: gap 0.15s;
+}
+.softLink:hover {
+  gap: 10px;
+}
+.softLink svg {
+  stroke: currentColor;
+}
+
+/* Frosted mock frame — reuses the .chatCard material recipe */
+.mockFrame {
+  width: 100%;
+  max-width: 460px;
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  padding: 20px;
+}
+:global(html.dark) .mockFrame {
+  background: rgba(44, 44, 46, 0.42);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :global(html:not(.light)) .mockFrame {
+    background: rgba(44, 44, 46, 0.42);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* Mock: a stacked chat / debate column */
+.mockStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mockQuestion {
+  align-self: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+/* §2 Book-canvas mock */
+.bookMock {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.bookCover {
+  flex-shrink: 0;
+  width: 100px;
+  height: 138px;
+  border-radius: 8px;
+  background: var(--cover-placeholder-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px 11px;
+}
+.bookCoverTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.bookCoverAuthor {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  margin-top: 7px;
+}
+.bookPage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bookLine {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border-strong);
+}
+.bookPage .bookChip {
+  margin-top: 6px;
+  align-self: flex-start;
+}
+
+/* §3 Minds-network constellation mock */
+.constellation {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  height: 264px;
+}
+.constellation svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.cNode {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+.cAvatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+}
+.cName {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.cUpload {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+  background: var(--bg-chat);
+}
+.cUpload svg {
+  stroke: currentColor;
+}
+.cNodeUpload .cName {
+  color: var(--text-muted);
+}
+
+/* §5 Closing CTA band */
+.ctaBand {
+  text-align: center;
+  padding: 116px 0 128px;
+  border-top: 1px solid var(--border);
+}
+.ctaTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+.ctaSub {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin: 0 0 28px;
+}
+.ctaBand .heroCta {
+  margin-top: 0;
+}
+
+/* Scroll reveal — motion users only; reduced-motion shows everything */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.isVisible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Responsive — mirrors the hero's 960px collapse */
+@media (max-width: 960px) {
+  .section {
+    padding: 72px 0;
+  }
+  .sectionInner {
+    padding: 0 20px;
+  }
+  .featureRow,
+  .featureRowReverse {
+    flex-direction: column;
+    gap: 32px;
+    text-align: center;
+  }
+  .featureCopy .bodyText {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .chips {
+    justify-content: center;
+  }
+  .featureVisual {
+    width: 100%;
+  }
+  .positioningTitle {
+    font-size: 27px;
+  }
+  .sectionTitle {
+    font-size: 24px;
+  }
+  .ctaTitle {
+    font-size: 26px;
+  }
+  .ctaBand {
+    padding: 80px 0;
+  }
+}
+
+/* ── Mock tweaks ── */
+.mockStack > .bookChip {
+  align-self: flex-start;
+}
+
+/* "Network builds itself" topic mock (topic entry + on-demand books) */
+.topicMock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+}
+.topicChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: var(--accent-light);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.topicLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.miniCovers {
+  display: flex;
+  gap: 10px;
+}
+.miniCover {
+  width: 56px;
+  height: 78px;
+  border-radius: 5px;
+  background: var(--cover-placeholder-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 7px 6px;
+  display: flex;
+  align-items: flex-end;
+}
+.miniCoverTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 8px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.miniCoverGen {
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-light);
+  border: 1px dashed var(--accent);
+  color: var(--accent);
+}
+.miniCoverGen svg {
+  stroke: currentColor;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FOOTER (social links moved here from the topbar)
+   ════════════════════════════════════════════════════════════════════ */
+.footer {
+  position: relative;
+  z-index: 1;
+  background: var(--landing-bg);
+  border-top: 1px solid var(--border);
+}
+/* Full-bleed with the SAME 32px side padding as the topbar, so the footer's
+   left/right edges line up with the top menu's edges (no centered max-width box). */
+.footerInner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 28px 32px;
+}
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.footerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.footerLogo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 16px;
+  color: var(--text);
+}
+.footerTagline {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+.footerCopy {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.footerSocials {
+  display: flex;
+  gap: 10px;
+}
+.footerSocial {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.footerSocial:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+@media (max-width: 960px) {
+  .footerInner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 32px;
+  }
+}
+
+/* §5 on-demand book — book-writing canvas mock: composed pages + right-side
+   outline (mirrors the real write-book BookCanvas; no chat UI). */
+.bookCanvas {
+  display: flex;
+  gap: 18px;
+  align-items: stretch;
+  width: 100%;
+}
+.bookCanvasPage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bookCanvasTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.bookCanvasOutline {
+  flex-shrink: 0;
+  width: 134px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.bookOutlineLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.bookOutlineItem {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+.bookOutlineActive {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* §2 Library — a grid of book cards (mirrors the real library page:
+   colored gradient cover + faded initials watermark + title beneath). */
+.libraryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  width: 100%;
+}
+.libCard {
+  display: flex;
+  flex-direction: column;
+}
+.libArt {
+  aspect-ratio: 3 / 4;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.libArtInitials {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.28);
+  letter-spacing: 0.02em;
+}
+.libTitle {
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  margin-top: 7px;
+}
+
+/* §3 On-demand books — the composed book + chapter outline (mirrors the real
+   write-book page: the book/outline is the main element). */
+.bookBuild {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  width: 100%;
+}
+.bookBuildTitle {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 16px;
+  line-height: 1.25;
+  color: var(--text);
+}
+.bookBuildStatus {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+.bookBuildBar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.bookBuildBarFill {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+}
+.bookChapters {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 2px;
+}
+.bookChapter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.bookChapterCheck {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--success-bg);
+  color: var(--success-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+.bookChapterTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bookChapterWords {
+  flex-shrink: 0;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* §5 Symposium — question as a prominent heading (mirrors the real page) */
+.symQuestion {
+  font-family: 'Libre Baskerville', Georgia, serif;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+/* Closing CTA — a glass card so it matches the page's card aesthetic */
+.ctaCard {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 52px 32px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+:global(html.dark) .ctaCard {
+  background: rgba(44, 44, 46, 0.42);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+@media (prefers-color-scheme: dark) {
+  :global(html:not(.light)) .ctaCard {
+    background: rgba(44, 44, 46, 0.42);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+}

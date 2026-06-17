@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import * as d3 from "d3";
 import styles from "./LandingPage.module.css";
 
@@ -278,6 +279,82 @@ type GParticle = {
   size: number;
   opacity: number;
 };
+
+/* ════════════════════════════════════════════════════════════════════
+   BELOW-THE-HERO FEATURE SECTIONS — static helpers + data.
+   These render NON-animated feature mocks that reuse the demo message
+   classes (.msg*, .mnAvatar, .joinInner …) so they look native. The hero
+   above is untouched.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* One mind message — same DOM shape as the animated demo's mind row. */
+function MockMind({ name, text }: { name: string; text: string }) {
+  return (
+    <div className={`${styles.msg} ${styles.msgMind}`}>
+      <span className={styles.mnAvatar} style={{ background: lpColor(name) }}>
+        {initials(name)}
+      </span>
+      <div className={styles.mindBodyWrap}>
+        <div className={styles.mindHeader}>
+          <span className={styles.mnName}>{name}</span>
+        </div>
+        <div className={styles.mindBody}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+/* A "minds joined" / "in conversation" notice — ports the demo's join row. */
+function MockJoin({ names, verb }: { names: string[]; verb: string }) {
+  const label =
+    names.length === 1
+      ? names[0]
+      : names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  return (
+    <div className={styles.systemNotice}>
+      <div className={styles.joinInner}>
+        {names.map((n) => (
+          <span key={n} className={styles.mnAvatar} style={{ background: lpColor(n) }}>
+            {initials(n)}
+          </span>
+        ))}
+        <span>
+          {label} {verb}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* §3 constellation — node placements (left/top = CSS %, cx/cy = SVG viewBox
+   coords in a 420×264 box, kept in sync so the links land on the avatars). */
+const NETWORK_NODES: { name: string; left: string; top: string; cx: number; cy: number }[] = [
+  { name: "Richard Feynman", left: "20%", top: "26%", cx: 84, cy: 68.6 },
+  { name: "Socrates", left: "52%", top: "16%", cx: 218.4, cy: 42.2 },
+  { name: "Adam Smith", left: "82%", top: "33%", cx: 344.4, cy: 87.1 },
+  { name: "Ada Lovelace", left: "26%", top: "74%", cx: 109.2, cy: 195.4 },
+];
+const NETWORK_UPLOAD = { left: "72%", top: "78%", cx: 302.4, cy: 205.9 };
+/* Links as [x1,y1,x2,y2] in the same viewBox. */
+const NETWORK_LINKS: [number, number, number, number][] = [
+  [84, 68.6, 218.4, 42.2],
+  [218.4, 42.2, 344.4, 87.1],
+  [84, 68.6, 109.2, 195.4],
+  [109.2, 195.4, 302.4, 205.9],
+  [302.4, 205.9, 344.4, 87.1],
+  [218.4, 42.2, 302.4, 205.9],
+];
+
+/* §2 Library cards — colored gradient cover + faded initials + title (mirrors
+   the real /library cards). */
+const LIB_BOOKS: { title: string; initials: string; grad: string }[] = [
+  { title: "Thinking, Fast and Slow", initials: "TF", grad: "linear-gradient(135deg,#6d597a,#355070)" },
+  { title: "The Wealth of Nations", initials: "WN", grad: "linear-gradient(135deg,#2a9d8f,#264653)" },
+  { title: "Meditations", initials: "Md", grad: "linear-gradient(135deg,#e76f51,#9b2226)" },
+  { title: "The Art of War", initials: "AW", grad: "linear-gradient(135deg,#457b9d,#264653)" },
+  { title: "Gödel, Escher, Bach", initials: "GE", grad: "linear-gradient(135deg,#b56576,#6d597a)" },
+  { title: "Sapiens", initials: "Sp", grad: "linear-gradient(135deg,#588157,#2a9d8f)" },
+];
 
 export function LandingPage({
   ctaLabel,
@@ -961,6 +1038,27 @@ export function LandingPage({
     };
   }, [renderChatStatic, startChatDemo, startSearchDemo, startMindsGraph]);
 
+  /* ---- Scroll-reveal for the below-hero sections (motion users only;
+         reduced-motion keeps them statically visible via the CSS gate). ---- */
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    if (typeof IntersectionObserver === "undefined") return;
+    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add(styles.isVisible);
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
   /* ---- Theme toggle (ports the inline lp-theme-toggle handler) ---- */
   const toggleTheme = useCallback(() => {
     const root = document.documentElement;
@@ -1020,17 +1118,6 @@ export function LandingPage({
           Feynman
         </span>
         <div className={styles.topbarActions}>
-          <a
-            href="https://discord.gg/bCShwbFnCd"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.discordLink}
-            title="Join our Discord"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
-            </svg>
-          </a>
           <button className={styles.themeToggle} onClick={toggleTheme} title="Toggle dark mode">
             <svg
               className={styles.iconSun}
@@ -1381,6 +1468,373 @@ export function LandingPage({
           </div>
         </div>
       </section>
+
+      {/* ═══════════ BELOW-THE-HERO SECTIONS (appended) ═══════════
+          The hero <section> above is 100% untouched. Order follows the README's
+          narrative — three ways to enter (a book, a topic, a mind), then the two
+          extensions (symposiums, on-demand books). Consistent layout: every feature
+          row is text-left / visual-right; the CTA is a centered band. Visuals reuse
+          the demo message classes. */}
+      <div className={styles.sections}>
+        {/* 1 — Chat with a book or a topic; great minds join in (the core) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Chat with books</p>
+              <h2 className={styles.sectionTitle}>Chat with any book — and the most relevant minds join in.</h2>
+              <p className={styles.bodyText}>
+                Start from a book or a topic — every answer cited to the exact page.
+              </p>
+              <button type="button" className={styles.softLink} onClick={onCta}>
+                Start a chat
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={styles.bookChip}>
+                    <span>The Wealth of Nations</span>
+                  </div>
+                  <div className={`${styles.msg} ${styles.msgUser}`}>
+                    What really creates the wealth of a nation?
+                  </div>
+                  <div className={`${styles.msg} ${styles.msgAssistant}`}>
+                    <span>
+                      The division of labour — productivity rises when work is specialized and
+                      freely exchanged, not from hoarding gold.
+                    </span>
+                    <div className={styles.msgSources}>
+                      <span className={styles.sourceTag}>Bk.1 Ch.1 — Of the Division of Labour</span>
+                    </div>
+                  </div>
+                  <MockJoin
+                    names={["Adam Smith", "Karl Marx", "John Maynard Keynes"]}
+                    verb="joined the discussion"
+                  />
+                  <MockMind
+                    name="Adam Smith"
+                    text="Just so — and the wider the market, the further that division of labour can go."
+                  />
+                  <MockMind
+                    name="Karl Marx"
+                    text="But who owns that labour, Adam? The value the workers create accrues to capital, not to them."
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 2 — Library (the growing collection of books) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Library</p>
+              <h2 className={styles.sectionTitle}>A library that grows as you explore.</h2>
+              <p className={styles.bodyText}>
+                No fixed catalog — every book you chat, search, or mention joins it.
+              </p>
+              <Link className={styles.softLink} href="/library">
+                Browse the library
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.libraryGrid}>
+                  {LIB_BOOKS.map((b) => (
+                    <div key={b.title} className={styles.libCard}>
+                      <div className={styles.libArt} style={{ background: b.grad }}>
+                        <span className={styles.libArtInitials}>{b.initials}</span>
+                      </div>
+                      <span className={styles.libTitle}>{b.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 3 — On-demand books: write the book you need */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>On-demand books</p>
+              <h2 className={styles.sectionTitle}>The book you need, written on demand.</h2>
+              <p className={styles.bodyText}>
+                Describe what you want to know, and Feynman generates a book for you on the spot.
+              </p>
+              <button type="button" className={styles.softLink} onClick={onCta}>
+                Write a book
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.bookBuild}>
+                  <div className={styles.bookBuildTitle}>The History of Coffee</div>
+                  <div className={styles.bookBuildStatus}>All chapters complete · 100%</div>
+                  <div className={styles.bookBuildBar}>
+                    <div className={styles.bookBuildBarFill} />
+                  </div>
+                  <div className={styles.bookChapters}>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.1 · Origins in Ethiopia</span>
+                      <span className={styles.bookChapterWords}>1,240 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.2 · The Spread of Coffee</span>
+                      <span className={styles.bookChapterWords}>1,610 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.3 · Coffeehouse Culture</span>
+                      <span className={styles.bookChapterWords}>1,090 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.4 · Coffee &amp; Commerce</span>
+                      <span className={styles.bookChapterWords}>1,375 words</span>
+                    </div>
+                    <div className={styles.bookChapter}>
+                      <span className={styles.bookChapterCheck}>✓</span>
+                      <span className={styles.bookChapterTitle}>Ch.5 · The Modern Cup</span>
+                      <span className={styles.bookChapterWords}>980 words</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 4 — Great minds: an ever-evolving network of simulated minds (chat 1:1 + upload) */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Great minds</p>
+              <h2 className={styles.sectionTitle}>An ever-evolving network of simulated great minds.</h2>
+              <p className={styles.bodyText}>
+                A living map where minds connect by the ideas they share — move between
+                them, and chat anyone.
+              </p>
+              <Link className={styles.softLink} href="/minds">
+                Explore the network
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.constellation}>
+                  <svg viewBox="0 0 420 264" preserveAspectRatio="xMidYMid meet">
+                    {NETWORK_LINKS.map(([x1, y1, x2, y2], i) => (
+                      <line
+                        key={i}
+                        x1={x1}
+                        y1={y1}
+                        x2={x2}
+                        y2={y2}
+                        stroke="rgba(150,160,180,0.35)"
+                        strokeWidth="1.2"
+                      />
+                    ))}
+                  </svg>
+                  {NETWORK_NODES.map((n) => (
+                    <div
+                      key={n.name}
+                      className={styles.cNode}
+                      style={{ left: n.left, top: n.top }}
+                    >
+                      <span className={styles.cAvatar} style={{ background: lpColor(n.name) }}>
+                        {initials(n.name)}
+                      </span>
+                      <span className={styles.cName}>{n.name}</span>
+                    </div>
+                  ))}
+                  <div
+                    className={`${styles.cNode} ${styles.cNodeUpload}`}
+                    style={{ left: NETWORK_UPLOAD.left, top: NETWORK_UPLOAD.top }}
+                  >
+                    <span className={styles.cUpload}>
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </span>
+                    <span className={styles.cName}>Upload a Mind</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 5 — Symposiums */}
+        <section className={`${styles.section} ${styles.reveal}`} data-reveal>
+          <div className={`${styles.sectionInner} ${styles.featureRow}`}>
+            <div className={styles.featureCopy}>
+              <p className={styles.eyebrow}>Symposiums</p>
+              <h2 className={styles.sectionTitle}>Put your question to a panel of great minds.</h2>
+              <p className={styles.bodyText}>
+                See how history&apos;s greatest minds view the questions we care about today.
+              </p>
+              <Link className={styles.softLink} href="/symposiums">
+                Browse symposiums
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </Link>
+            </div>
+            <div className={styles.featureVisual} aria-hidden="true">
+              <div className={styles.mockFrame}>
+                <div className={styles.mockStack}>
+                  <div className={styles.symQuestion}>Is it better to be feared or loved?</div>
+                  <MockJoin
+                    names={["Machiavelli", "Sun Tzu", "Marcus Aurelius"]}
+                    verb="in conversation"
+                  />
+                  <MockMind
+                    name="Machiavelli"
+                    text="It is far safer to be feared than loved, if one cannot be both."
+                  />
+                  <MockMind
+                    name="Marcus Aurelius"
+                    text="Yet a ruler governed by fear governs nothing in himself, Niccolò. Virtue commands more than dread."
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      {/* Footer — social links live here (moved out of the topbar) */}
+      <footer className={styles.footer}>
+        <div className={styles.footerInner}>
+          <span className={styles.footerLogo}>
+            <svg width="18" height="18" viewBox="0 0 64 64" fill="none">
+              <line x1="8" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="56" y1="58" x2="32" y2="30" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="32" cy="30" r="3.5" fill="currentColor" />
+              <path d="M32,30 C26,24 38,18 32,12 C26,6 38,0 32,-4" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Feynman
+          </span>
+          <div className={styles.footerRight}>
+            <span className={styles.footerCopy}>© 2026 Feynman. All rights reserved.</span>
+            <div className={styles.footerSocials}>
+            <a
+              className={styles.footerSocial}
+              href="https://github.com/steveyeow/feynman"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              title="GitHub"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.56 0-.28-.01-1.02-.02-2-3.34.71-4.04-1.58-4.04-1.58-.55-1.37-1.34-1.74-1.34-1.74-1.09-.73.08-.72.08-.72 1.2.08 1.84 1.21 1.84 1.21 1.07 1.79 2.81 1.27 3.49.97.11-.76.42-1.27.76-1.56-2.67-.3-5.47-1.31-5.47-5.81 0-1.28.47-2.33 1.24-3.15-.12-.3-.54-1.51.12-3.15 0 0 1.01-.32 3.3 1.2.96-.26 1.98-.39 3-.4 1.02.01 2.04.14 3 .4 2.28-1.52 3.29-1.2 3.29-1.2.66 1.64.24 2.85.12 3.15.77.82 1.24 1.87 1.24 3.15 0 4.51-2.81 5.5-5.49 5.79.43.36.81 1.08.81 2.18 0 1.58-.01 2.85-.01 3.24 0 .31.22.68.83.56C20.57 21.88 24 17.49 24 12.29 24 5.78 18.63.5 12 .5z" />
+              </svg>
+            </a>
+            <a
+              className={styles.footerSocial}
+              href="https://discord.gg/bCShwbFnCd"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Discord"
+              title="Discord"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+              </svg>
+            </a>
+            <a
+              className={styles.footerSocial}
+              href="https://x.com/steve_yeow"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="X (Twitter)"
+              title="X (Twitter)"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </a>
+          </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
