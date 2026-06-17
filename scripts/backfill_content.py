@@ -75,7 +75,10 @@ def main() -> int:
             return (0, "")
         if len(txt) >= _MIN_FULLTEXT:
             if args.apply:
-                db.stage_pending_content(aid, txt, src)
+                # Cap at 700K (~875 chunks) so the Vercel index cron embeds each
+                # book inside one function invocation — a 1.5MB book (~1,900
+                # chunks) overruns it. 700K is still a large slice for RAG.
+                db.stage_pending_content(aid, txt[:700_000], src)
             return (len(txt), src)
         return (0, "")
 
