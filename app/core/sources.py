@@ -145,17 +145,29 @@ def fetch_book_content(title: str, author: str = "") -> str:
         from .sources_wikisource import fetch_wikisource_content
         return fetch_wikisource_content(t, a)
 
+    def _internet_archive(t: str, a: str) -> str:
+        from .sources_internetarchive import fetch_internetarchive_content
+        return fetch_internetarchive_content(t, a)
+
+    def _arxiv(t: str, a: str) -> str:
+        from .sources_arxiv import fetch_arxiv_content
+        return fetch_arxiv_content(t, a)
+
     try:
         from .sources_wikisource import _detect_lang
         lang = _detect_lang(title)
     except Exception:
         lang = "en"
 
-    chain = (
+    # Precise canon first (Gutenberg/Wikisource, ordered by language), then the
+    # Internet Archive catch-all (strict-gated, huge OCR corpus), then arXiv
+    # (only matches real preprints). First substantial hit (>2000 chars) wins.
+    canon = (
         [("gutenberg", _gutenberg), ("wikisource", _wikisource)]
         if lang == "en"
         else [("wikisource", _wikisource), ("gutenberg", _gutenberg)]
     )
+    chain = canon + [("internet_archive", _internet_archive), ("arxiv", _arxiv)]
     for name, fn in chain:
         try:
             body = fn(title, author)
