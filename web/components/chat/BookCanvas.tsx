@@ -422,6 +422,7 @@ function WritingProgress({
           <div className="canvas-done-label" style={{ color: "var(--error-color, #e55)" }}>
             Writing failed at chapter {done + 1} of {total}
           </div>
+          {status?.error && <p className="canvas-error">{status.error}</p>}
           <div className="canvas-done-actions">
             <button
               type="button"
