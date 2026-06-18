@@ -4346,12 +4346,14 @@ def get_ai_book_status(book_id: str) -> dict[str, Any] | None:
     with get_conn() as conn:
         row = _fetchone(conn, _q(
             "SELECT id, agent_id, user_id, status, title, outline_json, "
-            "chapters_total, chapters_written, updated_at FROM ai_books WHERE id = ?"
+            "preferences_json, chapters_total, chapters_written, updated_at FROM ai_books WHERE id = ?"
         ), (book_id,))
         if not row:
             return None
         result = dict(row)
         result["outline"] = json.loads(result.pop("outline_json", None) or "{}")
+        prefs = json.loads(result.pop("preferences_json", None) or "{}")
+        result["error"] = prefs.get("_write_error")  # failure reason, else None
         return result
 
 
@@ -4382,12 +4384,26 @@ def update_ai_book_outline(book_id: str, outline: dict[str, Any]) -> None:
             outline.get("title", "Untitled"), now, book_id))
 
 
-def update_ai_book_status(book_id: str, status: str) -> None:
+def update_ai_book_status(book_id: str, status: str, error: str | None = None) -> None:
     now = _utcnow()
     with get_conn() as conn:
         _execute(conn, _q(
             "UPDATE ai_books SET status = ?, updated_at = ? WHERE id = ?"
         ), (status, now, book_id))
+        # Record (or clear) the failure reason in preferences_json so the status
+        # endpoint can surface WHY a write failed — no schema change. Set on
+        # failure; cleared when a (re)write starts or completes so a stale reason
+        # doesn't linger after a successful retry.
+        if error is not None or status in ("writing", "completed"):
+            prow = _fetchone(conn, _q("SELECT preferences_json FROM ai_books WHERE id = ?"), (book_id,))
+            if prow:
+                prefs = json.loads(prow["preferences_json"] or "{}")
+                if error is not None:
+                    prefs["_write_error"] = error[:500]
+                else:
+                    prefs.pop("_write_error", None)
+                _execute(conn, _q("UPDATE ai_books SET preferences_json = ? WHERE id = ?"),
+                         (json.dumps(prefs, ensure_ascii=False), book_id))
         # Sync agent status when book completes, fails, or is cancelled
         if status in ("completed", "failed", "cancelled"):
             row = _fetchone(conn, _q("SELECT agent_id, chapters_written FROM ai_books WHERE id = ?"), (book_id,))
@@ -4415,6 +4431,7 @@ def update_ai_book_chapter(book_id: str, chapter_num: int, chapter_data: dict[st
 
 
 def _row_to_ai_book(row: dict[str, Any]) -> dict[str, Any]:
+    prefs = json.loads(row["preferences_json"] or "{}")
     return {
         "id": row["id"],
         "agent_id": row["agent_id"],
@@ -4424,9 +4441,10 @@ def _row_to_ai_book(row: dict[str, Any]) -> dict[str, Any]:
         "description": row["description"],
         "outline": json.loads(row["outline_json"] or "{}"),
         "content": json.loads(row["content_json"] or "{}"),
-        "preferences": json.loads(row["preferences_json"] or "{}"),
+        "preferences": prefs,
         "chapters_total": row["chapters_total"],
         "chapters_written": row["chapters_written"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "error": prefs.get("_write_error"),  # failure reason, else None
     }

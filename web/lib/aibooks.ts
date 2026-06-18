@@ -66,6 +66,8 @@ export interface BookStatus {
   chaptersDone: number;
   /** 0–100, derived from chaptersDone / chaptersTotal. */
   progressPct: number;
+  /** Failure reason when status is "failed" (else null) — surfaced in the canvas. */
+  error?: string | null;
 }
 
 export interface FullBook extends BookStatus {
@@ -87,6 +89,7 @@ function toStatus(raw: any): BookStatus {
     chaptersTotal: total,
     chaptersDone: done,
     progressPct: total > 0 ? Math.round((done / total) * 100) : 0,
+    error: raw?.error ?? null,
   };
 }
 

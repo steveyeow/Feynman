@@ -199,8 +199,16 @@ def write_chapter(
         f"Target length: ~{chapter.get('estimated_words', 2000)} words\n"
     )
 
+    # Chapter writing is a BACKGROUND task that emits a long (~2000-word),
+    # grounded generation — routinely well over the 30s/50s interactive default,
+    # which made a single slow chapter time out across the ~2 providers the
+    # budget allowed and fail the whole book (it always died on the first
+    # heavier chapter). Give it a background-sized budget so a long generation
+    # has room and the fallback can reach every provider. Grounding stays on —
+    # factual books benefit from it, and 120s accommodates the search latency.
     result, _ = chat_with_fallback(
         system=_CHAPTER_SYSTEM, user=user_prompt, use_grounding=True,
+        timeout=120, max_total_seconds=300,
     )
 
     return result.content.strip(), _extract_usage(result)
@@ -286,7 +294,7 @@ def _write_full_book_impl(book_id: str) -> None:
             log.info("Wrote chapter %d/%d for book %s", ch["number"], len(chapters), book_id)
         except Exception as exc:
             log.error("Failed writing chapter %d for book %s: %s", ch["number"], book_id, exc)
-            update_ai_book_status(book_id, "failed")
+            update_ai_book_status(book_id, "failed", error=f"Chapter {ch['number']}: {exc}")
             return
 
     # Combine all chapters into full text for indexing
@@ -308,7 +316,7 @@ def _write_full_book_impl(book_id: str) -> None:
         log.info("Book %s completed and indexed (%s)", book_id, outline.get("title"))
     except Exception as exc:
         log.error("Indexing failed for book %s: %s", book_id, exc)
-        update_ai_book_status(book_id, "failed")
+        update_ai_book_status(book_id, "failed", error=f"Indexing: {exc}")
 
 
 def _index_partial_book(book_id: str) -> None:
