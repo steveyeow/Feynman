@@ -174,7 +174,12 @@ class GeminiProvider(BaseProvider):
         for batch_idx, i in enumerate(range(0, len(texts), _BATCH_LIMIT)):
             batch = texts[i : i + _BATCH_LIMIT]
 
-            if sent_this_window + len(batch) > _RPM_LIMIT:
+            # Throttle by REQUESTS, not texts: Gemini's RPM quota counts API
+            # calls, and each batchEmbedContents call (≤100 texts) is one call.
+            # Counting texts made every full batch trip a 95 limit and sleep
+            # ~60s/batch — which crawled AND killed any >95-chunk book against
+            # the 60s function budget (it never finished embedding).
+            if sent_this_window + 1 > _RPM_LIMIT:
                 elapsed = time.monotonic() - window_start
                 if elapsed < 60:
                     wait = 61 - elapsed
@@ -204,7 +209,7 @@ class GeminiProvider(BaseProvider):
                         window_start = time.monotonic()
                     else:
                         raise
-            sent_this_window += len(batch)
+            sent_this_window += 1
             for item in data.get("embeddings", []):
                 all_embeddings.append(item.get("values", []))
         return all_embeddings

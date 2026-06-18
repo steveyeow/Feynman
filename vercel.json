@@ -1,7 +1,7 @@
 {
   "regions": ["sfo1"],
   "builds": [
-    { "src": "app/main.py", "use": "@vercel/python", "config": { "maxDuration": 60 } }
+    { "src": "app/main.py", "use": "@vercel/python", "config": { "maxDuration": 300 } }
   ],
   "routes": [
     { "src": "/(.*)", "dest": "app/main.py" }
