@@ -3731,8 +3731,16 @@ def api_cron_index_pending_content(request: Request) -> dict[str, Any]:
         batch = max(1, min(int(request.query_params.get("batch", "4")), 10))
     except (TypeError, ValueError):
         batch = 4
+    # Optional sharding: N concurrent drain loops pass ?of=N&shard=k to split the
+    # staging table into disjoint hash-buckets (safe parallelism, no double-pop).
+    try:
+        of = int(request.query_params.get("of", "0")) or None
+        shard = int(request.query_params.get("shard", "0"))
+    except (TypeError, ValueError):
+        of = None
+        shard = 0
     indexed = failed = 0
-    for row in pop_pending_content(limit=batch):
+    for row in pop_pending_content(limit=batch, shard=shard, of=of):
         aid = row["agent_id"]
         try:
             index_text(aid, row["text"], replace_existing=True)

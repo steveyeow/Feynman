@@ -308,13 +308,28 @@ def stage_pending_content(agent_id: str, text: str, source: str) -> None:
                 (agent_id, source, text, _utcnow()))
 
 
-def pop_pending_content(limit: int = 5) -> list[dict[str, Any]]:
+def pop_pending_content(
+    limit: int = 5, shard: int | None = None, of: int | None = None
+) -> list[dict[str, Any]]:
     # random() order, not created_at — so a row that fails to index (and is left
     # in place for retry) can't sit at the head and stall the whole drain.
+    #
+    # Sharding: when `of` > 1, restrict to a disjoint hash-bucket of agent_ids
+    # (mod, not the `%` operator, to avoid clashing with psycopg2's %s params).
+    # This lets N concurrent drain loops (shard=0..of-1) run without ever popping
+    # the same row — no claim column / row lock needed, since a given agent_id
+    # always lands in the same bucket.
+    where = ""
+    params: list[Any] = []
+    if of and of > 1 and shard is not None:
+        where = "WHERE mod(abs(hashtext(agent_id)::bigint), ?) = ?"
+        params = [of, int(shard) % of]
+    params.append(limit)
     with get_conn() as conn:
         cur = _execute(conn, _q(
-            "SELECT agent_id, source, text FROM pending_content ORDER BY random() LIMIT ?"
-        ), (limit,))
+            f"SELECT agent_id, source, text FROM pending_content {where} "
+            "ORDER BY random() LIMIT ?"
+        ), tuple(params))
         rows = cur.fetchall()
     return [{"agent_id": r[0], "source": r[1], "text": r[2]} for r in rows]
 
