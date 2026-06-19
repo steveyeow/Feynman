@@ -334,6 +334,20 @@ function WritingProgress({
       ? "All chapters complete"
       : `Chapter ${Math.min(done + 1, total)} of ${total}`;
 
+  // Inline reading: a chapter with saved body text can be expanded to read it
+  // right here in the canvas (no jump to /read). Single-open keeps the panel
+  // tidy; the first written chapter auto-opens once the book is complete.
+  const [openCh, setOpenCh] = useState<number | null>(null);
+  const autoOpened = useRef(false);
+  const firstWritten =
+    chapters.find((c) => (content?.[String(c.number)]?.content || "").trim())?.number ?? null;
+  useEffect(() => {
+    if (!autoOpened.current && state === "completed" && firstWritten != null) {
+      setOpenCh(firstWritten);
+      autoOpened.current = true;
+    }
+  }, [state, firstWritten]);
+
   return (
     <>
       <div className="canvas-book-header">
@@ -366,10 +380,12 @@ function WritingProgress({
 
       <div className="writing-progress-chapters">
         {chapters.map((c) => {
-          // On resume the full book carries per-chapter content + word_count;
-          // the live /status poll does not (so words only show post-resume,
-          // matching production) — port of _renderCanvasWritingProgress.
+          // Once content is loaded (on completion / resume) the full book carries
+          // per-chapter body + word_count; the live /status poll does not — so a
+          // chapter only becomes readable here once its body is present.
           const chData = content?.[String(c.number)];
+          const body = (chData?.content || "").trim();
+          const hasBody = !!body;
           let stateClass = "pending";
           let icon = "—";
           let detail = "Waiting...";
@@ -390,16 +406,62 @@ function WritingProgress({
             icon = "✎";
             detail = "Writing...";
           }
+          const isOpen = hasBody && openCh === c.number;
           return (
-            <div key={c.number} className={`progress-ch ${stateClass}`}>
-              <div className={`progress-ch-icon ${stateClass}`}>{icon}</div>
-              <div className="progress-ch-info">
-                <div className="progress-ch-title">
-                  Ch.{c.number}: {c.title}
+            <div key={c.number}>
+              <div
+                className={`progress-ch ${stateClass}`}
+                onClick={hasBody ? () => setOpenCh(isOpen ? null : c.number) : undefined}
+                style={hasBody ? { cursor: "pointer" } : undefined}
+                role={hasBody ? "button" : undefined}
+                aria-expanded={hasBody ? isOpen : undefined}
+                title={hasBody ? (isOpen ? "Hide chapter" : "Read chapter") : undefined}
+              >
+                <div className={`progress-ch-icon ${stateClass}`}>{icon}</div>
+                <div className="progress-ch-info">
+                  <div className="progress-ch-title">
+                    Ch.{c.number}: {c.title}
+                  </div>
+                  <div className="progress-ch-detail">{isOpen ? "Reading" : detail}</div>
                 </div>
-                <div className="progress-ch-detail">{detail}</div>
+                {words && <div className="progress-ch-words">{words}</div>}
+                {hasBody && (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{
+                      flexShrink: 0,
+                      marginLeft: 8,
+                      opacity: 0.45,
+                      transform: isOpen ? "rotate(180deg)" : undefined,
+                      transition: "transform .15s ease",
+                    }}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
               </div>
-              <div className="progress-ch-words">{words}</div>
+              {isOpen && (
+                <div
+                  className="canvas-ch-body"
+                  style={{
+                    padding: "4px 10px 18px 40px",
+                    fontSize: 14,
+                    lineHeight: 1.75,
+                    color: "var(--text-primary, #1d1d1f)",
+                  }}
+                >
+                  {body.split(/\n{2,}/).map((para, i) => (
+                    <p key={i} style={{ margin: "0 0 12px", whiteSpace: "pre-wrap" }}>
+                      {para.trim()}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

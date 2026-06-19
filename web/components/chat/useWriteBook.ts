@@ -160,7 +160,24 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
             return;
           }
           setStatus(s);
-          if (TERMINAL.includes(s.status)) stopPolling();
+          if (TERMINAL.includes(s.status)) {
+            stopPolling();
+            // The lightweight /status poll carries no chapter bodies. On
+            // completion, pull the full book once so the canvas can show the
+            // written content inline (read-in-place) without needing a reopen.
+            if (s.status === "completed") {
+              try {
+                const full = await getBook(id);
+                if (bookIdRef.current === id) {
+                  setStatus(full);
+                  setOutline(full.outline);
+                  setBookContent(full.content || null);
+                }
+              } catch {
+                /* keep the lightweight status; content shows on next open */
+              }
+            }
+          }
         } catch {
           // Transient poll error — keep trying on the next tick (port of the
           // app.js poll() try/catch console.warn).
