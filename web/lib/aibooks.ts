@@ -50,9 +50,15 @@ export interface StartResult {
 }
 
 export interface ChatResult {
-  outline: Outline;
-  /** The assistant's reply to the refinement message. */
+  /** Updated outline (outline refine, or a finished-book retitle/reply). Absent
+   *  when the chat triggered a rewrite (the book goes back to writing). */
+  outline?: Outline;
+  /** The assistant's reply to the message. */
   response: string;
+  /** "writing" when the chat triggered a full rewrite (regenerate every chapter). */
+  status?: AiBookStatus;
+  /** Chapter count, present when a rewrite started. */
+  chaptersTotal?: number;
 }
 
 /** Normalized status, derived fields included for progress UI. */
@@ -132,17 +138,28 @@ export async function startBook(
   };
 }
 
-/** Phase 2: refine the outline conversationally. */
+/**
+ * Phase 2: edit the book through chat. While outlining this refines the outline;
+ * once written, the backend ACTS — it may retitle, just reply, or trigger a full
+ * rewrite (returns status:"writing"), so the chat is the editor (no separate button).
+ */
 export async function chatBook(
   bookId: string,
   message: string,
   history: { role: string; content: string }[] = [],
 ): Promise<ChatResult> {
-  const data = await post<{ outline: Outline; response: string }>(
-    `/api/ai-books/${encodeURIComponent(bookId)}/chat`,
-    { message, history },
-  );
-  return { outline: data.outline || {}, response: data.response || "" };
+  const data = await post<{
+    outline?: Outline;
+    response: string;
+    status?: AiBookStatus;
+    chapters_total?: number;
+  }>(`/api/ai-books/${encodeURIComponent(bookId)}/chat`, { message, history });
+  return {
+    outline: data.outline,
+    response: data.response || "",
+    status: data.status,
+    chaptersTotal: data.chapters_total,
+  };
 }
 
 /** Confirm the outline; the backend starts writing chapters in the background. */

@@ -132,6 +132,7 @@ from .core.url_fetch import fetch_url_as_book_text
 from .core.ai_writer import (
     all_outline_chapters_have_content,
     generate_outline,
+    plan_finished_book_edit,
     refine_outline,
     translate_outline,
     write_full_book,
@@ -5157,9 +5158,38 @@ def api_ai_book_start(payload: AIBookStartRequest, request: Request) -> dict[str
     }
 
 
+def _start_book_rewrite(
+    book: dict[str, Any], language: str, user_id: str, background_tasks: BackgroundTasks
+) -> int:
+    """Regenerate a finished book's chapters in *language*: re-language the outline
+    (title + TOC) to match, clear the old chapter bodies, and kick the writer.
+    Shared by the chat (when the user asks to rewrite/translate) and the /rewrite
+    endpoint. Raises ProviderError if the outline translation fails. Returns the
+    chapter count."""
+    translated, _usage = translate_outline(book["outline"], language)
+    update_ai_book_outline(book["id"], translated)
+    new_title = (translated.get("title") or book["title"] or "").strip()
+    if new_title:
+        rename_agent(book["agent_id"], new_title)
+    reset_ai_book_for_rewrite(book["id"], language)
+    creator_name = book.get("preferences", {}).get("creator_name", "") or _resolve_creator_name(user_id)
+    update_agent_status(book["agent_id"], "writing", {
+        "title": new_title or book["title"],
+        "is_ai_generated": True,
+        "creator_name": creator_name or "User",
+        "creator_user_id": user_id,
+    })
+    background_tasks.add_task(write_full_book, book["id"])
+    background_tasks.add_task(_revalidate_book_share, book["agent_id"])
+    return book.get("chapters_total") or len(translated.get("chapters") or [])
+
+
 @app.post("/api/ai-books/{book_id}/chat")
 def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    """Refine the book outline through conversation."""
+    """Edit the book through chat. While OUTLINING this refines the outline; once
+    the book is WRITTEN the chat ACTS on intent — regenerate the whole book (incl. a
+    language change), retitle it, or just reply — so the left chat is the editor and
+    there is no separate Rewrite button."""
     _check_quota(request, "chat")
     user_id = _get_user_id(request) or "anon"
 
@@ -5168,10 +5198,7 @@ def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request,
         raise HTTPException(status_code=404, detail="AI book not found")
     if book["user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    # In-flight states (about to write / actively writing) can't be edited — the
-    # background writer reads the outline mid-run. Any other state is editable;
-    # for an already-written book the edit is constrained to title/metadata below
-    # so it can't desync from the chapters already on disk.
+    # Can't edit mid-flight — the background writer is reading the outline.
     if book["status"] in ("confirmed", "writing"):
         raise HTTPException(status_code=409, detail="The book is being written right now — wait until it finishes, then you can edit it.")
 
@@ -5179,65 +5206,77 @@ def api_ai_book_chat(book_id: str, payload: AIBookChatRequest, request: Request,
     if payload.history:
         history = [{"role": m.role, "content": m.content} for m in payload.history]
 
-    # On a finished book, let the chat SEE how the chapters are actually written
-    # (a short sample) so it answers honestly and routes content/language changes
-    # to Rewrite instead of silently (and wrongly) re-languaging the outline.
-    already_written = book["status"] != "outlining"
-    content_sample: str | None = None
-    if already_written:
-        _content = book.get("content") or {}
-        _samples = []
-        for _ch in (book["outline"].get("chapters") or [])[:2]:
-            _body = (_content.get(str(_ch.get("number")), {}).get("content") or "").strip()
-            if _body:
-                _samples.append(_body[:200])
-        content_sample = "\n…\n".join(_samples) or None
+    # ── OUTLINING: free outline refinement ──────────────────────────────────
+    if book["status"] == "outlining":
+        try:
+            updated_outline, response_text, usage = refine_outline(
+                book["outline"], payload.message, history=history,
+            )
+        except ProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Refinement failed: {exc}")
+        update_ai_book_outline(book_id, updated_outline)
+        new_title = (updated_outline.get("title") or book["title"] or "").strip()
+        if new_title and new_title != (book["title"] or ""):
+            rename_agent(book["agent_id"], new_title)
+        else:
+            update_agent_meta(book["agent_id"], {"title": new_title or book["title"]})
+        _track_usage(request, "ai_book", usage.get("total_tokens", 0))
+        return {"outline": updated_outline, "response": response_text, "usage": usage}
+
+    # ── WRITTEN book: the chat ACTS (rewrite / retitle / reply) ──────────────
+    # Give the model a short sample of the real chapter text so it judges a
+    # content/language complaint correctly instead of guessing from the outline.
+    _content = book.get("content") or {}
+    _samples = []
+    for _ch in (book["outline"].get("chapters") or [])[:2]:
+        _body = (_content.get(str(_ch.get("number")), {}).get("content") or "").strip()
+        if _body:
+            _samples.append(_body[:200])
+    content_sample = "\n…\n".join(_samples) or None
 
     try:
-        updated_outline, response_text, usage = refine_outline(
-            book["outline"], payload.message, history=history,
-            already_written=already_written, content_sample=content_sample,
+        plan, usage = plan_finished_book_edit(
+            book["outline"], payload.message, history=history, content_sample=content_sample,
         )
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Refinement failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Edit failed: {exc}")
 
-    # An already-written book keeps its chapter structure (content is on disk and
-    # isn't rewritten here) — only title/subtitle/category may change. An
-    # outlining book can still be restructured freely.
-    if book["status"] != "outlining":
+    action = plan.get("action")
+    reply = plan.get("reply") or "Done."
+    _track_usage(request, "ai_book", usage.get("total_tokens", 0))
+
+    if action == "rewrite":
+        # Regenerate every chapter (often in another language) — re-language the
+        # outline, clear the bodies, kick the writer. The frontend flips the canvas
+        # to live writing progress on `status:"writing"`.
+        lang = (plan.get("language") or book.get("preferences", {}).get("language") or "en").strip()
+        try:
+            total = _start_book_rewrite(book, lang, user_id, background_tasks)
+        except ProviderError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Rewrite failed: {exc}")
+        return {"response": reply, "status": "writing", "chapters_total": total}
+
+    if action == "retitle":
+        # Title/subtitle/category only — keep the written chapters (no rewrite).
         preserved = dict(book["outline"] or {})
         for key in ("title", "subtitle", "category"):
-            if updated_outline.get(key):
-                preserved[key] = updated_outline[key]
-        updated_outline = preserved
-
-    update_ai_book_outline(book_id, updated_outline)
-    # update_ai_book_outline syncs ai_books.title; also push the new title to the
-    # agent (agents.name + meta.title) so the library, reader, and a finished
-    # book's canvas reflect it. rename_agent keeps all three in sync — the old
-    # meta-only bump left agents.name/ai_books.title stale, so a finished book's
-    # displayed title never changed.
-    new_title = (updated_outline.get("title") or book["title"] or "").strip()
-    if new_title and new_title != (book["title"] or ""):
-        rename_agent(book["agent_id"], new_title)
-    else:
-        update_agent_meta(book["agent_id"], {"title": new_title or book["title"]})
-
-    # A published book (completed/failed/cancelled) has live SEO + share pages,
-    # and its title/subtitle/category just changed — bust the Next ISR page + ssr
-    # data cache now so the Twitter/X card's og:title/og:image don't stay stale
-    # for up to 24h. Skipped for outlining drafts (not shared yet).
-    if book["status"] != "outlining":
+            if plan.get(key):
+                preserved[key] = plan[key]
+        update_ai_book_outline(book_id, preserved)
+        new_title = (preserved.get("title") or book["title"] or "").strip()
+        if new_title and new_title != (book["title"] or ""):
+            rename_agent(book["agent_id"], new_title)
         background_tasks.add_task(_revalidate_book_share, book["agent_id"])
+        return {"response": reply, "outline": preserved}
 
-    _track_usage(request, "ai_book", usage.get("total_tokens", 0))
-    return {
-        "outline": updated_outline,
-        "response": response_text,
-        "usage": usage,
-    }
+    # action == "reply" — answer only, change nothing.
+    return {"response": reply, "outline": book["outline"]}
 
 
 @app.post("/api/ai-books/{book_id}/confirm")
@@ -5271,11 +5310,9 @@ def api_ai_book_confirm(book_id: str, request: Request, background_tasks: Backgr
 
 @app.post("/api/ai-books/{book_id}/rewrite")
 def api_ai_book_rewrite(book_id: str, payload: AIBookRewriteRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
-    """Regenerate a finished book's chapters from scratch in a target language —
-    the post-completion Rewrite flow. Re-languages the outline (title + TOC) to
-    match, clears the existing chapters, and re-runs the writer. This is how a
-    written book's CONTENT/language is changed (the chat refine only edits the
-    outline, never the bodies)."""
+    """Regenerate a finished book's chapters in a target language. The chat now
+    drives this (see api_ai_book_chat → _start_book_rewrite); this endpoint is the
+    same flow exposed directly for programmatic callers."""
     user_id = _get_user_id(request) or "anon"
     book = get_ai_book(book_id)
     if not book:
@@ -5284,36 +5321,13 @@ def api_ai_book_rewrite(book_id: str, payload: AIBookRewriteRequest, request: Re
         raise HTTPException(status_code=403, detail="Access denied")
     if book["status"] in ("confirmed", "writing"):
         raise HTTPException(status_code=409, detail="The book is being written right now — wait until it finishes.")
-
-    # Re-language the outline first so the title/TOC match the rewritten chapters
-    # (the bodies follow the outline's language when regenerated).
     try:
-        translated, usage = translate_outline(book["outline"], payload.language)
+        total = _start_book_rewrite(book, payload.language, user_id, background_tasks)
     except ProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Rewrite setup failed: {exc}")
-
-    update_ai_book_outline(book_id, translated)
-    new_title = (translated.get("title") or book["title"] or "").strip()
-    if new_title:
-        rename_agent(book["agent_id"], new_title)
-
-    # Clear the old chapters + set the target language, then kick the writer.
-    reset_ai_book_for_rewrite(book_id, payload.language)
-    creator_name = book.get("preferences", {}).get("creator_name", "") or _resolve_creator_name(user_id)
-    update_agent_status(book["agent_id"], "writing", {
-        "title": new_title or book["title"],
-        "is_ai_generated": True,
-        "creator_name": creator_name or "User",
-        "creator_user_id": user_id,
-    })
-
-    background_tasks.add_task(write_full_book, book_id)
-    background_tasks.add_task(_revalidate_book_share, book["agent_id"])
-
-    _track_usage(request, "ai_book", usage.get("total_tokens", 0))
-    return {"status": "writing", "chapters_total": book["chapters_total"]}
+    return {"status": "writing", "chapters_total": total}
 
 
 @app.post("/api/ai-books/{book_id}/cancel")

@@ -25,7 +25,6 @@ import {
   startBook,
   chatBook,
   confirmBook,
-  rewriteBook,
   getStatus,
   getBook,
   cancelBook,
@@ -84,8 +83,6 @@ export interface WriteBookState {
   confirm: () => Promise<void>;
   cancel: () => Promise<void>;
   retry: () => Promise<void>;
-  /** Regenerate every chapter from scratch in `language` (post-completion). */
-  rewrite: (language: string) => Promise<void>;
 }
 
 function describeError(e: unknown, fallback: string): string {
@@ -312,16 +309,30 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
         return;
       }
 
-      // Phase 2: outline exists → refine it (history = last 6 turns, like prod).
+      // Phase 2: the book exists → the chat edits it. Outlining refines the
+      // outline; a written book may be retitled, answered, or fully rewritten —
+      // the backend decides and acts (no separate Rewrite button).
       setBusy(true);
       try {
         const res = await chatBook(bookIdRef.current, message, priorHistory);
         if (genRef.current !== gen) return;
-        setOutline(res.outline);
         cbRef.current.onAssistant(res.response);
+
+        // The chat triggered a full rewrite: the backend already re-languaged the
+        // outline, cleared the bodies, and kicked the writer. Flip the canvas to
+        // live writing progress (the new chapters stream in via the poll).
+        if (res.status === "writing") {
+          const id = bookIdRef.current;
+          setBookContent(null);
+          setStatus(null);
+          setPhase("writing");
+          if (id) startPolling(id);
+          return;
+        }
+
+        if (res.outline) setOutline(res.outline);
         // A finished book's canvas shows `status.title` (not `outline.title`) and
-        // polling is stopped — so after editing it (e.g. a title fix) refetch once
-        // to surface the new title/metadata.
+        // polling is stopped — so after a retitle refetch once to surface it.
         const refetchId = bookIdRef.current;
         if (statusRef.current && refetchId) {
           try {
@@ -332,7 +343,7 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
               setBookContent(fresh.content || null);
             }
           } catch {
-            /* keep the refine result we already applied */
+            /* keep the result we already applied */
           }
         }
       } catch (err) {
@@ -344,7 +355,7 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
         if (genRef.current === gen) setBusy(false);
       }
     },
-    [busy, sessionId],
+    [busy, sessionId, startPolling],
   );
 
   // ── Confirm + poll (port of _confirmWriteBook) ─────────────────────────
@@ -399,30 +410,6 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
     }
   }, [startPolling]);
 
-  // ── Rewrite (regenerate every chapter, optionally in a new language) ──────
-  const rewrite = useCallback(
-    async (language: string) => {
-      const id = bookIdRef.current;
-      if (!id) return;
-      setError(null);
-      try {
-        await rewriteBook(id, language);
-        // Drop the old chapters so the canvas shows fresh progress, not stale
-        // bodies as "done"; the new ones repopulate when writing completes.
-        setBookContent(null);
-        setPhase("writing");
-        cbRef.current.onAssistant(
-          "Rewriting the whole book from scratch — I'll regenerate every chapter. " +
-            "You can watch the progress on the right.",
-        );
-        startPolling(id);
-      } catch (err) {
-        setError(describeError(err, "Couldn't start the rewrite. Try again."));
-      }
-    },
-    [startPolling],
-  );
-
   return {
     phase,
     outline,
@@ -437,6 +424,5 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
     confirm,
     cancel,
     retry,
-    rewrite,
   };
 }

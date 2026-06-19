@@ -41,7 +41,6 @@ interface BookCanvasProps {
   onConfirm: () => void;
   onCancel: () => void;
   onRetry: () => void;
-  onRewrite: (language: string) => void;
 }
 
 export default function BookCanvas({
@@ -56,7 +55,6 @@ export default function BookCanvas({
   onConfirm,
   onCancel,
   onRetry,
-  onRewrite,
 }: BookCanvasProps) {
   return (
     <aside
@@ -76,7 +74,6 @@ export default function BookCanvas({
             content={content}
             onCancel={onCancel}
             onRetry={onRetry}
-            onRewrite={onRewrite}
           />
         )}
         {error && <p className="canvas-error">{error}</p>}
@@ -208,91 +205,6 @@ function CanvasActions({ readId, title }: { readId: string; title: string }) {
   );
 }
 
-// ── Rewrite menu: regenerate the whole book in another language ──────────────
-const REWRITE_LANGS: { code: string; label: string }[] = [
-  { code: "en", label: "English" },
-  { code: "zh", label: "中文" },
-  { code: "es", label: "Español" },
-  { code: "fr", label: "Français" },
-  { code: "ja", label: "日本語" },
-  { code: "ko", label: "한국어" },
-  { code: "de", label: "Deutsch" },
-];
-
-/** "Rewrite" control on a finished book — the ONLY way to change the chapter
- *  bodies / language (chat refine edits the outline, never the written text).
- *  Picks a language → confirm → regenerate every chapter. */
-function RewriteMenu({
-  chapterCount,
-  onRewrite,
-}: {
-  chapterCount: number;
-  onRewrite: (language: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
-  }, [open]);
-  const pick = (code: string, label: string) => {
-    setOpen(false);
-    const n = chapterCount || 0;
-    if (
-      window.confirm(
-        `Rewrite ${n ? `all ${n} chapters` : "the book"} in ${label}? This replaces the current text and takes a few minutes.`,
-      )
-    ) {
-      onRewrite(code);
-    }
-  };
-  return (
-    // Tertiary action: a restrained centered text link under the primary
-    // Chat/Read/Share row — NOT a fourth full-width pill (rewriting is rare +
-    // expensive, so it shouldn't compete with the primary actions). The language
-    // menu reuses the share-popup (opens upward, centered on the trigger).
-    <div className="canvas-rewrite-wrap">
-      <div
-        className={`canvas-share-wrap${open ? " open" : ""}`}
-        ref={wrapRef}
-        style={{ display: "inline-block" }}
-      >
-        <button
-          type="button"
-          className="canvas-rewrite-trigger"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen((o) => !o);
-          }}
-          title="Regenerate every chapter, optionally in another language"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>
-          Rewrite in another language
-        </button>
-        <div className="canvas-share-popup">
-          {REWRITE_LANGS.map((l) => (
-            <button
-              key={l.code}
-              type="button"
-              className="canvas-share-opt"
-              onClick={() => pick(l.code, l.label)}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Outline accordion (port of _renderCanvasOutline) ─────────────────────────
 function OutlineView({
   outline,
@@ -392,7 +304,6 @@ function WritingProgress({
   content,
   onCancel,
   onRetry,
-  onRewrite,
 }: {
   status: BookStatus | null;
   fallbackChapters: OutlineChapter[];
@@ -400,7 +311,6 @@ function WritingProgress({
   content?: CanvasContent | null;
   onCancel: () => void;
   onRetry: () => void;
-  onRewrite: (language: string) => void;
 }) {
   const chapters = status?.outline?.chapters?.length
     ? status.outline.chapters
@@ -563,9 +473,6 @@ function WritingProgress({
           <div className="canvas-done-label">Your book is ready!</div>
           {/* Chat + Read + Share — the full production completed footer. */}
           <CanvasActions readId={readId} title={title} />
-          {/* The only way to change the written chapters / their language: a full
-              regenerate (chat refine edits the outline, not the bodies). */}
-          <RewriteMenu chapterCount={total} onRewrite={onRewrite} />
         </>
       )}
 
