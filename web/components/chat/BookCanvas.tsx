@@ -420,7 +420,9 @@ function WritingProgress({
           {/* Red, specific failure point + Retry only — matches production
               (no read/chat/share on failure). */}
           <div className="canvas-done-label" style={{ color: "var(--error-color, #e55)" }}>
-            Writing failed at chapter {done + 1} of {total}
+            {done >= total
+              ? "Writing failed while finalizing the book"
+              : `Writing failed at chapter ${done + 1} of ${total}`}
           </div>
           {status?.error && <p className="canvas-error">{status.error}</p>}
           <div className="canvas-done-actions">

@@ -37,7 +37,9 @@ _REFINE_SYSTEM = (
     "Wrap the JSON in ```json and ``` markers. The JSON must have the same structure: "
     "{title, subtitle, category, chapters: [{number, title, summary, key_points, estimated_words}]}.\n\n"
     "If the user's request doesn't require outline changes, return the outline unchanged. "
-    "Always respond in the same language as the user."
+    "If the user asks to change the book's language (e.g. \"write it in English\"), rewrite the "
+    "outline — titles, summaries, and key points — in that language. "
+    "Write your conversational reply in the user's language."
 )
 
 _CHAPTER_SYSTEM = (
@@ -98,7 +100,9 @@ def generate_outline(
         f"Create a book outline based on this description:\n\n{description}\n\n"
         f"Writing style: {style}\n"
         f"Target length: {length_guide.get(length, length_guide['medium'])}\n"
-        f"Language: {lang_names.get(language, language)}\n"
+        f"Language: write the outline in {lang_names.get(language, language)} — UNLESS the "
+        f"description explicitly asks for another language (e.g. \"write in English\", \"用英文写\"), "
+        f"in which case follow that request.\n"
     )
     if prefs.get("focus_areas"):
         user_prompt += f"Focus areas: {', '.join(prefs['focus_areas'])}\n"
@@ -181,7 +185,9 @@ def write_chapter(
         f"Book: \"{outline.get('title', 'Untitled')}\" — {outline.get('subtitle', '')}\n"
         f"Total chapters: {len(outline.get('chapters', []))}\n"
         f"Writing style: {style}\n"
-        f"Language: {lang_names.get(language, language)}\n"
+        f"Language: write this chapter in the SAME language as the outline below (its titles "
+        f"and summaries) — that is the book's language, regardless of the language of these "
+        f"instructions.\n"
     )
 
     if previous_summaries:
