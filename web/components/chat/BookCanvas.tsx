@@ -251,33 +251,43 @@ function RewriteMenu({
     }
   };
   return (
-    <div className={`canvas-share-wrap${open ? " open" : ""}`} ref={wrapRef} style={{ marginTop: 8 }}>
-      <button
-        type="button"
-        className="canvas-action-btn canvas-share-trigger"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((o) => !o);
-        }}
-        title="Regenerate the chapters, optionally in another language"
+    // Tertiary action: a restrained centered text link under the primary
+    // Chat/Read/Share row — NOT a fourth full-width pill (rewriting is rare +
+    // expensive, so it shouldn't compete with the primary actions). The language
+    // menu reuses the share-popup (opens upward, centered on the trigger).
+    <div className="canvas-rewrite-wrap">
+      <div
+        className={`canvas-share-wrap${open ? " open" : ""}`}
+        ref={wrapRef}
+        style={{ display: "inline-block" }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="23 4 23 10 17 10" />
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        </svg>
-        Rewrite
-      </button>
-      <div className="canvas-share-popup">
-        {REWRITE_LANGS.map((l) => (
-          <button
-            key={l.code}
-            type="button"
-            className="canvas-share-opt"
-            onClick={() => pick(l.code, l.label)}
-          >
-            Rewrite in {l.label}
-          </button>
-        ))}
+        <button
+          type="button"
+          className="canvas-rewrite-trigger"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
+          title="Regenerate every chapter, optionally in another language"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          Rewrite in another language
+        </button>
+        <div className="canvas-share-popup">
+          {REWRITE_LANGS.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              className="canvas-share-opt"
+              onClick={() => pick(l.code, l.label)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
