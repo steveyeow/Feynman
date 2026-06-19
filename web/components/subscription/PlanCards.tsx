@@ -18,7 +18,7 @@ import { track } from "@/lib/analytics";
 export const FREE_FEATURES = [
   "Chat with any book in your library",
   "Answers rooted in the book — and beyond, with broader relevant context",
-  "Great minds join your first chats",
+  "Invite great minds to chat (3 replies/day)",
   "Discover books & topics (3/day)",
   "Upload up to 3 books (PDF / EPUB / TXT / MD)",
 ];
@@ -28,8 +28,7 @@ export const PRO_FEATURES = [
   "Upload more books",
   "Discover more books in chat & library",
   "Write the book you need — on-demand, on any topic",
-  "Great minds continuously join chats",
-  "Invite great minds into your chats",
+  "Unlimited mind chat replies",
   "Join any symposium and continue the debate live",
   "Upload your own minds or from any source",
   "Discover & expand the minds network",

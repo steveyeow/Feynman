@@ -188,9 +188,7 @@ export default function ChatView({
    *  RelatedBooks sidebar when omitted. */
   rightSidebar?: ReactNode;
 }) {
-  // Pro-gate for inviting minds (hosted build). On open-source, isProUser is
-  // always true so requirePro() runs through.
-  const { requirePro, isProUser } = useProGate();
+  const { isProUser } = useProGate();
 
   // The session row (title + share state). Loaded client-side with a stub
   // fallback so the chat works even when the row can't be fetched.
@@ -802,10 +800,6 @@ export default function ChatView({
       const effBooks = override?.books ?? books;
       const effMinds = override?.minds ?? minds;
 
-      // Inviting minds requires pro on the hosted build (legacy app.js 3149).
-      // The minds popover already gates selection; this is the backstop on send.
-      if (effMinds.size && !requirePro()) return;
-
       // @-mention parsing (port of parseMentions). Known names = minds already
       // active in the conversation + the chip-selected minds. Mentions targeting
       // one of these route the question to that mind on send.
@@ -934,7 +928,7 @@ export default function ChatView({
         await inviteMinds(gen, working, cleanMessage, bookCtx, agentIds, effMinds, mentionedNames);
       }
     },
-    [books, minds, messages, sessionId, buildHistory, inviteMinds, requirePro],
+    [books, minds, messages, sessionId, buildHistory, inviteMinds],
   );
 
   // ── Write-book flow (ai-books pipeline for write_book sessions) ──

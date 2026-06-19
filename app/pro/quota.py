@@ -7,7 +7,7 @@ from ..core.db import count_usage_today, count_user_uploads, count_ai_books_this
 QUOTA_LIMITS = {
     "free": {
         "chat": 15,
-        "mind_chat": 5,
+        "mind_chat": 3,
         "discover": 3,
         "generate_mind": 0,
         "upload": 2,
@@ -54,7 +54,7 @@ def check_quota(request: Request, action: str) -> None:
     if used >= limit:
         messages = {
             "chat": "You've used all your daily chats. Upgrade to Pro for 200 chats/day.",
-            "mind_chat": "You've reached your daily mind conversations limit. Upgrade to Pro for 100/day.",
+            "mind_chat": "You've used your 3 daily mind chat replies. Upgrade to Pro for 100/day.",
             "generate_mind": "Great minds are waiting to join your discussions. Upgrade to Pro for unlimited mind suggestions.",
             "discover": "You've used all your daily discoveries. Upgrade to Pro to discover 50 books/day.",
         }

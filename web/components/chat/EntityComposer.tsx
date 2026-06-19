@@ -21,7 +21,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSession, bumpSessions } from "@/lib/chat";
-import { useProGate } from "@/components/pro/ProOverlay";
 import { track } from "@/lib/analytics";
 import Composer from "./Composer";
 import type { SelectedBook, SelectedMind } from "./ComposerPickers";
@@ -39,7 +38,6 @@ export default function EntityComposer({
   placeholder?: string;
 }) {
   const router = useRouter();
-  const { requirePro } = useProGate();
   const [books, setBooks] = useState<Map<string, SelectedBook>>(
     () =>
       new Map([
@@ -52,8 +50,6 @@ export default function EntityComposer({
   const start = async (message: string) => {
     const msg = message.trim();
     if (!msg || busy) return;
-    // Inviting minds is the pro path — same backstop as the home composer.
-    if (minds.size && !requirePro()) return;
     setBusy(true);
     try {
       const session = await createSession({ title: "New chat", sessionType: "chat" });

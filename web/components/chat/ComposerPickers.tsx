@@ -258,7 +258,7 @@ export function MindsPopover({
   // the in-flight fetch to be cancelled by the cleanup → stuck on "Loading…").
   const loadedRef = useRef(false);
   // Inviting minds is a pro feature on the hosted build (legacy app.js 4804).
-  const { isProUser, showProOverlay } = useProGate();
+  const { isProUser } = useProGate();
 
   // Mint a brand-new mind from the search query and select it (port of
   // _inviteComposerMind → /api/minds/generate {name, link_works:false}).
@@ -341,12 +341,10 @@ export function MindsPopover({
           : "No minds yet";
 
   // Empty-state branching (port of renderPopoverMindList's !filtered.length):
-  //   • non-pro  → "Upgrade to Pro to invite minds" (click → overlay)
   //   • pro + a query → an "Invite '<query>' to the network" action button
-  //   • pro + no query (or loading/error) → the default empty text
+  //   • otherwise     → the default empty text
   const noMatch = filtered.length === 0;
   const showInvite = noMatch && isProUser && !!query.trim() && state === "ready";
-  const showUpgradeHint = noMatch && !isProUser && state === "ready";
 
   return (
     <div
@@ -354,21 +352,6 @@ export function MindsPopover({
       className={`composer-popover${direction === "down" ? " composer-popover-down" : ""}`}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* Pro badge row — only shown to non-pro users (legacy index.html:247). */}
-      {!isProUser && (
-        <div className="popover-pro-row">
-          <button
-            type="button"
-            className="popover-pro-badge"
-            onClick={() => {
-              onClose();
-              showProOverlay();
-            }}
-          >
-            <span className="popover-pro-label">Pro</span> Upgrade
-          </button>
-        </div>
-      )}
       {/* Hint line (legacy index.html:248). */}
       <div className="popover-hint">
         Invite minds to join the discussion. More relevant minds will also join
@@ -415,18 +398,6 @@ export function MindsPopover({
                 </>
               )}
             </button>
-          ) : showUpgradeHint ? (
-            <button
-              type="button"
-              className="popover-empty"
-              onClick={() => {
-                onClose();
-                showProOverlay();
-              }}
-              style={{ cursor: "pointer", background: "none", border: "none", width: "100%", textAlign: "left" }}
-            >
-              Upgrade to Pro to invite minds
-            </button>
           ) : (
             <div className="popover-empty">{emptyText}</div>
           )
@@ -436,15 +407,8 @@ export function MindsPopover({
             return (
               <div
                 key={m.id}
-                className={`popover-mind-item${sel ? " selected" : ""}${!isProUser ? " locked" : ""}`}
+                className={`popover-mind-item${sel ? " selected" : ""}`}
                 onClick={() => {
-                  // Hosted build: non-pro users get the upgrade overlay instead
-                  // of selecting (legacy: closeAllPopovers(); showProOverlay()).
-                  if (!isProUser) {
-                    onClose();
-                    showProOverlay();
-                    return;
-                  }
                   onToggle({ id: m.id, name: m.name, domain: m.domain, era: m.era });
                 }}
               >

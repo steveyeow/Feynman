@@ -332,9 +332,6 @@ export default function HomeComposer() {
       router.push(search ? `/login?next=${encodeURIComponent(`/?${search}`)}` : "/login");
       return;
     }
-    // Inviting minds requires pro on the hosted build (legacy app.js 3149).
-    // The minds popover already gates selection; this is the backstop on send.
-    if (minds.size && !requirePro()) return;
     setBusy(true);
     try {
       const session = await createSession({ title: "New chat", sessionType: "chat" });
