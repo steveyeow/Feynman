@@ -132,31 +132,15 @@ def refine_outline(
     current_outline: dict[str, Any],
     user_message: str,
     history: list[dict[str, str]] | None = None,
-    already_written: bool = False,
-    content_sample: str | None = None,
 ) -> tuple[dict[str, Any], str, dict[str, int]]:
-    """Refine an outline based on user feedback.
+    """Refine an outline based on user feedback (OUTLINING stage only).
 
-    Returns (updated_outline, ai_response_text, usage_dict).
-
-    *already_written* marks a finished book: the chat may tweak title/subtitle but
-    must NOT try to change chapter bodies or their language by editing the outline
-    (that needs a Rewrite). *content_sample* lets the model see how the chapters
-    are actually written, so it answers honestly instead of guessing.
+    Returns (updated_outline, ai_response_text, usage_dict). A FINISHED book does
+    NOT route here — see plan_finished_book_edit (on a written book the chat ACTS:
+    regenerate / retitle / reply, instead of editing a now-frozen outline).
     """
     outline_str = json.dumps(current_outline, ensure_ascii=False, indent=2)
     system = f"{_REFINE_SYSTEM}\n\nCurrent outline:\n{outline_str}"
-    if already_written:
-        system += (
-            "\n\nIMPORTANT: this book is ALREADY fully written. You may adjust the title or "
-            "subtitle, but you CANNOT change the chapter bodies or the language they are written in "
-            "by editing this outline — that needs a full rewrite (the user can click \"Rewrite\" in "
-            "the book panel to regenerate every chapter, optionally in another language). If the user "
-            "asks to change the content or the writing language, tell them to use Rewrite; do NOT "
-            "restructure the chapters or change their language in the outline."
-        )
-        if content_sample:
-            system += f"\n\nHow the current chapters are actually written (sample):\n{content_sample}"
 
     # No grounding here: restructuring an existing outline needs no fresh web
     # research, and the Gemini google_search round-trips were the main cause of
@@ -211,6 +195,54 @@ def translate_outline(
     if not translated or "chapters" not in translated:
         raise ProviderError("Couldn't prepare the rewrite. Please try again.")
     return translated, _extract_usage(result)
+
+
+_FINISHED_EDIT_SYSTEM = (
+    "You help a user edit a book that is ALREADY fully written (every chapter has body text). "
+    "Read their latest message and decide what they want, then return ONLY a JSON object (no "
+    "markdown fences) with these keys:\n"
+    "- \"reply\": a short, friendly reply to the user, written in the user's language\n"
+    "- \"action\": one of \"rewrite\", \"retitle\", \"reply\"\n"
+    "- \"language\": ISO code (\"en\",\"zh\",\"es\",\"fr\",\"ja\",\"ko\",\"de\") — ONLY for \"rewrite\"\n"
+    "- \"title\", \"subtitle\", \"category\": the new value(s) — ONLY for \"retitle\"\n\n"
+    "Pick the action:\n"
+    "- \"rewrite\": the user wants the CHAPTER BODIES regenerated, or the book re-written in a "
+    "different LANGUAGE (e.g. \"用英文重写\", \"rewrite in English\", \"the chapters/body should be in "
+    "English\", \"redo the writing\"). Put the target language in \"language\". This regenerates EVERY "
+    "chapter, so only choose it when the user clearly wants the content or its language changed.\n"
+    "- \"retitle\": the user only wants to change the book's title, subtitle, or category. Put the "
+    "new value(s) in those fields.\n"
+    "- \"reply\": anything else (a question, a comment) — just answer in \"reply\" and change nothing.\n"
+)
+
+
+def plan_finished_book_edit(
+    current_outline: dict[str, Any],
+    user_message: str,
+    history: list[dict[str, str]] | None = None,
+    content_sample: str | None = None,
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Interpret a chat message on a FINISHED book into an action plan, so the chat
+    itself acts (regenerate / retitle / just reply) — the left chat is the editor,
+    not a set of buttons. Returns (plan, usage); plan has {action, reply, language?,
+    title?, subtitle?, category?}. *content_sample* lets the model see how the
+    chapters are actually written so it judges a language complaint correctly.
+    """
+    outline_str = json.dumps(current_outline, ensure_ascii=False, indent=2)
+    system = f"{_FINISHED_EDIT_SYSTEM}\n\nCurrent outline:\n{outline_str}"
+    if content_sample:
+        system += f"\n\nHow the chapters are actually written (sample):\n{content_sample}"
+    result, _ = chat_with_fallback(
+        system=system, user=user_message, history=history,
+        use_grounding=False, thinking_budget=0, timeout=45, max_total_seconds=120,
+    )
+    plan = _parse_json_from_text(result.content) or {}
+    if plan.get("action") not in ("rewrite", "retitle", "reply"):
+        # Unparseable / unexpected → treat as a plain reply using the model's text.
+        plan = {"action": "reply", "reply": (result.content or "").strip()}
+    if not (plan.get("reply") or "").strip():
+        plan["reply"] = "Done."
+    return plan, _extract_usage(result)
 
 
 def write_chapter(

@@ -3527,19 +3527,6 @@ html.dark .canvas-share-popup { box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
 .canvas-share-opt:hover { background: rgba(0,0,0,0.05); }
 html.dark .canvas-share-opt:hover { background: rgba(255,255,255,0.08); }
 .canvas-share-opt svg { flex-shrink: 0; color: var(--text-secondary); }
-
-/* Rewrite = a restrained TERTIARY action (heavy + rare): a subtle centered text
-   link under the primary Chat/Read/Share row, not a fourth full-width pill. */
-.canvas-rewrite-wrap { margin-top: 10px; text-align: center; }
-.canvas-rewrite-trigger {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 10px; border: none; background: none;
-  color: var(--text-secondary); cursor: pointer;
-  font: 500 13px/1 'Inter', sans-serif;
-  border-radius: 8px; transition: color 0.12s, background 0.12s;
-}
-.canvas-rewrite-trigger:hover { color: var(--text); background: rgba(128,128,128,0.07); }
-.canvas-rewrite-trigger svg { opacity: 0.75; }
 /* Writing progress in canvas reuses existing progress-ch styles */
 .book-canvas .writing-progress-chapters { padding: 0; }
 .book-canvas .progress-ch { padding: 8px 4px; }
