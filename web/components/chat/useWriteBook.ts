@@ -25,6 +25,7 @@ import {
   startBook,
   chatBook,
   confirmBook,
+  rewriteBook,
   getStatus,
   getBook,
   cancelBook,
@@ -83,6 +84,8 @@ export interface WriteBookState {
   confirm: () => Promise<void>;
   cancel: () => Promise<void>;
   retry: () => Promise<void>;
+  /** Regenerate every chapter from scratch in `language` (post-completion). */
+  rewrite: (language: string) => Promise<void>;
 }
 
 function describeError(e: unknown, fallback: string): string {
@@ -396,6 +399,30 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
     }
   }, [startPolling]);
 
+  // ── Rewrite (regenerate every chapter, optionally in a new language) ──────
+  const rewrite = useCallback(
+    async (language: string) => {
+      const id = bookIdRef.current;
+      if (!id) return;
+      setError(null);
+      try {
+        await rewriteBook(id, language);
+        // Drop the old chapters so the canvas shows fresh progress, not stale
+        // bodies as "done"; the new ones repopulate when writing completes.
+        setBookContent(null);
+        setPhase("writing");
+        cbRef.current.onAssistant(
+          "Rewriting the whole book from scratch — I'll regenerate every chapter. " +
+            "You can watch the progress on the right.",
+        );
+        startPolling(id);
+      } catch (err) {
+        setError(describeError(err, "Couldn't start the rewrite. Try again."));
+      }
+    },
+    [startPolling],
+  );
+
   return {
     phase,
     outline,
@@ -410,5 +437,6 @@ export function useWriteBook(args: UseWriteBookArgs): WriteBookState {
     confirm,
     cancel,
     retry,
+    rewrite,
   };
 }

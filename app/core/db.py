@@ -4430,6 +4430,23 @@ def update_ai_book_chapter(book_id: str, chapter_num: int, chapter_data: dict[st
         ), (json.dumps(content, ensure_ascii=False), written, now, book_id))
 
 
+def reset_ai_book_for_rewrite(book_id: str, language: str) -> None:
+    """Clear the written chapters and set the target language so a finished book
+    can be regenerated from scratch (the post-completion Rewrite flow). Leaves the
+    outline intact (the caller re-languages it first); status → 'writing' so the
+    background writer picks it up."""
+    now = _utcnow()
+    with get_conn() as conn:
+        row = _fetchone(conn, _q("SELECT preferences_json FROM ai_books WHERE id = ?"), (book_id,))
+        prefs = json.loads((row["preferences_json"] if row else None) or "{}")
+        prefs["language"] = language
+        prefs.pop("_write_error", None)
+        _execute(conn, _q(
+            "UPDATE ai_books SET content_json = '{}', chapters_written = 0, "
+            "preferences_json = ?, status = 'writing', updated_at = ? WHERE id = ?"
+        ), (json.dumps(prefs, ensure_ascii=False), now, book_id))
+
+
 def _row_to_ai_book(row: dict[str, Any]) -> dict[str, Any]:
     prefs = json.loads(row["preferences_json"] or "{}")
     return {

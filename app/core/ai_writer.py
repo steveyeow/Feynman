@@ -132,13 +132,31 @@ def refine_outline(
     current_outline: dict[str, Any],
     user_message: str,
     history: list[dict[str, str]] | None = None,
+    already_written: bool = False,
+    content_sample: str | None = None,
 ) -> tuple[dict[str, Any], str, dict[str, int]]:
     """Refine an outline based on user feedback.
 
     Returns (updated_outline, ai_response_text, usage_dict).
+
+    *already_written* marks a finished book: the chat may tweak title/subtitle but
+    must NOT try to change chapter bodies or their language by editing the outline
+    (that needs a Rewrite). *content_sample* lets the model see how the chapters
+    are actually written, so it answers honestly instead of guessing.
     """
     outline_str = json.dumps(current_outline, ensure_ascii=False, indent=2)
     system = f"{_REFINE_SYSTEM}\n\nCurrent outline:\n{outline_str}"
+    if already_written:
+        system += (
+            "\n\nIMPORTANT: this book is ALREADY fully written. You may adjust the title or "
+            "subtitle, but you CANNOT change the chapter bodies or the language they are written in "
+            "by editing this outline — that needs a full rewrite (the user can click \"Rewrite\" in "
+            "the book panel to regenerate every chapter, optionally in another language). If the user "
+            "asks to change the content or the writing language, tell them to use Rewrite; do NOT "
+            "restructure the chapters or change their language in the outline."
+        )
+        if content_sample:
+            system += f"\n\nHow the current chapters are actually written (sample):\n{content_sample}"
 
     # No grounding here: restructuring an existing outline needs no fresh web
     # research, and the Gemini google_search round-trips were the main cause of
@@ -167,6 +185,32 @@ def refine_outline(
         response_text = "I've updated the outline based on your feedback."
 
     return outline, response_text, _extract_usage(result)
+
+
+def translate_outline(
+    outline: dict[str, Any],
+    language: str,
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Rewrite an outline's text into *language*, preserving structure. Used by the
+    post-completion Rewrite flow so a re-languaged book gets a matching title + TOC
+    (the chapter bodies are then regenerated to follow it). Returns (outline, usage).
+    """
+    lang_names = {"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "es": "Spanish", "fr": "French", "de": "German"}
+    target = lang_names.get(language, language)
+    system = (
+        f"You are a professional translator. Rewrite the given book outline into {target}. "
+        "Translate the title, subtitle, and every chapter's title, summary, and key_points. "
+        "Keep the EXACT same JSON structure, the same chapter numbers, the same `category`, and "
+        "the same `estimated_words` values. Return ONLY the JSON object (no markdown fences)."
+    )
+    result, _ = chat_with_fallback(
+        system=system, user=json.dumps(outline, ensure_ascii=False, indent=2),
+        use_grounding=False, thinking_budget=0, timeout=45, max_total_seconds=120,
+    )
+    translated = _parse_json_from_text(result.content)
+    if not translated or "chapters" not in translated:
+        raise ProviderError("Couldn't prepare the rewrite. Please try again.")
+    return translated, _extract_usage(result)
 
 
 def write_chapter(
