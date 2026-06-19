@@ -3740,6 +3740,7 @@ def api_cron_index_pending_content(request: Request) -> dict[str, Any]:
         of = None
         shard = 0
     indexed = failed = 0
+    last_error = None
     for row in pop_pending_content(limit=batch, shard=shard, of=of):
         aid = row["agent_id"]
         try:
@@ -3749,9 +3750,10 @@ def api_cron_index_pending_content(request: Request) -> dict[str, Any]:
             indexed += 1
         except Exception as exc:
             log.error("index-pending-content %s: %s", aid, exc)
+            last_error = str(exc)[:400]
             failed += 1
     return {"status": "ok", "indexed": indexed, "failed": failed,
-            "remaining": count_pending_content()}
+            "remaining": count_pending_content(), "last_error": last_error}
 
 
 @app.get("/api/minds/{mind_id}/questions")
