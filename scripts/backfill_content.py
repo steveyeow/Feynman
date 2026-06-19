@@ -78,7 +78,14 @@ def main() -> int:
                 # Cap at 700K (~875 chunks) so the Vercel index cron embeds each
                 # book inside one function invocation — a 1.5MB book (~1,900
                 # chunks) overruns it. 700K is still a large slice for RAG.
-                db.stage_pending_content(aid, txt[:700_000], src)
+                try:
+                    db.stage_pending_content(aid, txt[:700_000], src)
+                except Exception:
+                    # Transient DB error (e.g. a brief Supabase read-only window
+                    # during disk autoscale/failover) — skip this book rather
+                    # than crashing the whole run; it stays unstaged, retried
+                    # on the next pass.
+                    return (0, "")
             return (len(txt), src)
         return (0, "")
 
