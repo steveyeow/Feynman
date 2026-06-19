@@ -3436,7 +3436,6 @@ def api_discover(payload: DiscoverRequest, request: Request, background_tasks: B
 @app.post("/api/search-book")
 def api_search_book(payload: SearchBookRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     """Search for a specific book by name. Uses LLM to identify the book and add it."""
-    _check_quota(request, "discover")
     query = payload.query.strip()
     # Check if already exists
     existing = find_agent_by_name(query)
@@ -3474,7 +3473,6 @@ def api_search_book(payload: SearchBookRequest, request: Request, background_tas
         agent = get_agent(agent_id)
         if agent and agent["status"] == "catalog":
             background_tasks.add_task(_learn_agent, agent_id)
-    _track_usage(request, "discover")
     return {"books": results, "usage": _usage_dict(result)}
 
 
