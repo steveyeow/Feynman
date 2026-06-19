@@ -157,6 +157,23 @@ export async function confirmBook(
 }
 
 /**
+ * Regenerate a finished book's chapters from scratch in `language` (the
+ * post-completion Rewrite flow). Re-languages the outline + clears the old
+ * chapters server-side, then re-runs the writer. Returns the writing status so
+ * the caller can resume polling.
+ */
+export async function rewriteBook(
+  bookId: string,
+  language: string,
+): Promise<{ status: AiBookStatus; chaptersTotal: number }> {
+  const data = await post<{ status: AiBookStatus; chapters_total?: number }>(
+    `/api/ai-books/${encodeURIComponent(bookId)}/rewrite`,
+    { language },
+  );
+  return { status: data.status, chaptersTotal: data.chapters_total ?? 0 };
+}
+
+/**
  * Stop an in-progress write (port of _cancelWriteBook → POST /{id}/cancel).
  * Chapters already written are kept; the book transitions to `cancelled`.
  */

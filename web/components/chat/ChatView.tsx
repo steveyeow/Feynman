@@ -1255,6 +1255,7 @@ export default function ChatView({
           onConfirm={writeBook.confirm}
           onCancel={writeBook.cancel}
           onRetry={writeBook.retry}
+          onRewrite={writeBook.rewrite}
         />
       ) : rightSidebar !== undefined ? (
         rightSidebar
