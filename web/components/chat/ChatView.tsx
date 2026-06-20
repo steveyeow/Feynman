@@ -631,6 +631,9 @@ export default function ChatView({
           }
         }
         for (const id of invitedIds) phase1Ids.add(id);
+        if (!phase1Ids.size && activeMindsRef.current.size > 0) {
+          for (const id of activeMindsRef.current.keys()) phase1Ids.add(id);
+        }
 
         if (phase1Ids.size) {
           const ids = [...phase1Ids];
@@ -651,11 +654,7 @@ export default function ChatView({
           if (genRef.current !== gen) return;
         }
 
-        // Phase 2: auto-suggest is skipped when the user @-mentioned minds (they
-        // already chose who answers) OR for a non-Pro user who already got the
-        // fan-out once this conversation (port of skipSuggest = hasMentions ||
-        // (!isProUser && _mindsInvitedOnce)). Production latches the flag here too.
-        const skipSuggest = hasMentions || (!isProUser && invitedOnceRef.current);
+        const skipSuggest = hasMentions || activeMindsRef.current.size > 0 || (!isProUser && invitedOnceRef.current);
         if (skipSuggest) {
           invitedOnceRef.current = true;
           return;
@@ -869,10 +868,7 @@ export default function ChatView({
         Object.keys(userMeta).length ? userMeta : undefined,
       );
 
-      // skipFeynman: when minds are chosen as chips OR the user @-mentioned a
-      // mind, the panel answers instead of Feynman (port of app.js 2783, scoped
-      // per the brief to fire whenever there are mentioned names).
-      const skipFeynman = effMinds.size > 0 || mentionedNames.length > 0;
+      const skipFeynman = effMinds.size > 0 || mentionedNames.length > 0 || activeMindsRef.current.size > 0;
 
       let working = afterUser;
 
