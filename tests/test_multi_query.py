@@ -66,7 +66,8 @@ class TestMultiQueryInRetrieveCrossBook:
             v = query_dir * 0.9
             chunks.append({
                 "id": str(uuid.uuid4()), "agent_id": a["id"], "chunk_index": 0,
-                "text": f"chunk from {a['name']}", "vector": v.astype(np.float32).tobytes(),
+                "text": f"This is a sufficiently long passage of text from the book called {a['name']} that passes quality filters.",
+                "vector": v.astype(np.float32).tobytes(),
                 "dim": dim, "norm": float(np.linalg.norm(v)),
             })
 
@@ -93,7 +94,8 @@ class TestMultiQueryInRetrieveCrossBook:
 
         chunks = [{
             "id": str(uuid.uuid4()), "agent_id": agents[0]["id"], "chunk_index": 0,
-            "text": "chunk", "vector": query_dir.tobytes(), "dim": dim, "norm": 1.0,
+            "text": "This is a sufficiently long passage of text that easily passes chunk quality filters in the retrieval pipeline.",
+            "vector": query_dir.tobytes(), "dim": dim, "norm": 1.0,
         }]
 
         with patch("app.core.rag.list_agents", return_value=agents), \
@@ -118,7 +120,8 @@ class TestMultiQueryInRetrieveCrossBook:
         for a in agents:
             chunks.append({
                 "id": str(uuid.uuid4()), "agent_id": a["id"], "chunk_index": 0,
-                "text": f"chunk from {a['name']}", "vector": query_dir.tobytes(),
+                "text": f"This is a sufficiently long passage of text from the book called {a['name']} that passes quality filters.",
+                "vector": query_dir.tobytes(),
                 "dim": dim, "norm": 1.0,
             })
 

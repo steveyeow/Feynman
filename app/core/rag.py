@@ -30,6 +30,20 @@ _EXPAND_MIN_AGENTS = 3
 # ranks, but small enough that egress stays in KB territory (not MB).
 _ANN_CANDIDATE_MULT = 20
 
+# Chunk quality gate: skip chunks that are too short or mostly
+# numbers/symbols (OCR artifacts, page numbers, chemical data tables).
+_MIN_CHUNK_LENGTH = 50
+_MIN_ALPHA_RATIO = 0.3
+
+
+def _is_low_quality_chunk(text: str) -> bool:
+    """Filter chunks that are too short or mostly non-text."""
+    stripped = text.strip()
+    if len(stripped) < _MIN_CHUNK_LENGTH:
+        return True
+    alpha = sum(1 for c in stripped if c.isalpha())
+    return alpha / len(stripped) < _MIN_ALPHA_RATIO
+
 
 def _bytes_to_vector(blob, dim: int) -> np.ndarray:
     """Decode a stored vector blob into a numpy float32 array.
@@ -122,6 +136,7 @@ def retrieve(agent_id: str, query: str, top_k: int | None = None, provider_name:
             vector_results = [
                 {"id": r["id"], "chunk_index": r["chunk_index"], "text": r["text"], "score": float(r["score"])}
                 for r in ann_rows
+                if not _is_low_quality_chunk(r["text"])
             ]
         except Exception as exc:
             log.warning("ann_topk failed for agent %s, falling back: %s", agent_id, exc)
@@ -142,6 +157,8 @@ def retrieve(agent_id: str, query: str, top_k: int | None = None, provider_name:
             vec = _bytes_to_vector(row["vector"], row["dim"])
             denom = float(query_norm * row["norm"]) or 1.0
             score = float(np.dot(query_vec, vec) / denom)
+            if _is_low_quality_chunk(row["text"]):
+                continue
             vector_results.append(
                 {
                     "id": row["id"],
@@ -155,9 +172,14 @@ def retrieve(agent_id: str, query: str, top_k: int | None = None, provider_name:
     # Hybrid: fuse with keyword search if available
     kw_results = keyword_search_chunks(query, agent_ids=[agent_id], limit=top_k * 3)
     if kw_results:
-        kw_formatted = [{"id": r["id"], "chunk_index": r["chunk_index"], "text": r["text"], "score": 0.0} for r in kw_results]
-        fused = _rrf_fuse(kw_formatted, vector_results)
-        return fused[:top_k]
+        kw_formatted = [
+            {"id": r["id"], "chunk_index": r["chunk_index"], "text": r["text"], "score": 0.0}
+            for r in kw_results
+            if not _is_low_quality_chunk(r["text"])
+        ]
+        if kw_formatted:
+            fused = _rrf_fuse(kw_formatted, vector_results)
+            return fused[:top_k]
 
     return vector_results[:top_k]
 
@@ -178,12 +200,18 @@ def _score_rows(rows: list[dict], ready_agents: dict, query_vec: np.ndarray, que
         results.append({
             "id": row["id"], "agent_id": agent_id, "agent_name": agent["name"],
             "chunk_index": row["chunk_index"], "text": row["text"], "score": score,
+            "_cosine_sim": score,
         })
     return results
 
 
-def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[str] | None = None, expand: bool = True) -> list[dict[str, Any]]:
-    """Retrieve chunks across ready agents for global chat. Optionally filter by agent_ids."""
+def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[str] | None = None, expand: bool = True, min_cosine_sim: float | None = None) -> list[dict[str, Any]]:
+    """Retrieve chunks across ready agents for global chat. Optionally filter by agent_ids.
+
+    min_cosine_sim: when set, discard chunks whose cosine similarity to the
+    query falls below this threshold.  Applied BEFORE RRF fusion so the filter
+    uses the real embedding score, not the rank-based RRF score.
+    """
     top_k = top_k or TOP_K
     embedder = pick_provider("embed")
 
@@ -227,10 +255,12 @@ def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[st
                     agent = ready_agents.get(aid)
                     if not agent:
                         continue
+                    raw_score = float(r["score"])
                     item = {
                         "id": r["id"], "agent_id": aid, "agent_name": agent["name"],
                         "chunk_index": r["chunk_index"], "text": r["text"],
-                        "score": float(r["score"]),
+                        "score": raw_score,
+                        "_cosine_sim": (raw_score - 0.5) * 2.0,
                     }
                     cid = item["id"]
                     if cid not in all_scored or item["score"] > all_scored[cid]["score"]:
@@ -250,7 +280,20 @@ def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[st
                 if cid not in all_scored or item["score"] > all_scored[cid]["score"]:
                     all_scored[cid] = item
 
-    vector_results = sorted(all_scored.values(), key=lambda x: x["score"], reverse=True)
+    # ── Quality + relevance gate (applied BEFORE RRF so we use real cosine
+    # scores, not rank-based RRF scores). ──
+    filtered: dict[str, dict] = {}
+    for cid, item in all_scored.items():
+        if _is_low_quality_chunk(item["text"]):
+            continue
+        if min_cosine_sim is not None and item.get("_cosine_sim", 0) < min_cosine_sim:
+            continue
+        filtered[cid] = item
+
+    if len(filtered) < len(all_scored):
+        log.info("Chunk filter: %d → %d (quality/relevance)", len(all_scored), len(filtered))
+
+    vector_results = sorted(filtered.values(), key=lambda x: x["score"], reverse=True)
 
     # Hybrid: fuse with keyword search if available
     kw_results = keyword_search_chunks(query, agent_ids=ready_ids or None, limit=top_k * 3)
@@ -260,6 +303,8 @@ def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[st
             aid = r["agent_id"]
             agent = ready_agents.get(aid)
             if not agent:
+                continue
+            if _is_low_quality_chunk(r["text"]):
                 continue
             kw_formatted.append({
                 "id": r["id"], "agent_id": aid, "agent_name": agent["name"],

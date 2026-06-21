@@ -23,7 +23,7 @@ def _make_chunk(agent_id: str, index: int, vec: np.ndarray) -> dict:
         "id": str(uuid.uuid4()),
         "agent_id": agent_id,
         "chunk_index": index,
-        "text": f"chunk {index} for {agent_id[:8]}",
+        "text": f"This is a sufficiently long chunk of text number {index} for agent {agent_id[:8]} that passes quality filters.",
         "vector": blob,
         "dim": len(vec),
         "norm": float(np.linalg.norm(vec)),

@@ -4190,7 +4190,7 @@ def api_chat(agent_id: str, payload: ChatRequest, request: Request, background_t
         "Answer using the provided context passages. Each passage has a unique number: [Passage 1], [Passage 2], [Passage 3], etc. "
         "IMPORTANT: Even though all passages are from the same book, they are DIFFERENT text segments with DIFFERENT numbers. "
         "Cite the specific passage number you used, e.g. [1], [2], [3]. Never cite all as [1] — each passage must keep its own number. "
-        "If the context is insufficient, supplement with your own knowledge (no citation needed). "
+        "If the passages don't cover the question, supplement with your own knowledge (no citation needed). "
         "Encourage deeper thinking by occasionally suggesting follow-up questions. "
         "Respond in the same language as the user's question."
     )
@@ -4293,7 +4293,9 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
     # Run skill resolution and RAG retrieval concurrently
     use_grounding = False
     supplementary_context = ""
-    _RAG_RELEVANCE_THRESHOLD = 0.65
+    # Minimum cosine similarity (raw, -1…1 scale) for cross-library search
+    # when no books are selected.  0.35 ≈ "at least loosely related".
+    _RAG_COSINE_THRESHOLD = 0.35
     ready_ids = [a["id"] for a in target_agents if a["status"] == "ready"]
     rag_context = ""
     rag_chunks: list[dict[str, Any]] = []
@@ -4310,12 +4312,16 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
         nonlocal rag_result_holder
         try:
             if ready_ids:
+                # User selected specific books — trust their choice, only
+                # apply chunk-quality filtering (no cosine threshold).
                 rag_result_holder = retrieve_cross_book(payload.message, payload.top_k, agent_ids=ready_ids)
             elif not target_agents:
-                rag_result_holder = retrieve_cross_book(payload.message, payload.top_k)
-                if rag_result_holder and rag_result_holder[0]["score"] < _RAG_RELEVANCE_THRESHOLD:
-                    log.info("RAG top score %.3f below threshold — ignoring library results", rag_result_holder[0]["score"])
-                    rag_result_holder.clear()
+                # No books selected — search the whole library with a
+                # cosine-similarity floor so irrelevant books don't surface.
+                rag_result_holder = retrieve_cross_book(
+                    payload.message, payload.top_k,
+                    min_cosine_sim=_RAG_COSINE_THRESHOLD,
+                )
         except ProviderError:
             pass
 
@@ -4360,7 +4366,8 @@ def api_global_chat(payload: GlobalChatRequest, request: Request, background_tas
             "Use the provided context passages to answer. Each passage has a unique number: [Passage 1], [Passage 2], [Passage 3], etc. "
             "IMPORTANT: Even when multiple passages come from the same book, they are DIFFERENT text segments with DIFFERENT numbers. "
             "Cite the specific passage number you used, e.g. [1], [2], [3]. Never cite all as [1] — each passage must keep its own number. "
-            "If the context is insufficient, supplement with your own knowledge (no citation needed). "
+            "Only cite passages that DIRECTLY address the user's question. "
+            "If passages are about unrelated topics, ignore them entirely and answer from your own knowledge without any citations. "
             "Encourage deeper thinking by suggesting follow-up questions. "
             "Respond in the same language as the user's question."
         )

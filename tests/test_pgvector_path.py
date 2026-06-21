@@ -187,8 +187,8 @@ class TestRetrieveLegacyPathUnchanged:
         match_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32).tobytes()
         orth_vec = np.array([0.0, 1.0, 0.0], dtype=np.float32).tobytes()
         rows = [
-            {"id": "c1", "chunk_index": 0, "text": "match", "vector": match_vec, "dim": 3, "norm": 1.0},
-            {"id": "c2", "chunk_index": 1, "text": "ortho", "vector": orth_vec, "dim": 3, "norm": 1.0},
+            {"id": "c1", "chunk_index": 0, "text": "This matching passage contains relevant information about the query topic for testing purposes.", "vector": match_vec, "dim": 3, "norm": 1.0},
+            {"id": "c2", "chunk_index": 1, "text": "This orthogonal passage goes in a completely different direction that is unrelated to the query topic.", "vector": orth_vec, "dim": 3, "norm": 1.0},
         ]
 
         with patch("app.core.rag.pick_provider", return_value=mock_embedder), \
@@ -213,8 +213,8 @@ class TestRetrieveLegacyPathUnchanged:
         mock_embedder.embed_texts.return_value = [[1.0, 0.0, 0.0]]
 
         ann_rows = [
-            {"id": "c1", "chunk_index": 0, "text": "match", "score": 0.99},
-            {"id": "c2", "chunk_index": 1, "text": "ortho", "score": 0.50},
+            {"id": "c1", "chunk_index": 0, "text": "This matching passage contains relevant information about the query topic for testing purposes.", "score": 0.99},
+            {"id": "c2", "chunk_index": 1, "text": "This orthogonal passage goes in a completely different direction that is unrelated to the query topic.", "score": 0.50},
         ]
 
         with patch("app.core.rag.pick_provider", return_value=mock_embedder), \
@@ -239,7 +239,7 @@ class TestRetrieveLegacyPathUnchanged:
 
         match_vec = np.array([1.0, 0.0, 0.0], dtype=np.float32).tobytes()
         rows = [
-            {"id": "c1", "chunk_index": 0, "text": "match", "vector": match_vec, "dim": 3, "norm": 1.0},
+            {"id": "c1", "chunk_index": 0, "text": "This matching passage contains relevant information about the query topic for testing purposes.", "vector": match_vec, "dim": 3, "norm": 1.0},
         ]
 
         with patch("app.core.rag.pick_provider", return_value=mock_embedder), \

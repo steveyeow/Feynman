@@ -133,13 +133,14 @@ class TestHybridRetrieve:
             chunks.append({
                 "id": f"chunk_{i}",
                 "chunk_index": i,
-                "text": f"chunk {i} text",
+                "text": f"This is a sufficiently long passage of text number {i} that passes the chunk quality filters in the retrieval pipeline.",
                 "vector": v.tobytes(),
                 "dim": dim,
                 "norm": float(np.linalg.norm(v)),
             })
 
-        kw_result = [{"id": "chunk_2", "chunk_index": 2, "text": "chunk 2 text",
+        kw_result = [{"id": "chunk_2", "chunk_index": 2,
+                       "text": "This is a sufficiently long passage of text number 2 that passes the chunk quality filters in the retrieval pipeline.",
                        "vector": chunks[2]["vector"], "dim": dim, "norm": chunks[2]["norm"],
                        "agent_id": "a1", "fts_rank": -0.5}]
 
@@ -162,7 +163,8 @@ class TestHybridRetrieve:
         dim = 4
         query_dir = np.array([1, 0, 0, 0], dtype=np.float32)
         chunks = [{
-            "id": "c1", "chunk_index": 0, "text": "hello",
+            "id": "c1", "chunk_index": 0,
+            "text": "This is a sufficiently long passage of text that passes the chunk quality filters in the retrieval pipeline.",
             "vector": query_dir.tobytes(), "dim": dim, "norm": 1.0,
         }]
 
