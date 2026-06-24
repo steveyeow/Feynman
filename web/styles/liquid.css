@@ -872,6 +872,18 @@ body { background-color: var(--bg-home); }
   position: absolute !important;
   animation: none !important;
 }
+/* Collapsed rail: .app-sidebar is 52px wide with overflow:hidden, which clips
+ * the absolutely-positioned menu down to the rail — so the popup showed only as
+ * a sliver (e.g. over the open reader). Re-anchor it to the viewport with fixed
+ * (no transformed/contain/container ancestor exists, so it escapes the clip)
+ * and drop `right` so min-width drives the width. z-index:1000 (app.css) keeps
+ * it above page content. */
+.app-layout.sidebar-collapsed .sidebar-user-menu {
+  position: fixed !important;
+  left: 12px !important;
+  right: auto !important;
+  bottom: 60px !important;
+}
 .profile-email {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   flex: 1; min-width: 0; color: var(--text); font-size: 13px;
