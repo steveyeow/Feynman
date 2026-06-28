@@ -986,40 +986,18 @@ def sitemap_xml():
     <priority>0.6</priority>
   </url>
 """
-        # Per-mind Q&A pages — only minds with STORED answers are advertised
-        # (the row exists ⇒ the page renders substantively; no thin shells).
-        from .core.db import list_mind_question_slugs
-        _mq: dict[str, list[str]] = {}
-        for _r in list_mind_question_slugs():
-            _mq.setdefault(_r["mind_id"], []).append(_r["slug"])
-        for mind in slugged_minds:
-            if _editorial_frozen(mind):
-                continue
-            for qslug in _mq.get(mind["id"], []):
-                urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["slug"]}/q/{qslug}</loc>{_lastmod(mind.get("created_at"))}
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-"""
-        # Phase 4B — mind-on-topic compound URLs. Only emit pairs that
-        # pass the relevance filter so we don't list /mind/X/on/Y for
-        # combos that the route would 404 anyway.
-        for mind in slugged_minds:
-            if _editorial_frozen(mind):
-                continue
-            for topic in TOPIC_TAGS:
-                if not qa_module.is_mind_topic_relevant(mind, topic):
-                    continue
-                tslug = seo_render.topic_slug(topic)
-                if not tslug:
-                    continue
-                urls += f"""  <url>
-    <loc>{_SITE_URL}/mind/{mind["slug"]}/on/{tslug}</loc>{_lastmod(mind.get("created_at"))}
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-"""
+        # Mind /q and /on pages are intentionally NOT advertised (2026-06-26).
+        # They were 5,628 of 8,223 sitemap URLs (68%) — programmatic, thin,
+        # zero search demand. On a young, crawl-budget-limited domain they
+        # diluted the budget so badly that 6,228 URLs sat in GSC "Discovered –
+        # currently not indexed" (Google saw them but wouldn't spend budget to
+        # crawl). Dropping them concentrates crawl budget on the ~2,600
+        # substantive detail + book/q pages. The pages still render and stay
+        # reachable via internal links — we just stop asking Google to crawl
+        # them. Do NOT re-add without a materially stronger domain (real
+        # backlinks / higher crawl budget). book/q stays advertised: it's
+        # chunk-gated (≥5) + generic-filtered + only ~385 URLs.
+
         # Topic hub pages — 15 fixed URLs from TOPIC_TAGS. Cheap to include
         # and they're the upper layer of the topic→entity link graph.
         for topic in TOPIC_TAGS:
