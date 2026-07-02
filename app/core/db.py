@@ -1932,9 +1932,13 @@ def ensure_catalog_agents(catalog: list[dict[str, Any]]) -> None:
                 "category": book.get("category", ""),
                 "description": book.get("description", ""),
             }
+            # Slug at mint time — the sitemap is slug-gated, so a slugless
+            # catalog book that later turns "ready" (content backfill) is
+            # invisible to crawlers (321 ready books hit this by 2026-07-02).
+            slug = _unique_slug(conn, "agents", book["title"])
             _execute(conn, _q(
-                "INSERT INTO agents (id, name, type, source, status, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-            ), (agent_id, book["title"], "catalog", book.get("author", ""), "catalog", json.dumps(meta), _utcnow()))
+                "INSERT INTO agents (id, name, slug, type, source, status, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ), (agent_id, book["title"], slug, "catalog", book.get("author", ""), "catalog", json.dumps(meta), _utcnow()))
 
 
 def rename_agent(agent_id: str, new_name: str) -> None:
@@ -2132,9 +2136,11 @@ def create_catalog_agent(title: str, author: str = "", isbn: str | None = None,
     meta = {"title": title, "author": author, "isbn": isbn, "category": category, "description": description}
     agent_id = str(uuid.uuid4())
     with get_conn() as conn:
+        # Slug at mint time — sitemap is slug-gated (see seed_catalog_agents).
+        slug = _unique_slug(conn, "agents", title)
         _execute(conn, _q(
-            "INSERT INTO agents (id, name, type, source, status, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ), (agent_id, title, "catalog", author, "catalog", json.dumps(meta), _utcnow()))
+            "INSERT INTO agents (id, name, slug, type, source, status, meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        ), (agent_id, title, slug, "catalog", author, "catalog", json.dumps(meta), _utcnow()))
     return agent_id
 
 
