@@ -39,6 +39,13 @@ log = logging.getLogger(__name__)
 # INDEXNOW_KEY explicitly so it's stable across deploys (rotating
 # breaks the verification file ↔ submission mapping). Dev fallback
 # is a fixed string that's not secret (anyone can pick a key).
+#
+# COUPLING: the key file is served by THIS backend, but keyLocation
+# points at feynman.wiki, where web/vercel.json rewrites the exact
+# path /<key>.txt to api.feynman.wiki. If the key ever changes, that
+# rewrite must change with it — otherwise the key file 404s on the
+# submitted host and Bing silently rejects every submission (this
+# exact failure went unnoticed from the Next cutover until 2026-07-02).
 _DEFAULT_KEY = "feynman-indexnow-2026-05-26-7f3a"
 INDEXNOW_KEY = os.getenv("INDEXNOW_KEY", _DEFAULT_KEY).strip().lower()
 

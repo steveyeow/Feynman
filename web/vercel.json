@@ -7,6 +7,7 @@
     { "source": "/robots.txt", "destination": "https://api.feynman.wiki/robots.txt" },
     { "source": "/llms.txt", "destination": "https://api.feynman.wiki/llms.txt" },
     { "source": "/llms-full.txt", "destination": "https://api.feynman.wiki/llms-full.txt" },
+    { "source": "/feynman-indexnow-2026-05-26-7f3a.txt", "destination": "https://api.feynman.wiki/feynman-indexnow-2026-05-26-7f3a.txt" },
     { "source": "/book/:id/og.png", "destination": "https://api.feynman.wiki/book/:id/og.png" },
     { "source": "/mind/:id/og.png", "destination": "https://api.feynman.wiki/mind/:id/og.png" },
     { "source": "/share/:path*", "destination": "https://api.feynman.wiki/share/:path*" }

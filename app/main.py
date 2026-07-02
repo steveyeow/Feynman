@@ -1116,34 +1116,57 @@ def sitemap_xml():
 @app.get("/llms.txt")
 def llms_txt():
     from fastapi.responses import PlainTextResponse
+    # Live catalog counts (same cached COUNT(*)s as /api/stats) so this file
+    # never drifts from reality again — it shipped saying "50+ minds" while
+    # the sitemap advertised 1,400.
+    try:
+        stats = _cache_get("landing_stats", _STATS_CACHE_TTL)
+        if stats is None:
+            stats = count_landing_stats()
+            _cache_set("landing_stats", stats)
+    except Exception:
+        stats = {}
+
+    def _count_or(n, floor: int, fallback: str) -> str:
+        # Floor guards dev/empty DBs and partial outages from rendering
+        # embarrassing counts like "1 great minds".
+        return f"{n:,}" if isinstance(n, int) and n >= floor else fallback
+
+    books_n = _count_or(stats.get("books"), 100, "600+")
+    minds_n = _count_or(stats.get("minds"), 100, "1,400+")
+    symp_n = _count_or(stats.get("symposiums"), 20, "100+")
     content = f"""# Feynman
 
-> An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.
+> An interactive knowledge network built on the world's most important books and great minds. Chat with {books_n} books, talk with {minds_n} simulated great thinkers, read multi-mind symposiums, and generate new books on demand.
 
 ## About
 
 Feynman is an AI-powered study companion inspired by the Feynman learning method.
-Users can chat with books using a four-layer content system (RAG, Content Fetch, Web Search, LLM Knowledge),
-explore topics with AI-curated book discovery, and engage with 50+ simulated great minds — scholars,
+The catalog currently spans {books_n} chattable books, {minds_n} great minds, and {symp_n} symposiums.
+Users chat with books using a four-layer content system (RAG, Content Fetch, Web Search, LLM Knowledge),
+explore topics with AI-curated book discovery, and talk with simulated great minds — scholars,
 scientists, and practitioners — who automatically join conversations with relevant expertise.
 
 - [Homepage]({_SITE_URL}/): Main application — chat with books, explore topics, interact with great minds
-- [Library]({_SITE_URL}/#/library): Browse and discover books across all topics
-- [Great Minds]({_SITE_URL}/#/minds): Interactive knowledge graph of 50+ great thinkers
-- [GitHub](https://github.com/steveyeow/feynman): Open-source repository (MIT license)
+- [Library]({_SITE_URL}/library): Browse and discover books across all topics
+- [Great Minds]({_SITE_URL}/minds): Explore {minds_n} simulated great thinkers
+- [Symposiums]({_SITE_URL}/symposiums): Multi-mind debates on timeless questions
+- [GitHub](https://github.com/steveyeow/Feynman): Open-source repository (MIT license)
 
 ## What Feynman Does
 
 - **Chat with Books**: Ask questions about any book and get answers with passage-level citations [1], [2] from a four-layer RAG system
+- **Great Minds Network**: AI agents faithfully simulate {minds_n} great thinkers (Aristotle, Feynman, Adam Smith, Keynes, etc.) who join your conversations automatically
+- **Symposiums** (`/symposium/{{slug}}`): curated multi-mind debates — several great-mind agents argue a timeless question in turns, with settled positions mapped on a graph. Users can also convene their own.
 - **Topic-Driven Discovery**: Enter a topic (Psychology, Philosophy, Economics, Physics, etc.) and Feynman discovers the most relevant books via AI curation
-- **Great Minds Network**: AI agents faithfully simulate great thinkers (Aristotle, Feynman, Adam Smith, Keynes, etc.) who join your conversations automatically
 - **Cross-Book Knowledge**: Select multiple books and search across your entire library for the most relevant passages
-- **AI Book Writing**: Collaboratively outline and generate full books on any topic
+- **AI Book Writing**: outline, confirm, and generate a complete book on demand for your current needs — then chat with it like any other book
 - **Upload Custom Minds**: Create mind agents from Twitter profiles, blog URLs, or text
 - **Live AI Insights** (per entity, citation-friendly): every indexed book and great mind has a public page that aggregates AI-synthesized commentary drawn from real reader chat sessions. Located at `/book/{{id}}/insights` for books and `/mind/{{id}}/dialogues` for great minds. Only the AI agent's responses are published; user questions remain private. These pages are the canonical citable source for "what does this book say about [topic]" and "how does this thinker engage with [topic]" — applied, live, refreshed continuously, available nowhere else on the open web.
 - **Compound Q&A pages** (`/book/{{id}}/q/{{question-slug}}`): one indexable URL per popular reader question per book, with an LLM-synthesized answer grounded in the book's actual passages and `QAPage` JSON-LD.
 - **Imagined-perspective pages** (`/mind/{{id}}/on/{{topic-slug}}`): short essays of how a great-mind agent would approach a given topic, persona-grounded and labelled as imagined synthesis.
 - **Topic hub pages** (`/topic/{{topic-slug}}`): aggregations of books and minds tagged with each canonical topic, with `CollectionPage` + `ItemList` JSON-LD.
+- **Shared answers & discussions** (`/a/{{id}}`, `/discussions/{{id}}`): user-published Q&A turns and full conversations, each attributed to its book or mind.
 
 ## What Feynman Does NOT Do
 
@@ -1225,7 +1248,7 @@ The library expands through topic exploration, search, chat mentions, PDF/TXT/EP
 and community voting (books with enough upvotes get auto-indexed).
 
 ### 3. Enter Through a Mind
-50+ pre-generated AI agents simulate great thinkers across every field:
+Over a thousand pre-generated AI agents simulate great thinkers across every field:
 philosophy, physics, economics, psychology, literature, tech, startups, and more.
 From Aristotle and Richard Feynman to Marc Andreessen and Naval Ravikant.
 
@@ -1237,7 +1260,7 @@ Users can upload their own minds from Twitter profiles, blog URLs, or pasted tex
 
 - **Book Chat with Citations**: RAG-powered Q&A with passage-level source attribution
 - **AI Book Discovery**: LLM-curated book recommendations for any topic
-- **Great Minds Network**: 50+ simulated thinkers with persistent memory and auto-join
+- **Great Minds Network**: 1,000+ simulated thinkers with persistent memory and auto-join
 - **Cross-Book Search**: Query across your entire library simultaneously
 - **AI Book Writing**: Collaborative outline + full book generation
 - **Knowledge Graph**: Interactive force-directed visualization of mind connections
@@ -1286,9 +1309,9 @@ The project draws inspiration from Richard Feynman's approach to learning:
 ## Pages
 
 - [Home]({_SITE_URL}/): Main chat interface — ask about books, topics, or anything
-- [Library]({_SITE_URL}/#/library): Browse, search, and discover books
-- [Great Minds]({_SITE_URL}/#/minds): Interactive knowledge graph of great thinkers
-- [Chats]({_SITE_URL}/#/chats): Chat session history
+- [Library]({_SITE_URL}/library): Browse, search, and discover books
+- [Great Minds]({_SITE_URL}/minds): Explore the simulated great thinkers
+- [Symposiums]({_SITE_URL}/symposiums): Multi-mind debates on timeless questions
 - [Terms of Service]({_SITE_URL}/terms)
 - [Privacy Policy]({_SITE_URL}/privacy)
 
@@ -3601,18 +3624,32 @@ def api_cron_indexnow(request: Request) -> dict[str, Any]:
     from datetime import datetime, timedelta, timezone
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=26)).isoformat()
     urls: list[str] = []
-    # Recent ready agents → /book/{id}
+    # Recent ready agents → /book/{slug}. Submit the canonical slug URL only —
+    # a UUID submission makes Bing crawl a 301 hop, and slugless entities
+    # aren't in the sitemap either (same gate).
     for a in list_agents(limit=2000, lite=True):
         if a.get("status") != "ready":
             continue
         if (a.get("created_at") or "") < cutoff:
             continue
-        urls.append(f"{_SITE_URL}/book/{a['id']}")
-    # Recent minds → /mind/{id}
+        if not a.get("slug"):
+            continue
+        urls.append(f"{_SITE_URL}/book/{a['slug']}")
+    # Recent minds → /mind/{slug}
     for m in list_minds(limit=2000, lite=True):
         if (m.get("created_at") or "") < cutoff:
             continue
-        urls.append(f"{_SITE_URL}/mind/{m['id']}")
+        if not m.get("slug"):
+            continue
+        urls.append(f"{_SITE_URL}/mind/{m['slug']}")
+    # Recent symposiums → /symposium/{slug} (list_debates is slug-gated).
+    # created_at may come back as a datetime (PG) or string (SQLite); compare
+    # dates only — over-inclusion just re-pings, which IndexNow treats as a no-op.
+    from .core.db import list_debates as _list_debates
+    for d in _list_debates(limit=500):
+        if str(d.get("created_at") or "")[:10] < cutoff[:10]:
+            continue
+        urls.append(f"{_SITE_URL}/symposium/{d['slug']}")
     # Always re-ping sitemap so engines re-fetch the URL graph
     urls.append(f"{_SITE_URL}/sitemap.xml")
 
