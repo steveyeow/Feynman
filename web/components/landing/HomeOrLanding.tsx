@@ -8,6 +8,22 @@ import { LandingPage } from "./LandingPage";
 
 const LANDED_KEY = "feynman-landed";
 
+// Cookie mirror of "this visitor is app-bound" (signed in, or dismissed the
+// landing). Unlike localStorage it IS visible to the server, which uses it in
+// app/page.tsx to decide whether `/` server-renders the full landing HTML
+// (crawlers + first-time visitors) or nothing (returning users — avoids a
+// landing flash before this gate picks HOME).
+const HOME_COOKIE = "feynman-home";
+
+function setHomeCookie() {
+  try {
+    document.cookie = `${HOME_COOKIE}=1; path=/; max-age=31536000; samesite=lax`;
+  } catch {
+    /* cookies blocked — the server keeps SSR-ing the landing; this gate
+       still swaps to HOME after hydration, same as pre-SSR behavior */
+  }
+}
+
 /**
  * Decides between the marketing LANDING and the app HOME at `/`.
  *
@@ -25,7 +41,13 @@ const LANDED_KEY = "feynman-landed";
  * wait for auth to resolve (`ready`) before deciding so a signed-in or
  * returning visitor never flashes the landing on first paint.
  */
-export default function HomeOrLanding() {
+export default function HomeOrLanding({
+  ssrLanding = false,
+}: {
+  /** Server verdict from app/page.tsx: no chat-intent params and no
+   *  `feynman-home` cookie → the initial HTML should be the full landing. */
+  ssrLanding?: boolean;
+}) {
   const { ready, authEnabled, user } = useAuth();
   const router = useRouter();
 
@@ -56,12 +78,22 @@ export default function HomeOrLanding() {
     }
   }, []);
 
+  // Keep the server's cookie mirror in sync: any app-bound visitor (signed in
+  // or already landed) gets the cookie so their NEXT `/` load skips the SSR
+  // landing. A signed-in visitor who doesn't have it yet (first visit after
+  // this shipped, cleared cookies) sees the landing for one paint before the
+  // gate swaps to HOME — once, then the cookie prevents it.
+  useEffect(() => {
+    if (ready && (user || landed)) setHomeCookie();
+  }, [ready, user, landed]);
+
   const markLandedAndShowHome = useCallback(() => {
     try {
       window.localStorage.setItem(LANDED_KEY, "1");
     } catch {
       /* private mode — re-render still flips to home for this session */
     }
+    setHomeCookie();
     setLanded(true);
   }, []);
 
@@ -78,13 +110,19 @@ export default function HomeOrLanding() {
     }
   }, [authEnabled, user, router, markLandedAndShowHome]);
 
-  // Before auth/localStorage resolve, render nothing (a neutral blank) rather
-  // than committing to HOME — otherwise a first-time anonymous visitor on the
-  // hosted build briefly sees the app home, then it swaps to the landing
-  // (a backwards flash). Rendering null until `ready` avoids that while still
-  // never flashing the landing to returning/auth'd users.
+  // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO (authEnabled).
+  const ctaLabel = authEnabled ? "Get Started Free" : "Start Exploring";
+
+  // Before auth/localStorage resolve, the render depends on the SERVER's
+  // verdict. When the server saw no `feynman-home` cookie and no chat-intent
+  // params (ssrLanding), render the landing — this is what puts real content
+  // and entity links in the initial HTML for crawlers, and it's also the
+  // correct first paint for a first-time anonymous visitor (no flash: the
+  // resolved gate below reaches the same answer). Otherwise render nothing
+  // (a neutral blank) rather than committing to HOME — a returning visitor
+  // must never see a backwards home→landing (or landing→home) flash.
   if (!ready || landed === null || hasChatIntent === null) {
-    return null;
+    return ssrLanding ? <LandingPage ctaLabel={ctaLabel} onCta={handleCta} /> : null;
   }
 
   // Legacy getRoute() (app.js 679-684):
@@ -95,8 +133,6 @@ export default function HomeOrLanding() {
   // login from there, so the intent survives sign-up instead of being lost here).
   const showLanding = !hasChatIntent && (authEnabled ? !user : !landed);
   if (showLanding) {
-    // CTA copy mirrors the legacy ternary on window.FEYNMAN_PRO (authEnabled).
-    const ctaLabel = authEnabled ? "Get Started Free" : "Start Exploring";
     return <LandingPage ctaLabel={ctaLabel} onCta={handleCta} />;
   }
 
