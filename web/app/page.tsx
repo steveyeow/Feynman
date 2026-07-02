@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import HomeOrLanding from "@/components/landing/HomeOrLanding";
 
 type SP = { [key: string]: string | string[] | undefined };
@@ -30,6 +31,23 @@ export async function generateMetadata(
   return { alternates: { canonical } };
 }
 
-export default function Page() {
-  return <HomeOrLanding />;
+export default function Page({ searchParams }: { searchParams: SP }) {
+  // Server-side mirror of HomeOrLanding's client gate, so the LANDING can be
+  // in the initial HTML. Until this, `/` server-rendered as an EMPTY shell
+  // (0 links, 0 text — the gate returned null until client auth resolved):
+  // Googlebot's most-crawled URL was a discovery dead end, and non-JS AI
+  // crawlers (GPTBot, ClaudeBot, PerplexityBot) saw a blank front door.
+  //
+  //  - chat-intent params (?book/?q/?mind/?debate) → app composer, never
+  //    the landing (same override as the client gate)
+  //  - `feynman-home` cookie (set client-side once a visitor is app-bound:
+  //    signed in or dismissed the landing) → render nothing and let the
+  //    client gate pick HOME, exactly the pre-SSR behavior — no landing
+  //    flash for returning users
+  //  - everyone else (first-time visitors AND crawlers) → full landing HTML
+  const hasChatIntent = ["book", "q", "mind", "debate"].some(
+    (k) => searchParams[k] !== undefined,
+  );
+  const appBound = cookies().has("feynman-home");
+  return <HomeOrLanding ssrLanding={!hasChatIntent && !appBound} />;
 }
