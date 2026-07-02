@@ -480,12 +480,20 @@ export function debateJsonLd(opts: {
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
     headline: opts.question,
+    // Google's Discussion-forum rich result REQUIRES text/image/video on the
+    // main posting — GSC flagged every symposium as "1 invalid item" without
+    // it (found 2026-07-02). The symposium's opening post IS the question.
+    text: opts.question,
     url: opts.url,
     datePublished: opts.created || "",
     author: { "@type": "Organization", name: "Feynman", url: SITE_URL },
     comment: opts.turns.map((t) => ({
       "@type": "Comment",
       text: t.text,
+      // Turns are generated in the same job that creates the debate, so the
+      // debate timestamp is honestly each turn's publish time (GSC warns on
+      // every comment without one).
+      datePublished: opts.created || "",
       author: { "@type": "Person", name: t.name, url: t.url },
     })),
   });
