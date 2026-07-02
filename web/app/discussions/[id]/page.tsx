@@ -7,9 +7,11 @@ import {
   SITE_URL,
   abs,
   breadcrumbJsonLd,
+  dropNulls,
   fetchPublicDiscussion,
   fetchDebatesList,
   metaDescription,
+  truncate,
   type PublicDiscussion,
 } from "@/lib/seo-mind";
 import MessageList from "@/components/chat/MessageList";
@@ -134,15 +136,22 @@ export default async function PublicDiscussionPage({
   }
 
   const title = pickTitle(disc);
-  const forumLd = {
+  const forumLd = dropNulls({
     "@context": "https://schema.org",
     "@type": "DiscussionForumPosting",
     headline: title,
+    // Google's Discussion-forum rich result REQUIRES text/image/video on the
+    // main posting (same GSC "invalid item" as symposiums, 2026-07-02). The
+    // OP's post is the sharer's opening message.
+    text: truncate(
+      disc.messages.find((m) => m.role === "user")?.content || title,
+      500,
+    ),
     url: canonical,
     datePublished: disc.approved_at || "",
     author: { "@type": "Person", name: disc.handle || "Anonymous" },
     publisher: { "@type": "Organization", name: "Feynman", url: SITE_URL },
-  };
+  });
   const breadcrumbLd = breadcrumbJsonLd([
     ["Feynman", SITE_URL],
     ["Discussions", SITE_URL],
