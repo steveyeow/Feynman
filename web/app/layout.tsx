@@ -6,8 +6,9 @@ import "@/styles/liquid.css";
 import ClientProviders from "@/components/providers/ClientProviders";
 import JsonLd from "@/components/seo/JsonLd";
 
+// ≤160 chars — Bing WT flags longer ones as an SEO error (was 205, 2026-07-03).
 const SITE_DESCRIPTION =
-  "An interactive knowledge network built on the world's most important books and great minds. Chat with any book, explore topics with AI-curated sources, and discuss ideas with simulated great thinkers.";
+  "An interactive knowledge network built on the world's most important books and great minds. Chat with any book — great minds join the conversation.";
 
 export const metadata: Metadata = {
   title: "Feynman — Chat with Books. Great Minds Join In.",

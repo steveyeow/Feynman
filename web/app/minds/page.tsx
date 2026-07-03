@@ -18,6 +18,10 @@ export default function MindsPage() {
   return (
     <AppShell>
       <div className="page-view minds-page">
+        {/* Crawler/AT heading — the graph is the visual title; Bing WT flags
+            the page as "H1 tag missing" without one. Same pattern as the
+            discussions page. */}
+        <h1 className="sr-only">Great Minds — chat with history&apos;s thinkers</h1>
         <MindsGraph />
         <p className="minds-tagline">Expand the scale and scope of collective enlightenment.</p>
       </div>

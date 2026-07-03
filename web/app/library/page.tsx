@@ -12,6 +12,9 @@ export default function LibraryPage() {
   return (
     <AppShell>
       <div className="page-view library-page">
+        {/* Crawler/AT heading — same "H1 tag missing" gap Bing WT flagged on
+            /minds; the Library client island renders no server-side heading. */}
+        <h1 className="sr-only">Library — browse and chat with books</h1>
         <Library />
       </div>
     </AppShell>
