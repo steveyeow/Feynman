@@ -43,9 +43,9 @@ export async function generateMetadata({
     resolveTopicSlug(params.slug),
     fetchMindOnTopic(params.id, params.slug),
   ]);
-  if (!mind || !topic) {
-    return { title: "Not found — Feynman" };
-  }
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!mind || !topic) notFound();
   // Canonical = the one true lowercase slug, regardless of how the URL was
   // typed (resolveTopicSlug matches case-insensitively).
   const canonical = abs(`/mind/${params.id}/on/${topicSlug(topic)}`);

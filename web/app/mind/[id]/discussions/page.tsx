@@ -23,8 +23,11 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   const mind = await fetchMind(params.id);
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!mind) notFound();
   const canonical = abs(`/mind/${params.id}/discussions`);
-  const name = mind?.name || "this mind";
+  const name = mind.name || "this mind";
   const desc = `Public conversations readers have shared with ${name} on Feynman.`;
   const ogImage = abs(`/og?type=mind-agg&id=${encodeURIComponent(params.id)}&kind=discussions`);
   return {

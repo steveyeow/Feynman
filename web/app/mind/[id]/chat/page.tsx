@@ -14,8 +14,11 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   const mind = await fetchMind(params.id);
+  // Pre-stream 404 (the sibling loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!mind) notFound();
   return {
-    title: mind ? `Chat with ${mind.name} — Feynman` : "Mind not found — Feynman",
+    title: `Chat with ${mind.name} — Feynman`,
     robots: { index: false, follow: false },
   };
 }

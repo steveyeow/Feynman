@@ -57,9 +57,11 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const data = await getBookData(params.id);
-  if (!data) return { title: "Not found — Feynman" };
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!data) notFound();
   const resolved = await resolveQuestion(params.id, params.slug);
-  if (!resolved) return { title: "Question not found — Feynman" };
+  if (!resolved) notFound();
 
   // Grounded-content presence drives BOTH the snippet and indexability. Cached
   // server-side, so this is not an extra LLM call vs the body's fetch.

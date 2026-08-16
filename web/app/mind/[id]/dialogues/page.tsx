@@ -33,7 +33,9 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   const mind = await fetchMind(params.id);
-  if (!mind) return { title: "Mind not found — Feynman" };
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!mind) notFound();
   const canonical = abs(`/mind/${params.id}/dialogues`);
   const title = `AI dialogues with ${mind.name} — Feynman`;
   const desc = metaDescription(
