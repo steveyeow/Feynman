@@ -75,9 +75,12 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const data = await getBookData(params.id);
-  if (!data) {
-    return { title: "Book not found — Feynman" };
-  }
+  // Missing entity must 404 from generateMetadata, not the page body: the
+  // sibling loading.tsx streams a 200 shell before the page renders, so a body
+  // notFound() can no longer set the status (Next injects noindex instead) —
+  // Google then flags the dead URL as Soft 404 and keeps recrawling it.
+  // Metadata resolves before the first byte, so throwing here yields a real 404.
+  if (!data) notFound();
   // A bare catalog stub — no sample passages, no chapters, no questions — is a
   // low-unique-value page we can't ground. Keep it out of the index to
   // concentrate crawl budget on real books (it's already excluded from the

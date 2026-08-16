@@ -49,7 +49,9 @@ export async function generateMetadata({
   params: { slug: string };
 }): Promise<Metadata> {
   const topic = await resolveTopicSlug(params.slug);
-  if (!topic) return { title: "Topic not found — Feynman" };
+  // Pre-stream 404 (the sibling loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!topic) notFound();
   const canonical = abs(`/topic/${params.slug}`);
   const ogImage = abs(`/og?type=topic&slug=${encodeURIComponent(params.slug)}`);
   const title = `${topic} on Feynman`;

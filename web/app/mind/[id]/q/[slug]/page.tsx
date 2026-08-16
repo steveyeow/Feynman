@@ -36,7 +36,9 @@ export async function generateMetadata({
     fetchMind(params.id),
     fetchMindQA(params.id, params.slug),
   ]);
-  if (!mind || !qa) return { title: "Not found — Feynman" };
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!mind || !qa) notFound();
   const canonical = abs(`/mind/${params.id}/q/${qa.slug}`);
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   // The question IS the search query — title leads with it verbatim.

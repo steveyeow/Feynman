@@ -30,7 +30,9 @@ export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
   const data = await getBookData(params.id);
-  if (!data) return { title: "Not found — Feynman" };
+  // Pre-stream 404 (the parent loading.tsx flushes a 200 shell before the page
+  // body's notFound() can run — Soft 404 otherwise). See /book/[id].
+  if (!data) notFound();
 
   const canonical = `${SITE_URL}/book/${encodeURIComponent(params.id)}/insights`;
   const desc = clampDescription(

@@ -61,9 +61,9 @@ export async function generateMetadata({
   params: { id: string };
 }): Promise<Metadata> {
   const mind = await fetchMind(params.id);
-  if (!mind) {
-    return { title: "Mind not found — Feynman" };
-  }
+  // 404 must be thrown here, pre-stream — after loading.tsx flushes the 200
+  // shell a body notFound() can't set the status (Soft 404). See /book/[id].
+  if (!mind) notFound();
   const canonical = abs(`/mind/${params.id}`);
   const ogImage = abs(`/og?type=mind&id=${encodeURIComponent(params.id)}`);
   const desc = descFor(mind);
