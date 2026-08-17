@@ -1405,7 +1405,10 @@ def list_agents(limit: int | None = None, lite: bool = False) -> list[dict[str, 
             "'description',(meta_json::jsonb)->'description',"
             "'chunk_count',(meta_json::jsonb)->'chunk_count',"
             "'creator_name',(meta_json::jsonb)->'creator_name',"
-            "'creator_user_id',(meta_json::jsonb)->'creator_user_id'"
+            "'creator_user_id',(meta_json::jsonb)->'creator_user_id',"
+            # Tiny bool the RAG retrieval split needs (pgvec vs legacy path) —
+            # letting rag.py use lite instead of the full-fat SELECT *.
+            "'pgvector_ready',(meta_json::jsonb)->'pgvector_ready'"
             ")::text AS meta_json "
             "FROM agents WHERE is_deleted = ? ORDER BY created_at DESC"
         )
@@ -2754,7 +2757,12 @@ def list_books_by_topic(topic: str, limit: int = 30) -> list[dict[str, Any]]:
     if not topic:
         return []
     out = []
-    for agent in list_agents(limit=2000):
+    # lite=True is EGRESS-CRITICAL: this runs on the /topic page render path and
+    # only reads id/name/slug/status + meta.category/author — all in the lite
+    # projection. The full-fat SELECT * here (~2000 rows × ~9KB meta_json ≈
+    # 18MB/call, hammered by crawlers) was the dominant leak behind the Aug 2026
+    # 250GB egress overage.
+    for agent in list_agents(limit=2000, lite=True):
         if agent.get("status") not in ("ready", "catalog"):
             continue
         meta = agent.get("meta") or {}
@@ -3557,7 +3565,10 @@ def list_related_books(
         })
         seen.add(agent["id"])
 
-    all_agents = list_agents(limit=2000)
+    # lite=True is EGRESS-CRITICAL: runs on the /book page render path (related
+    # sidebar) and only reads id/name/slug/type/status + meta.category/author.
+    # See list_books_by_topic for the 18MB-per-call SELECT * postmortem.
+    all_agents = list_agents(limit=2000, lite=True)
 
     if topic_lower:
         for a in all_agents:

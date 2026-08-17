@@ -3418,7 +3418,7 @@ class SearchBookRequest(BaseModel):
 @app.post("/api/discover")
 def api_discover(payload: DiscoverRequest, request: Request, background_tasks: BackgroundTasks) -> dict[str, Any]:
     _check_quota(request, "discover")
-    existing_titles = [a["name"] for a in list_agents(limit=200)]
+    existing_titles = [a["name"] for a in list_agents(limit=200, lite=True)]
     try:
         books, usage = _discover_books_for_topic(payload.topic.strip(), count=payload.count, exclude_titles=existing_titles)
     except ProviderError as exc:
