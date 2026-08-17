@@ -215,7 +215,9 @@ def retrieve_cross_book(query: str, top_k: int | None = None, agent_ids: list[st
     top_k = top_k or TOP_K
     embedder = pick_provider("embed")
 
-    all_agents = list_agents()
+    # lite=True: retrieval only needs id/status + meta.pgvector_ready (now in
+    # the lite projection) — not the ~9KB/row full meta_json of every agent.
+    all_agents = list_agents(lite=True)
     ready_agents = {a["id"]: a for a in all_agents if a["status"] == "ready"}
     if agent_ids:
         ready_agents = {k: v for k, v in ready_agents.items() if k in agent_ids}
