@@ -2743,41 +2743,58 @@ def list_questions_batch(agent_ids: list[str]) -> dict[str, list[str]]:
     return out
 
 
-def list_books_by_topic(topic: str, limit: int = 30) -> list[dict[str, Any]]:
-    """Books tagged with a given topic via ``meta.category`` (set by
-    ``create_catalog_agent`` during topic-driven discovery).
-
-    Implementation note: agents.meta is JSON-stringified text, and we have
-    no JSON-aware index on it. We could push the predicate down with
-    ``json_extract`` / ``jsonb->>'category'`` but the corpus is small
-    (~hundreds) and the call site is cached by the page handler with a
-    long TTL, so an in-Python filter is fast enough and portable across
-    SQLite/Postgres without dialect branching.
-    """
-    if not topic:
+def _list_catalog_matches(
+    topic: str = "",
+    author: str = "",
+    exclude_agent_id: str = "",
+    limit: int = 30,
+) -> list[dict[str, Any]]:
+    """Filter and limit public book recommendations before rows leave the DB."""
+    topic = topic.strip().lower()
+    author = author.strip().lower()
+    if limit <= 0 or not (topic or author):
         return []
-    out = []
-    # lite=True is EGRESS-CRITICAL: this runs on the /topic page render path and
-    # only reads id/name/slug/status + meta.category/author — all in the lite
-    # projection. The full-fat SELECT * here (~2000 rows × ~9KB meta_json ≈
-    # 18MB/call, hammered by crawlers) was the dominant leak behind the Aug 2026
-    # 250GB egress overage.
-    for agent in list_agents(limit=2000, lite=True):
-        if agent.get("status") not in ("ready", "catalog"):
-            continue
-        meta = agent.get("meta") or {}
-        if not isinstance(meta, dict):
-            continue
-        if (meta.get("category") or "").strip().lower() == topic.strip().lower():
-            out.append({
-                "id": agent["id"],
-                "name": agent.get("name", ""),
-                "type": agent.get("type", ""),
-                "author": meta.get("author", ""),
-            })
-            if len(out) >= limit:
-                break
-    return out
+    if _USE_PG:
+        category_expr = "meta_json::jsonb->>'category'"
+        author_expr = "meta_json::jsonb->>'author'"
+    else:
+        category_expr = "json_extract(meta_json, '$.category')"
+        author_expr = "json_extract(meta_json, '$.author')"
+    category_match = f"lower(trim(coalesce({category_expr}, ''))) = ?"
+    author_match = f"lower(trim(coalesce({author_expr}, ''))) = ?"
+    predicates: list[str] = []
+    params: list[Any] = [False if _USE_PG else 0, exclude_agent_id]
+    if topic:
+        predicates.append(category_match)
+        params.append(topic)
+    if author:
+        predicates.append(author_match)
+        params.append(author)
+    # Topic matches retain priority over author-only matches. Within each
+    # group, preserve the catalog's newest-first order with an explicit tie.
+    order = ""
+    if topic and author:
+        order = f"CASE WHEN {category_match} THEN 0 ELSE 1 END, "
+        params.append(topic)
+    params.append(limit)
+    sql = (
+        f"SELECT id, name, slug, type, coalesce({author_expr}, '') AS author "
+        "FROM agents WHERE is_deleted = ? AND id <> ? "
+        "AND status IN ('ready', 'catalog') AND ("
+        + " OR ".join(predicates) + ") ORDER BY "
+        + order + "created_at DESC, id ASC LIMIT ?"
+    )
+    with get_conn() as conn:
+        rows = _fetchall(conn, _q(sql), tuple(params))
+    return [{**dict(row), "slug": row.get("slug") or ""} for row in rows]
+
+
+def list_books_by_topic(topic: str, limit: int = 30) -> list[dict[str, Any]]:
+    """Return only matching public books, with filtering and LIMIT in SQL."""
+    return [
+        {key: row[key] for key in ("id", "name", "type", "author")}
+        for row in _list_catalog_matches(topic=topic, limit=limit)
+    ]
 
 
 # ─── UGC / public-discussion queries (Phase 6) ───────────────────────
@@ -3532,69 +3549,14 @@ def list_related_books(
     author: str = "",
     limit: int = 6,
 ) -> list[dict[str, Any]]:
-    """Books related to one we're already rendering. Prefers same-topic,
-    then same-author, excluding the source book itself. Used for the
-    "Related Books" section on /book/{id} (Phase 5 — closes the
-    book↔book half of the internal linking graph).
+    """Prefer same-topic books, then same-author books, excluding the source.
 
-    Same in-Python filter pattern as list_books_by_topic — corpus is
-    small, queries are cached at the page handler level."""
+    Project only display fields and apply matching, priority and LIMIT in SQL.
+    A crawler visiting a book must not fetch the entire catalog for a sidebar.
+    """
     if not exclude_agent_id:
         return []
-    topic_lower = topic.strip().lower() if topic else ""
-    author_lower = author.strip().lower() if author else ""
-
-    # Two passes: topic matches first (higher relevance), then author
-    # matches that we haven't already picked. Stable ordering by name
-    # to keep the rendered list deterministic between cache misses.
-    seen: set[str] = {exclude_agent_id}
-    out: list[dict[str, Any]] = []
-
-    def _push(agent: dict[str, Any]) -> None:
-        if agent["id"] in seen:
-            return
-        meta = agent.get("meta") or {}
-        if not isinstance(meta, dict):
-            meta = {}
-        out.append({
-            "id": agent["id"],
-            "name": agent.get("name", ""),
-            "slug": agent.get("slug") or "",
-            "type": agent.get("type", ""),
-            "author": meta.get("author", ""),
-        })
-        seen.add(agent["id"])
-
-    # lite=True is EGRESS-CRITICAL: runs on the /book page render path (related
-    # sidebar) and only reads id/name/slug/type/status + meta.category/author.
-    # See list_books_by_topic for the 18MB-per-call SELECT * postmortem.
-    all_agents = list_agents(limit=2000, lite=True)
-
-    if topic_lower:
-        for a in all_agents:
-            if len(out) >= limit:
-                break
-            if a.get("status") not in ("ready", "catalog"):
-                continue
-            meta = a.get("meta") or {}
-            if not isinstance(meta, dict):
-                continue
-            if (meta.get("category") or "").strip().lower() == topic_lower:
-                _push(a)
-
-    if author_lower and len(out) < limit:
-        for a in all_agents:
-            if len(out) >= limit:
-                break
-            if a.get("status") not in ("ready", "catalog"):
-                continue
-            meta = a.get("meta") or {}
-            if not isinstance(meta, dict):
-                continue
-            if (meta.get("author") or "").strip().lower() == author_lower:
-                _push(a)
-
-    return out
+    return _list_catalog_matches(topic, author, exclude_agent_id, limit)
 
 
 def list_minds_by_topic(topic: str, limit: int = 12) -> list[dict[str, Any]]:

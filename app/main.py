@@ -3504,91 +3504,67 @@ _DISCOVER_CRON_MAX_INDEX = int(os.getenv("DISCOVER_CRON_MAX_INDEX", "5"))
 
 @app.get("/api/cron/egress-watch")
 def api_cron_egress_watch(request: Request) -> dict[str, Any]:
-    """Daily Supabase egress + DB-size watchdog. Snapshots pg_stat_statements
-    total rows returned (an egress proxy) and the database size; emails an alert
-    (Resend → ALERT_EMAIL, default shuqi.yeow@gmail.com) when the per-run rows
-    delta or DB size crosses a threshold. Postgres-only (the metric source);
-    no-op on SQLite. `?test=1` forces a test email to verify the wiring.
+    """Daily database-size and row-activity watch, scoped to this database.
 
-    This exists because a `SELECT *` on /api/agents silently leaked tens of GB of
-    egress (754% over the free tier) and was only caught manually days later —
-    this catches that class of regression within a day.
+    Statement deltas identify activity in the actual check interval. Rows are
+    returned or affected, not measured network bytes. ?dry_run=1 reads diagnostics
+    without changing the baseline or sending email. Postgres only.
     """
     _verify_cron(request)
     import json as _json
     from .core.notify import send_alert_email
-    if request.query_params.get("test"):
+    from .core.db import ops_state_get, ops_state_set, _USE_PG
+    from .core.egress_watch import (
+        collect_snapshot, compare_snapshots, render_alert, stored_snapshot,
+    )
+    dry_run = request.query_params.get("dry_run") == "1"
+    if request.query_params.get("test") and not dry_run:
         ok = send_alert_email(
             "Feynman egress-watch — test alert",
             "<p>Test of the egress-watch alert pipeline. If you received this, "
             "Resend alerts are wired correctly.</p>",
         )
         return {"status": "test_sent" if ok else "test_failed"}
-
-    from .core.db import (
-        get_conn, _fetchone, _fetchall, _q, ops_state_get, ops_state_set, _USE_PG,
-    )
     if not _USE_PG:
         return {"status": "skip", "reason": "not postgres"}
 
-    # Supabase Pro (since 2026-06-11): 8GB disk, 250GB egress. The free-tier
-    # 500MB limit is long gone — keeping it here fired a 95.9% false alarm at
-    # 479MB (really ~6% of 8GB). Override via env if the plan changes.
-    _DB_LIMIT = int(os.getenv("EGRESS_WATCH_DB_LIMIT_BYTES", str(8 * 1024 * 1024 * 1024)))
-    _DB_LIMIT_LABEL = os.getenv("EGRESS_WATCH_DB_LIMIT_LABEL", "8GB Pro")
-    # rows-delta is an egress-spike proxy; on Pro (250GB) the bar is higher, and
-    # my own backfills/diagnostics read millions of (narrow) rows without it
-    # mattering — 10M default so it only fires on a genuine SELECT* fat-table run.
-    _ROWS_DELTA_ALERT = int(os.getenv("EGRESS_WATCH_ROWS_DELTA", "10000000"))
+    db_limit = int(os.getenv("EGRESS_WATCH_DB_LIMIT_BYTES", str(8 * 1024**3)))
+    db_label = os.getenv("EGRESS_WATCH_DB_LIMIT_LABEL", "8 GiB Pro")
+    rows_threshold = int(os.getenv("EGRESS_WATCH_ROWS_DELTA", "10000000"))
     try:
-        with get_conn() as conn:
-            db_bytes = int(_fetchone(conn, _q(
-                "SELECT pg_database_size(current_database()) AS b"), ())["b"])
-            tot = _fetchone(conn, _q(
-                "SELECT coalesce(sum(rows),0) AS r, coalesce(sum(calls),0) AS c "
-                "FROM pg_stat_statements"), ())
-            total_rows, total_calls = int(tot["r"]), int(tot["c"])
-            top = _fetchall(conn, _q(
-                "SELECT calls, rows, left(regexp_replace(query, '\\s+', ' ', 'g'), 140) AS q "
-                "FROM pg_stat_statements ORDER BY rows DESC LIMIT 6"), ())
-    except Exception as exc:  # pg_stat_statements may be unavailable — never break
+        snapshot = collect_snapshot()
+        previous = _json.loads(ops_state_get("egress_watch") or "{}")
+        interval = compare_snapshots(snapshot, previous)
+        if not dry_run:
+            ops_state_set("egress_watch", _json.dumps(stored_snapshot(snapshot)))
+    except Exception as exc:
         return {"status": "error", "reason": str(exc)[:200]}
 
-    prev = _json.loads(ops_state_get("egress_watch") or "{}")
-    has_prev = "total_rows" in prev
-    prev_rows = int(prev.get("total_rows", 0))
-    # rows_delta is None on the FIRST run (no baseline yet — don't false-alarm on
-    # the cumulative total) or when pg_stat_statements was reset (counter went back).
-    rows_delta = (total_rows - prev_rows) if (has_prev and total_rows >= prev_rows) else None
-    ops_state_set("egress_watch", _json.dumps(
-        {"total_rows": total_rows, "total_calls": total_calls, "db_bytes": db_bytes}))
-
-    db_pct = round(100 * db_bytes / _DB_LIMIT, 1)
+    db_pct = round(100 * snapshot["db_bytes"] / db_limit, 1)
     alerts: list[str] = []
     if db_pct >= 90:
-        alerts.append(f"Database size at {db_pct}% of the {_DB_LIMIT_LABEL} limit")
-    if rows_delta is not None and rows_delta >= _ROWS_DELTA_ALERT:
+        alerts.append(f"Database size at {db_pct}% of the {db_label} limit")
+    if interval["rows_delta"] is not None and interval["rows_delta"] >= rows_threshold:
         alerts.append(
-            f"{rows_delta:,} DB rows read since last check "
-            f"(threshold {_ROWS_DELTA_ALERT:,}) — possible egress spike")
-
-    if alerts:
-        rows_html = "".join(
-            f"<li><code>calls={r['calls']:,} rows={r['rows']:,}</code> — {r['q']}</li>"
-            for r in top)
-        html = (
-            "<h3>⚠️ Feynman egress-watch</h3><ul>"
-            + "".join(f"<li>{a}</li>" for a in alerts)
-            + "</ul>"
-            f"<p>DB size: {db_bytes // 1024 // 1024} MB / 500 MB ({db_pct}%). "
-            f"Cumulative: {total_rows:,} rows over {total_calls:,} calls.</p>"
-            f"<p>Top queries by rows (egress proxy):</p><ul>{rows_html}</ul>"
-            "<p>Usual cause: a SELECT * on a fat table (agents/minds meta_json, "
-            "chunks) on a hot/request path — project the columns in SQL.</p>"
+            f"{interval['rows_delta']:,} DB rows returned or affected since last check "
+            f"(threshold {rows_threshold:,}) — review database activity"
         )
-        send_alert_email(f"Feynman egress-watch: {alerts[0]}", html)
-        return {"status": "alerted", "alerts": alerts, "db_pct": db_pct, "rows_delta": rows_delta}
-    return {"status": "ok", "db_pct": db_pct, "rows_delta": rows_delta}
+    result = {
+        "status": "baseline" if interval["baseline_reason"] else "ok",
+        "metric": "database_rows_returned_or_affected",
+        "db_bytes": snapshot["db_bytes"], "db_limit_bytes": db_limit,
+        "db_limit_label": db_label, "db_pct": db_pct, "alerts": alerts,
+        **interval,
+    }
+    if dry_run:
+        return {**result, "status": "dry_run", "would_alert": bool(alerts)}
+    if alerts:
+        sent = send_alert_email(
+            f"Feynman egress-watch: {alerts[0]}",
+            render_alert(snapshot, interval, alerts, db_limit, db_label),
+        )
+        result["status"] = "alerted" if sent else "alert_failed"
+    return result
 
 
 @app.get("/api/cron/discover")
