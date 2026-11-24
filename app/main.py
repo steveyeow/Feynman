@@ -3312,6 +3312,7 @@ def api_report_public_discussion(session_id: str, request: Request):
     if not session or session.get("public_status") != "approved":
         # Don't reveal whether the session exists; just acknowledge.
         return {"reported": True}
+    from .core.db import get_conn, _q, _execute
     try:
         # Flag the session for human review by transitioning to 'opted_in'
         # — admin's moderation queue picks it up. The original approved_at
