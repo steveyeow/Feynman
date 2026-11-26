@@ -310,6 +310,16 @@ def _novita_provider() -> OpenAICompatibleProvider:
     )
 
 
+def _cheaperinference_provider() -> OpenAICompatibleProvider:
+    return OpenAICompatibleProvider(
+        name="cheaperinference",
+        api_key=config.CHEAPER_INFERENCE_API_KEY,
+        base_url=config.CHEAPER_INFERENCE_BASE_URL,
+        chat_model=config.CHEAPER_INFERENCE_CHAT_MODEL,
+        embed_model=config.CHEAPER_INFERENCE_EMBED_MODEL or None,
+    )
+
+
 class AnthropicProvider(BaseProvider):
     name = "anthropic"
 
@@ -384,6 +394,8 @@ def get_provider(name: str) -> BaseProvider:
         return _deepseek_provider()
     if name == "novita":
         return _novita_provider()
+    if name == "cheaperinference":
+        return _cheaperinference_provider()
     if name == "anthropic":
         return _anthropic_provider()
     raise ProviderError(f"Unknown provider: {name}")

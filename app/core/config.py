@@ -20,7 +20,7 @@ APP_TITLE = os.getenv("APP_TITLE", "Feynman")
 # Bump (or set env OG_IMAGE_CACHE_VERSION) when OG card artwork changes so social crawlers see a new URL.
 OG_IMAGE_CACHE_VERSION = os.getenv("OG_IMAGE_CACHE_VERSION", "10").strip() or "10"
 
-PROVIDER_ORDER = [p.strip().lower() for p in os.getenv("PROVIDER_ORDER", "deepseek,gemini,openai,novita,kimi,anthropic").split(",") if p.strip()]
+PROVIDER_ORDER = [p.strip().lower() for p in os.getenv("PROVIDER_ORDER", "deepseek,gemini,openai,novita,kimi,anthropic,cheaperinference").split(",") if p.strip()]
 
 CHAT_PROVIDER = os.getenv("CHAT_PROVIDER", "auto").lower()
 EMBED_PROVIDER = os.getenv("EMBED_PROVIDER", "auto").lower()
@@ -61,6 +61,11 @@ NOVITA_API_KEY = os.getenv("NOVITA_API_KEY", "").strip()
 NOVITA_BASE_URL = os.getenv("NOVITA_BASE_URL", "https://api.novita.ai/openai").strip()
 NOVITA_CHAT_MODEL = os.getenv("NOVITA_CHAT_MODEL", "deepseek/deepseek-v3.2").strip()
 NOVITA_EMBED_MODEL = os.getenv("NOVITA_EMBED_MODEL", "qwen/qwen3-embedding-0.6b").strip()
+
+CHEAPER_INFERENCE_API_KEY = os.getenv("CHEAPER_INFERENCE_API_KEY", "").strip()
+CHEAPER_INFERENCE_BASE_URL = os.getenv("CHEAPER_INFERENCE_BASE_URL", "https://api.cheaperinference.com/v1").strip()
+CHEAPER_INFERENCE_CHAT_MODEL = os.getenv("CHEAPER_INFERENCE_CHAT_MODEL", "gpt-5.4-mini").strip()
+CHEAPER_INFERENCE_EMBED_MODEL = os.getenv("CHEAPER_INFERENCE_EMBED_MODEL", "text-embedding-3-small").strip()
 
 MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "1200"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "120"))
