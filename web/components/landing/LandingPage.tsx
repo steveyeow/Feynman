@@ -736,6 +736,7 @@ export function LandingPage({
   const startMindsGraph = useCallback(() => {
     const container = bgRef.current;
     if (!container) return;
+    if (window.matchMedia("(max-width: 960px)").matches) return;
 
     // Nodes from the hardcoded LP_MINDS list (legacy 1116-1122). Never throws on
     // empty data — the sim simply renders nothing.
